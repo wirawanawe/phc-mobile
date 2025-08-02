@@ -6,29 +6,34 @@ import {
   TouchableOpacity,
   Dimensions,
   StatusBar,
+  Alert,
+  ActivityIndicator,
 } from "react-native";
 import { Text, useTheme } from "react-native-paper";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Icon from "react-native-vector-icons/MaterialCommunityIcons";
 import { LinearGradient } from "expo-linear-gradient";
 import { CustomTheme } from "../theme/theme";
+import { useAuth } from "../contexts/AuthContext";
+import apiService from "../services/api";
 
 const { width } = Dimensions.get("window");
 
 const MoodTrackingScreen = ({ navigation }: any) => {
   const theme = useTheme<CustomTheme>();
+  const { isAuthenticated } = useAuth();
   const [selectedMood, setSelectedMood] = useState<string | null>(null);
   const [selectedStressLevel, setSelectedStressLevel] = useState<number | null>(
     null
   );
+  const [isLoading, setIsLoading] = useState(false);
 
   const moods = [
-    { id: "1", emoji: "😊", label: "Happy", color: "#10B981" },
-    { id: "2", emoji: "😌", label: "Calm", color: "#3B82F6" },
-    { id: "3", emoji: "😐", label: "Neutral", color: "#6B7280" },
-    { id: "4", emoji: "😔", label: "Sad", color: "#8B5CF6" },
-    { id: "5", emoji: "😤", label: "Stressed", color: "#F59E0B" },
-    { id: "6", emoji: "😡", label: "Angry", color: "#EF4444" },
+    { id: "very_happy", emoji: "😊", label: "Very Happy", color: "#10B981" },
+    { id: "happy", emoji: "😌", label: "Happy", color: "#34D399" },
+    { id: "neutral", emoji: "😐", label: "Neutral", color: "#6B7280" },
+    { id: "sad", emoji: "😔", label: "Sad", color: "#8B5CF6" },
+    { id: "very_sad", emoji: "😢", label: "Very Sad", color: "#EF4444" },
   ];
 
   const stressLevels = [
@@ -82,9 +87,53 @@ const MoodTrackingScreen = ({ navigation }: any) => {
     setSelectedStressLevel(level);
   };
 
-  const handleSaveMood = () => {
-    // Here you would typically save the mood data to your backend
-    navigation.goBack();
+  const handleSaveMood = async () => {
+    if (!selectedMood) {
+      Alert.alert("No Mood Selected", "Please select your mood before saving");
+      return;
+    }
+
+    if (!isAuthenticated) {
+      Alert.alert("Authentication Required", "Please log in to save your mood");
+      return;
+    }
+
+    setIsLoading(true);
+
+    try {
+      const moodData = {
+        mood_level: selectedMood,
+        energy_level: selectedStressLevel ? 
+          (selectedStressLevel <= 2 ? 'high' : 
+           selectedStressLevel <= 3 ? 'moderate' : 'low') : null,
+        tracking_date: new Date().toISOString().split('T')[0],
+        notes: `Mood: ${moods.find(m => m.id === selectedMood)?.label}, Stress Level: ${selectedStressLevel || 'Not specified'}`
+      };
+
+      const response = await apiService.createMoodEntry(moodData);
+
+      if (response.success) {
+        Alert.alert(
+          "Success",
+          "Mood data saved successfully!",
+          [
+            {
+              text: "OK",
+              onPress: () => {
+                navigation.goBack();
+              },
+            },
+          ]
+        );
+      } else {
+        Alert.alert("Error", response.message || "Failed to save mood data");
+      }
+    } catch (error: any) {
+      console.error("Error saving mood data:", error);
+      Alert.alert("Error", "Failed to save mood data. Please try again.");
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -188,17 +237,24 @@ const MoodTrackingScreen = ({ navigation }: any) => {
             <TouchableOpacity
               style={[
                 styles.saveButton,
-                (!selectedMood || selectedStressLevel === null) &&
+                (!selectedMood || isLoading) &&
                   styles.saveButtonDisabled,
               ]}
               onPress={handleSaveMood}
-              disabled={!selectedMood || selectedStressLevel === null}
+              disabled={!selectedMood || isLoading}
             >
               <LinearGradient
                 colors={["#E22345", "#B71C1C"]}
                 style={styles.saveButtonGradient}
               >
-                <Text style={styles.saveButtonText}>Save Mood</Text>
+                {isLoading ? (
+                  <View style={styles.loadingContainer}>
+                    <ActivityIndicator size="small" color="#FFFFFF" />
+                    <Text style={styles.saveButtonText}>Saving...</Text>
+                  </View>
+                ) : (
+                  <Text style={styles.saveButtonText}>Save Mood</Text>
+                )}
               </LinearGradient>
             </TouchableOpacity>
           </View>
@@ -380,6 +436,11 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "700",
     color: "#FFFFFF",
+  },
+  loadingContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
   },
 });
 

@@ -1,0 +1,1090 @@
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { Platform } from "react-native";
+import { handleApiError, withRetry } from "../utils/errorHandler";
+import mockApiService from "./mockApi";
+import NetworkHelper from "../utils/networkHelper";
+
+// Configuration for different environments
+const getApiBaseUrl = () => {
+  // For development - you can change this based on your setup
+  if (__DEV__) {
+    // Check if running on Android emulator
+    if (Platform.OS === "android") {
+      return "http://10.0.2.2:3000/api/mobile";
+    }
+
+    // Check if running on iOS simulator
+    if (Platform.OS === "ios") {
+      return "http://localhost:3000/api/mobile";
+    }
+
+    // For physical device testing - try multiple IP addresses
+    // You can uncomment one of these based on your network setup
+    const possibleIPs = [
+      "http://10.242.90.103:3000/api/mobile", // Primary network interface (fastest)
+      "http://192.168.193.150:3000/api/mobile", // Secondary network interface
+      "http://192.168.18.30:3000/api/mobile", // Third network interface
+      "http://localhost:3000/api/mobile" // Fallback
+    ];
+    
+    // For now, use the primary IP
+    return possibleIPs[0];
+  }
+
+  // For production - use your actual API URL
+  return "https://your-api-domain.com/api/mobile";
+};
+
+// Network connectivity test function
+const testNetworkConnectivity = async (baseURL) => {
+  try {
+    console.log(`🔍 Testing connectivity to: ${baseURL}`);
+    const startTime = Date.now();
+    
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+    
+    const response = await fetch(`${baseURL}/auth/me`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      signal: controller.signal
+    });
+    
+    clearTimeout(timeoutId);
+    const endTime = Date.now();
+    const responseTime = endTime - startTime;
+    
+    console.log(`✅ Network test successful for ${baseURL} (${responseTime}ms)`);
+    return { success: true, responseTime, status: response.status };
+  } catch (error) {
+    console.error(`❌ Network test failed for ${baseURL}:`, error.message);
+    return { success: false, error: error.message };
+  }
+};
+
+// Get the best available API URL
+const getBestApiUrl = async () => {
+  if (__DEV__) {
+    try {
+      return await NetworkHelper.findBestServer();
+    } catch (error) {
+      console.error('❌ Failed to find best server:', error.message);
+      return NetworkHelper.getDefaultURL();
+    }
+  }
+  
+  return getApiBaseUrl();
+};
+
+class ApiService {
+  constructor() {
+    this.baseURL = null; // Will be set dynamically
+    this.isInitialized = false;
+  }
+
+  // Initialize the API service with the best available URL
+  async initialize() {
+    if (this.isInitialized) {
+      return;
+    }
+
+    try {
+      this.baseURL = await getBestApiUrl();
+      this.isInitialized = true;
+      console.log(`🚀 API Service initialized with URL: ${this.baseURL}`);
+    } catch (error) {
+      console.error('❌ Failed to initialize API service:', error);
+      // Fallback to default URL
+      this.baseURL = getApiBaseUrl();
+      this.isInitialized = true;
+    }
+  }
+
+  // Helper method to get user ID from storage
+  async getUserId() {
+    try {
+      const userData = await AsyncStorage.getItem("userData");
+      if (userData) {
+        const user = JSON.parse(userData);
+        return user.id;
+      }
+      return null;
+    } catch (error) {
+      console.error("Error getting user ID:", error);
+      return null;
+    }
+  }
+
+  // Helper method to add user_id to query parameters
+  async addUserIdToParams(params = {}) {
+    const userId = await this.getUserId();
+    if (userId) {
+      return { ...params, user_id: userId };
+    }
+    return params;
+  }
+
+  // Helper method to create query string with user_id
+  async createQueryStringWithUserId(params = {}) {
+    const paramsWithUserId = await this.addUserIdToParams(params);
+    return new URLSearchParams(paramsWithUserId).toString();
+  }
+
+  // Get auth token from storage
+  async getAuthToken() {
+    try {
+      const token = await AsyncStorage.getItem("authToken");
+      return token;
+    } catch (error) {
+      return null;
+    }
+  }
+
+  // Get refresh token from storage
+  async getRefreshToken() {
+    try {
+      const refreshToken = await AsyncStorage.getItem("refreshToken");
+      return refreshToken;
+    } catch (error) {
+      return null;
+    }
+  }
+
+  // Set auth token to storage
+  async setAuthToken(token) {
+    try {
+      await AsyncStorage.setItem("authToken", token);
+    } catch (error) {
+      // Token setting failed
+    }
+  }
+
+  // Set refresh token to storage
+  async setRefreshToken(refreshToken) {
+    try {
+      await AsyncStorage.setItem("refreshToken", refreshToken);
+    } catch (error) {
+      // Refresh token setting failed
+    }
+  }
+
+  // Remove auth token from storage
+  async removeAuthToken() {
+    try {
+      await AsyncStorage.removeItem("authToken");
+      await AsyncStorage.removeItem("refreshToken");
+    } catch (error) {
+      // Token removal failed
+    }
+  }
+
+  // Refresh access token
+  async refreshAccessToken() {
+    try {
+      const refreshToken = await this.getRefreshToken();
+      
+      if (!refreshToken) {
+        throw new Error("No refresh token available");
+      }
+
+      const response = await fetch(`${this.baseURL}/auth/refresh`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ refreshToken }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to refresh token");
+      }
+
+      const data = await response.json();
+      
+      if (data.success && data.data) {
+        await this.setAuthToken(data.data.accessToken);
+        await this.setRefreshToken(data.data.refreshToken);
+        return data.data.accessToken;
+      } else {
+        throw new Error(data.message || "Token refresh failed");
+      }
+    } catch (error) {
+      console.error("Token refresh error:", error);
+      await this.removeAuthToken();
+      throw error;
+    }
+  }
+
+  // Generic request method with automatic token refresh
+  async request(endpoint, options = {}) {
+    // Ensure API service is initialized
+    if (!this.isInitialized) {
+      await this.initialize();
+    }
+
+    let token = await this.getAuthToken();
+    let isRetry = false;
+
+    const makeRequest = async (authToken) => {
+      const config = {
+        headers: {
+          "Content-Type": "application/json",
+          ...(authToken && { Authorization: `Bearer ${authToken}` }),
+          ...options.headers,
+        },
+        ...options,
+      };
+
+      console.log(`🌐 Making request to: ${this.baseURL}${endpoint}`);
+      
+      // Add timeout handling
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 second timeout
+      
+            try {
+        const response = await fetch(`${this.baseURL}${endpoint}`, {
+          ...config,
+          signal: controller.signal
+        });
+        
+        clearTimeout(timeoutId);
+        
+        // Check if response is ok before trying to parse JSON
+        if (!response.ok) {
+          // Try to get response text for debugging
+          let errorText = "";
+          try {
+            errorText = await response.text();
+          } catch (textError) {
+            // Could not read response text
+          }
+          
+          // Handle specific authentication errors
+          if (response.status === 401) {
+            // Don't retry auth endpoints or if we already tried refreshing
+            if (endpoint.includes('/auth/') || isRetry) {
+              await this.removeAuthToken();
+              throw new Error("Authentication failed. Please login again.");
+            }
+            
+            // Try to refresh token
+            try {
+              const newToken = await this.refreshAccessToken();
+              isRetry = true;
+              return await makeRequest(newToken);
+            } catch (refreshError) {
+              await this.removeAuthToken();
+              throw new Error("Authentication failed. Please login again.");
+            }
+          }
+          
+          // Handle rate limiting specifically
+          if (response.status === 429) {
+            throw new Error("Too many requests from this IP, please try again later.");
+          }
+          
+          // Handle server errors
+          if (response.status >= 500) {
+            throw new Error(`Server error (${response.status}). Please try again later.`);
+          }
+          
+          // Handle client errors
+          if (response.status >= 400) {
+            throw new Error(`Request failed (${response.status}): ${errorText || response.statusText}`);
+          }
+          
+          throw new Error(`HTTP Error: ${response.status} ${response.statusText}`);
+        }
+
+        // Check content type before parsing JSON
+        const contentType = response.headers.get("content-type");
+        if (!contentType || !contentType.includes("application/json")) {
+          const textResponse = await response.text();
+          throw new Error("Server returned non-JSON response. Please check backend configuration.");
+        }
+
+        const data = await response.json();
+        return data;
+      } catch (error) {
+        clearTimeout(timeoutId);
+        
+        // Use NetworkHelper to handle network errors
+        const networkError = NetworkHelper.handleNetworkError(error);
+        throw new Error(networkError.message);
+      }
+    };
+
+    try {
+      return await makeRequest(token);
+    } catch (error) {
+      // Handle JSON parse errors specifically
+      if (error.message.includes("JSON Parse error") || error.message.includes("Unexpected token")) {
+        throw new Error("Server returned invalid response format. Please check if backend is running correctly.");
+      }
+
+      // Don't re-process authentication errors that we've already handled
+      if (error.message === "Authentication failed. Please login again.") {
+        throw error; // Re-throw as-is to avoid double processing
+      }
+
+      // Use the new error handler for other errors
+      const errorInfo = handleApiError(error, `API Request to ${endpoint}`);
+      
+      // Re-throw the error with better context
+      const enhancedError = new Error(errorInfo.userMessage);
+      enhancedError.originalError = error;
+      enhancedError.errorInfo = errorInfo;
+      
+      throw enhancedError;
+    }
+  }
+
+  // ===== AUTHENTICATION =====
+
+  async login(email, password) {
+    // Use real API instead of mock for now
+    // if (__DEV__) {
+    //   console.log("🔧 Using mock API for development");
+    //   return await mockApiService.login(email, password);
+    // }
+
+    // For production, use real API
+    const config = {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ email, password }),
+    };
+
+    console.log("🔐 Attempting login with:", { email, baseURL: this.baseURL });
+
+    try {
+      // First, test if the server is reachable
+      try {
+        const healthResponse = await fetch(`${this.baseURL.replace('/api', '')}/health`);
+        console.log("🏥 Health check response:", healthResponse.status);
+      } catch (healthError) {
+        console.log("⚠️ Health check failed:", healthError.message);
+      }
+
+      // Use mobile auth endpoint for mobile users
+      const response = await fetch(`${this.baseURL}/auth/login`, config);
+      
+      if (!response.ok) {
+        let errorText = "";
+        try {
+          errorText = await response.text();
+        } catch (textError) {
+          // Could not read response text
+        }
+        
+        console.log("❌ Login failed:", { 
+          status: response.status, 
+          statusText: response.statusText, 
+          errorText,
+          url: `${this.baseURL}/auth/login`
+        });
+        
+        if (response.status === 401) {
+          throw new Error("Invalid credentials");
+        }
+        
+        throw new Error(`Login failed (${response.status}): ${errorText || response.statusText}`);
+      }
+
+      const contentType = response.headers.get("content-type");
+      if (!contentType || !contentType.includes("application/json")) {
+        throw new Error("Server returned non-JSON response");
+      }
+
+      const data = await response.json();
+      return data;
+      
+    } catch (error) {
+      console.error("Login error:", error);
+      throw error;
+    }
+  }
+
+  async register(userData) {
+    // For register, don't use existing tokens - make a fresh request
+    const config = {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(userData),
+    };
+
+    try {
+      const response = await fetch(`${this.baseURL}/auth/register`, config);
+      
+      if (!response.ok) {
+        let errorText = "";
+        try {
+          errorText = await response.text();
+        } catch (textError) {
+          // Could not read response text
+        }
+        
+        if (response.status === 400) {
+          throw new Error("Registration failed: Invalid data");
+        }
+        
+        throw new Error(`Registration failed (${response.status}): ${errorText || response.statusText}`);
+      }
+
+      const contentType = response.headers.get("content-type");
+      if (!contentType || !contentType.includes("application/json")) {
+        throw new Error("Server returned non-JSON response");
+      }
+
+      const data = await response.json();
+      return data;
+      
+    } catch (error) {
+      console.error("Registration error:", error);
+      throw error;
+    }
+  }
+
+  async logout() {
+    await this.removeAuthToken();
+  }
+
+  // ===== CLINICS =====
+
+  async getClinics() {
+    return await this.request("/clinics");
+  }
+
+  async getClinicById(id) {
+    return await this.request(`/clinics/${id}`);
+  }
+
+  async getClinicServices(clinicId) {
+    return await this.request(`/clinics/${clinicId}/services`);
+  }
+
+  async getClinicDoctors(clinicId) {
+    return await this.request(`/clinics/${clinicId}/doctors`);
+  }
+
+  async getDoctorsByService(serviceId) {
+    return await this.request(`/clinics/services/${serviceId}/doctors`);
+  }
+
+  // ===== BOOKINGS =====
+
+  async createBooking(bookingData) {
+    const userId = await this.getUserId();
+    const dataWithUserId = { ...bookingData, user_id: userId };
+    return await this.request("/bookings", {
+      method: "POST",
+      body: JSON.stringify(dataWithUserId),
+    });
+  }
+
+  async getMyBookings() {
+    // Use authenticated endpoint to get user's own bookings
+    const queryString = await this.createQueryStringWithUserId();
+    return await this.request(`/bookings/my-bookings?${queryString}`);
+  }
+
+  async getBookingById(id) {
+    return await this.request(`/bookings/${id}`);
+  }
+
+  async cancelBooking(id, reason) {
+    return await this.request(`/bookings/${id}/cancel`, {
+      method: "PATCH",
+      body: JSON.stringify({ cancellation_reason: reason }),
+    });
+  }
+
+  async updatePaymentStatus(id, paymentData) {
+    return await this.request(`/bookings/${id}/payment`, {
+      method: "PATCH",
+      body: JSON.stringify(paymentData),
+    });
+  }
+
+  // ===== MOOD TRACKING =====
+
+  async createMoodEntry(moodData) {
+    const userId = await this.getUserId();
+    const dataWithUserId = { ...moodData, user_id: userId };
+    return await this.request("/tracking/mood", {
+      method: "POST",
+      body: JSON.stringify(dataWithUserId),
+    });
+  }
+
+  async getMoodHistory(params = {}) {
+    const queryString = await this.createQueryStringWithUserId(params);
+    return await this.request(`/tracking/mood?${queryString}`);
+  }
+
+  // ===== WATER TRACKING =====
+
+  async createWaterEntry(waterData) {
+    const userId = await this.getUserId();
+    const dataWithUserId = { ...waterData, user_id: userId };
+    return await this.request("/tracking/water", {
+      method: "POST",
+      body: JSON.stringify(dataWithUserId),
+    });
+  }
+
+  async getWaterHistory(params = {}) {
+    const queryString = await this.createQueryStringWithUserId(params);
+    return await this.request(`/tracking/water?${queryString}`);
+  }
+
+  async getTodayWaterIntake() {
+    const queryString = await this.createQueryStringWithUserId();
+    return await this.request(`/tracking/water/today?${queryString}`);
+  }
+
+  async getWeeklyWaterIntake(params = {}) {
+    const queryString = await this.createQueryStringWithUserId(params);
+    return await this.request(`/tracking/water/weekly?${queryString}`);
+  }
+
+  // ===== SLEEP TRACKING =====
+
+  async createSleepEntry(sleepData) {
+    const userId = await this.getUserId();
+    const dataWithUserId = { ...sleepData, user_id: userId };
+    return await this.request("/tracking/sleep", {
+      method: "POST",
+      body: JSON.stringify(dataWithUserId),
+    });
+  }
+
+  async getSleepHistory(params = {}) {
+    const queryString = await this.createQueryStringWithUserId(params);
+    return await this.request(`/tracking/sleep?${queryString}`);
+  }
+
+  async getWeeklySleepData() {
+    const queryString = await this.createQueryStringWithUserId();
+    return await this.request(`/tracking/sleep/weekly?${queryString}`);
+  }
+
+  async getSleepAnalysis() {
+    const queryString = await this.createQueryStringWithUserId();
+    return await this.request(`/tracking/sleep/analysis?${queryString}`);
+  }
+
+  async getSleepStages(date = null) {
+    const params = date ? { date } : {};
+    const queryString = await this.createQueryStringWithUserId(params);
+    return await this.request(`/tracking/sleep/stages?${queryString}`);
+  }
+
+  // ===== MEAL LOGGING =====
+
+  async createMealEntry(mealData) {
+    const userId = await this.getUserId();
+    const dataWithUserId = { ...mealData, user_id: userId };
+    return await this.request("/tracking/meal", {
+      method: "POST",
+      body: JSON.stringify(dataWithUserId),
+    });
+  }
+
+  async getMealHistory(params = {}) {
+    const queryString = await this.createQueryStringWithUserId(params);
+    return await this.request(`/tracking/meal?${queryString}`);
+  }
+
+  async getTodayNutrition() {
+    const queryString = await this.createQueryStringWithUserId();
+    return await this.request(`/tracking/meal/today?${queryString}`);
+  }
+
+  // ===== USER PROFILE =====
+
+  async getUserProfile() {
+    return await this.request("/auth/me");
+  }
+
+  async updateUserInsurance(insuranceData) {
+    return await this.request("/auth/insurance", {
+      method: "PUT",
+      body: JSON.stringify(insuranceData),
+    });
+  }
+
+  async updateUserProfile(profileData) {
+    return await this.request("/auth/profile", {
+      method: "PUT",
+      body: JSON.stringify(profileData),
+    });
+  }
+
+  // ===== HEALTH DATA =====
+
+  async getHealthData() {
+    const queryString = await this.createQueryStringWithUserId();
+    return await this.request(`/health/data?${queryString}`);
+  }
+
+  async createHealthData(healthData) {
+    const userId = await this.getUserId();
+    const dataWithUserId = { ...healthData, user_id: userId };
+    return await this.request("/health/data", {
+      method: "POST",
+      body: JSON.stringify(dataWithUserId),
+    });
+  }
+
+  // ===== ASSESSMENTS =====
+
+  async getAssessments() {
+    return await this.request("/assessments");
+  }
+
+  async createAssessment(assessmentData) {
+    return await this.request("/assessments", {
+      method: "POST",
+      body: JSON.stringify(assessmentData),
+    });
+  }
+
+  // ===== EDUCATION =====
+
+  async getEducationContent() {
+    return await this.request("/education");
+  }
+
+  // ===== FITNESS =====
+
+  async getFitnessData() {
+    return await this.request("/fitness");
+  }
+
+  async createFitnessData(fitnessData) {
+    return await this.request("/fitness", {
+      method: "POST",
+      body: JSON.stringify(fitnessData),
+    });
+  }
+
+  // ===== WELLNESS =====
+
+  async getWellnessData() {
+    const queryString = await this.createQueryStringWithUserId();
+    return await this.request(`/wellness?${queryString}`);
+  }
+
+  async createWellnessData(wellnessData) {
+    const userId = await this.getUserId();
+    const dataWithUserId = { ...wellnessData, user_id: userId };
+    return await this.request("/wellness", {
+      method: "POST",
+      body: JSON.stringify(dataWithUserId),
+    });
+  }
+
+  async getWellnessActivities(params = {}) {
+    const queryString = await this.createQueryStringWithUserId(params);
+    return await this.request(`/wellness/activities?${queryString}`);
+  }
+
+  async getWellnessActivity(id) {
+    return await this.request(`/wellness/activities/${id}`);
+  }
+
+  async completeWellnessActivity(activityData) {
+    const userId = await this.getUserId();
+    const dataWithUserId = { ...activityData, user_id: userId };
+    return await this.request("/wellness/activities/complete", {
+      method: "POST",
+      body: JSON.stringify(dataWithUserId),
+    });
+  }
+
+  async getWellnessChallenges() {
+    return await this.request("/wellness/challenges");
+  }
+
+  async joinWellnessChallenge(challengeId) {
+    const userId = await this.getUserId();
+    return await this.request(`/wellness/challenges/${challengeId}/join`, {
+      method: "POST",
+      body: JSON.stringify({ user_id: userId }),
+    });
+  }
+
+  async getMoodTracker(params = {}) {
+    const queryString = await this.createQueryStringWithUserId(params);
+    return await this.request(`/wellness/mood-tracker?${queryString}`);
+  }
+
+  async logMood(moodData) {
+    const userId = await this.getUserId();
+    const dataWithUserId = { ...moodData, user_id: userId };
+    return await this.request("/wellness/mood-tracker", {
+      method: "POST",
+      body: JSON.stringify(dataWithUserId),
+    });
+  }
+
+  async getWellnessStats(params = {}) {
+    const queryString = await this.createQueryStringWithUserId(params);
+    return await this.request(`/wellness/stats?${queryString}`);
+  }
+
+  // ===== NEWS =====
+
+  async getNews() {
+    return await this.request("/news");
+  }
+
+  // ===== CALCULATORS =====
+
+  async calculateBMI(weight, height) {
+    return await this.request("/calculators/bmi", {
+      method: "POST",
+      body: JSON.stringify({ weight, height }),
+    });
+  }
+
+  async calculateBMR(userData) {
+    return await this.request("/calculators/bmr", {
+      method: "POST",
+      body: JSON.stringify(userData),
+    });
+  }
+
+  // ===== MISSIONS =====
+
+  async getMissions() {
+    return await this.request("/missions");
+  }
+
+  async getMissionsByCategory(category) {
+    return await this.request(`/missions/category/${category}`);
+  }
+
+  async getMyMissions() {
+    const queryString = await this.createQueryStringWithUserId();
+    return await this.request(`/missions/my-missions?${queryString}`);
+  }
+
+  async acceptMission(missionId) {
+    const userId = await this.getUserId();
+    return await this.request(`/missions/accept/${missionId}`, {
+      method: "POST",
+      body: JSON.stringify({ user_id: userId }),
+    });
+  }
+
+  async updateMissionProgress(userMissionId, progressData) {
+    const userId = await this.getUserId();
+    const dataWithUserId = { ...progressData, user_id: userId };
+    return await this.request(`/missions/progress/${userMissionId}`, {
+      method: "PUT",
+      body: JSON.stringify(dataWithUserId),
+    });
+  }
+
+  async abandonMission(userMissionId) {
+    const userId = await this.getUserId();
+    return await this.request(`/missions/abandon/${userMissionId}`, {
+      method: "PUT",
+      body: JSON.stringify({ user_id: userId }),
+    });
+  }
+
+  async getMissionStats() {
+    const queryString = await this.createQueryStringWithUserId();
+    return await this.request(`/missions/stats?${queryString}`);
+  }
+
+  // ===== TODAY'S SUMMARY =====
+
+  async getTodaySummary() {
+    const queryString = await this.createQueryStringWithUserId();
+    return await this.request(`/tracking/today-summary?${queryString}`);
+  }
+
+  // ===== DETAILED METRICS =====
+
+  async getDetailedMetrics(params = {}) {
+    const queryString = await this.createQueryStringWithUserId(params);
+    return await this.request(`/tracking/detailed-metrics?${queryString}`);
+  }
+
+  // ===== FITNESS TRACKING =====
+
+  async createFitnessEntry(fitnessData) {
+    const userId = await this.getUserId();
+    const dataWithUserId = { ...fitnessData, user_id: userId };
+    return await this.request("/tracking/fitness", {
+      method: "POST",
+      body: JSON.stringify(dataWithUserId),
+    });
+  }
+
+  async getFitnessHistory(params = {}) {
+    const queryString = await this.createQueryStringWithUserId(params);
+    return await this.request(`/tracking/fitness?${queryString}`);
+  }
+
+  async getTodayFitness() {
+    const queryString = await this.createQueryStringWithUserId();
+    return await this.request(`/tracking/fitness/today?${queryString}`);
+  }
+
+  // ===== CHAT =====
+
+  async getChats() {
+    const queryString = await this.createQueryStringWithUserId();
+    return await this.request(`/chat?${queryString}`);
+  }
+
+  async createAIChat() {
+    const userId = await this.getUserId();
+    return await this.request("/chat/ai", {
+      method: "POST",
+      body: JSON.stringify({ user_id: userId }),
+    });
+  }
+
+  async createDoctorChat(bookingId) {
+    const userId = await this.getUserId();
+    return await this.request(`/chat/doctor/${bookingId}`, {
+      method: "POST",
+      body: JSON.stringify({ user_id: userId }),
+    });
+  }
+
+  async getChatMessages(chatId, params = {}) {
+    const queryString = new URLSearchParams(params).toString();
+    return await this.request(`/chat/${chatId}/messages${queryString ? `?${queryString}` : ""}`);
+  }
+
+  async sendChatMessage(chatId, message) {
+    return await this.request(`/chat/${chatId}/messages`, {
+      method: "POST",
+      body: JSON.stringify({ message }),
+    });
+  }
+
+  async closeChat(chatId) {
+    return await this.request(`/chat/${chatId}`, {
+      method: "DELETE",
+    });
+  }
+
+  // ===== CONSULTATIONS =====
+
+  async getDoctors(type = 'all') {
+    const query = type !== 'all' ? `?type=${type}` : '';
+    return await this.request(`/clinics/doctors${query}`);
+  }
+
+  async getConsultationDoctors() {
+    return await this.request("/clinics/consultation/doctors");
+  }
+
+  async bookConsultation(consultationData) {
+    const userId = await this.getUserId();
+    const dataWithUserId = { ...consultationData, user_id: userId };
+    return await this.request("/consultations/book", {
+      method: "POST",
+      body: JSON.stringify(dataWithUserId),
+    });
+  }
+
+  async getConsultations() {
+    const queryString = await this.createQueryStringWithUserId();
+    return await this.request(`/consultations?${queryString}`);
+  }
+
+  async getConsultation(id) {
+    return await this.request(`/consultations/${id}`);
+  }
+
+  async payConsultation(id, paymentData) {
+    return await this.request(`/consultations/${id}/pay`, {
+      method: "POST",
+      body: JSON.stringify(paymentData),
+    });
+  }
+
+  async startConsultation(id) {
+    return await this.request(`/consultations/${id}/start`, {
+      method: "POST",
+    });
+  }
+
+  async endConsultation(id, data) {
+    return await this.request(`/consultations/${id}/end`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  }
+
+  async cancelConsultation(id, reason) {
+    return await this.request(`/consultations/${id}/cancel`, {
+      method: "POST",
+      body: JSON.stringify({ cancellation_reason: reason }),
+    });
+  }
+
+  async rateConsultation(id, rating, review) {
+    return await this.request(`/consultations/${id}/rate`, {
+      method: "POST",
+      body: JSON.stringify({ rating, review }),
+    });
+  }
+
+  async uploadPaymentProof(id, paymentData) {
+    return await this.request(`/consultations/${id}/upload-payment-proof`, {
+      method: "POST",
+      body: JSON.stringify(paymentData),
+    });
+  }
+
+  async getPendingPaymentConfirmations() {
+    return await this.request("/consultations/pending-confirmation");
+  }
+
+  async confirmPayment(id, confirmationData) {
+    return await this.request(`/consultations/${id}/confirm-payment`, {
+      method: "POST",
+      body: JSON.stringify(confirmationData),
+    });
+  }
+
+  // ===== FOOD & NUTRITION =====
+
+  async getQuickFoods() {
+    return await this.request('/food/quick-foods');
+  }
+
+  async addToQuickFoods(foodId) {
+    try {
+      return await this.request('/food/quick-foods', {
+        method: 'POST',
+        body: JSON.stringify({ food_id: foodId }),
+      });
+    } catch (error) {
+      // Handle specific error cases
+      if (error.message && error.message.includes("Food not found")) {
+        throw new Error("Selected food not found in database");
+      }
+      if (error.message && error.message.includes("Food already in quick foods")) {
+        throw new Error("Food already in quick foods");
+      }
+      if (error.message && error.message.includes("Maximum 12 quick foods allowed")) {
+        throw new Error("Maximum 12 quick foods allowed. Please remove some items first.");
+      }
+      throw error;
+    }
+  }
+
+  async removeFromQuickFoods(foodId) {
+    try {
+      return await this.request(`/food/quick-foods/${foodId}`, {
+        method: 'DELETE',
+      });
+    } catch (error) {
+      // Handle the case where quick food doesn't exist (already removed)
+      if (error.message && error.message.includes("Quick food not found") ||
+          error.message && error.message.includes("Data yang Anda cari tidak ditemukan")) {
+        return {
+          success: true,
+          message: "Food was not in quick foods"
+        };
+      }
+      throw error;
+    }
+  }
+
+  async checkQuickFoodStatus(foodId) {
+    try {
+      return await this.request(`/food/quick-foods/check/${foodId}`);
+    } catch (error) {
+      // Handle the case where food doesn't exist in database
+      if (error.message && error.message.includes("Food not found in database") || 
+          error.message && error.message.includes("Food not found")) {
+        return {
+          success: false,
+          data: { isQuickFood: false },
+          message: "Food not found in database"
+        };
+      }
+      throw error;
+    }
+  }
+
+  // Food categories endpoint
+  async getFoodCategories() {
+    try {
+      return await this.request('/food/categories');
+    } catch (error) {
+      console.error('Error fetching food categories:', error);
+      // Return fallback categories if API fails
+      return {
+        success: true,
+        data: [
+          "Rice Dishes",
+          "Chicken Dishes", 
+          "Beef Dishes",
+          "Noodle Dishes",
+          "Fruits",
+          "Vegetables", 
+          "Beverages",
+          "Snacks",
+          "Nuts",
+          "Salads",
+          "Soups",
+          "Grilled Dishes",
+          "Fermented Foods",
+          "Tofu Dishes",
+          "Meatballs"
+        ]
+      };
+    }
+  }
+
+  // Get food by ID with better error handling
+  async getFoodById(foodId) {
+    try {
+      return await this.request(`/food/${foodId}`);
+    } catch (error) {
+      if (error.message && error.message.includes("Food not found")) {
+        throw new Error("The requested food item was not found in the database");
+      }
+      if (error.message && error.message.includes("Invalid food ID format")) {
+        throw new Error("Invalid food ID provided");
+      }
+      throw error;
+    }
+  }
+
+  // Search food with improved error handling
+  async searchFood(query) {
+    try {
+      return await this.request(`/food/search?query=${encodeURIComponent(query)}&limit=20`);
+    } catch (error) {
+      console.error('Food search error:', error);
+      // Return empty results for search instead of throwing
+      return {
+        success: false,
+        data: [],
+        message: "Search temporarily unavailable"
+      };
+    }
+  }
+}
+
+export default new ApiService();

@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { View, StyleSheet, ScrollView, Dimensions } from "react-native";
+import { View, StyleSheet, ScrollView, Dimensions, Alert } from "react-native";
 import {
   Text,
   Button,
@@ -15,21 +15,32 @@ import LogoPutih from "../components/LogoPutih";
 
 const { width } = Dimensions.get("window");
 
-const TermsScreen = ({ navigation }: any) => {
+const TermsScreen = ({ navigation, onTermsAccepted }: any) => {
   const theme = useTheme();
   const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [acceptedPrivacy, setAcceptedPrivacy] = useState(false);
   const [acceptedDataConsent, setAcceptedDataConsent] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [loading, setLoading] = useState(false);
 
   const handleAccept = async () => {
-    if (acceptedTerms && acceptedPrivacy && acceptedDataConsent) {
+    if (acceptedTerms && acceptedPrivacy && acceptedDataConsent && !isProcessing) {
       try {
-        await AsyncStorage.setItem("isFirstLaunch", "false");
-        await AsyncStorage.setItem("hasAcceptedTerms", "true");
-        // Tidak perlu navigation.replace("Main") karena App.tsx akan otomatis
-        // menampilkan screen yang sesuai berdasarkan status authentication
+        setIsProcessing(true);
+        
+        // Call the callback function passed from parent
+        if (onTermsAccepted) {
+          await onTermsAccepted();
+        }
+        
+        // Navigate to main screen or next screen
+        if (navigation) {
+          navigation.replace("Main");
+        }
       } catch (error) {
-        console.error("Error saving terms acceptance:", error);
+        Alert.alert("Error", "Failed to accept terms. Please try again.");
+      } finally {
+        setIsProcessing(false);
       }
     }
   };
@@ -222,11 +233,12 @@ const TermsScreen = ({ navigation }: any) => {
             <Button
               mode="contained"
               onPress={handleAccept}
-              disabled={!allAccepted}
+              disabled={!allAccepted || isProcessing}
+              loading={isProcessing}
               style={[
                 styles.acceptButton,
                 {
-                  backgroundColor: allAccepted
+                  backgroundColor: allAccepted && !isProcessing
                     ? "#FFFFFF"
                     : "rgba(255,255,255,0.3)",
                 },
@@ -234,11 +246,11 @@ const TermsScreen = ({ navigation }: any) => {
               labelStyle={[
                 styles.buttonLabel,
                 {
-                  color: allAccepted ? "#D32F2F" : "#FFFFFF",
+                  color: allAccepted && !isProcessing ? "#D32F2F" : "#FFFFFF",
                 },
               ]}
             >
-              Terima & Lanjutkan
+              {isProcessing ? "Memproses..." : "Terima & Lanjutkan"}
             </Button>
           </View>
         </SafeAreaView>

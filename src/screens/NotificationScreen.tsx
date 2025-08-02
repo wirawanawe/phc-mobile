@@ -162,7 +162,11 @@ const NotificationScreen = ({ navigation }: any) => {
           contentContainerStyle={styles.scrollContent}
         >
           {notifications.length > 0 ? (
-            notifications.map(renderNotification)
+            notifications.map((notification) => (
+              <View key={notification.id}>
+                {renderNotification(notification)}
+              </View>
+            ))
           ) : (
             <View style={styles.emptyContainer}>
               <Icon name="bell-off" size={64} color="#9CA3AF" />

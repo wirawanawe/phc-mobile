@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   StyleSheet,
@@ -6,72 +6,56 @@ import {
   TouchableOpacity,
   Dimensions,
   StatusBar,
+  ActivityIndicator,
+  Alert,
 } from "react-native";
 import { Text, useTheme } from "react-native-paper";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Icon from "react-native-vector-icons/MaterialCommunityIcons";
 import { LinearGradient } from "expo-linear-gradient";
 import { CustomTheme } from "../theme/theme";
+import { useAuth } from "../contexts/AuthContext";
+import apiService from "../services/api";
 
 const { width } = Dimensions.get("window");
 
 const SleepTrackingScreen = ({ navigation }: any) => {
   const theme = useTheme<CustomTheme>();
+  const { isAuthenticated } = useAuth();
   const [selectedSleepTime, setSelectedSleepTime] = useState("22:30");
   const [selectedWakeTime, setSelectedWakeTime] = useState("07:00");
-
-  const sleepQualityData = [
-    { day: "Mon", hours: 7.5, quality: 85 },
-    { day: "Tue", hours: 8.0, quality: 90 },
-    { day: "Wed", hours: 6.5, quality: 70 },
-    { day: "Thu", hours: 8.5, quality: 95 },
-    { day: "Fri", hours: 7.0, quality: 80 },
-    { day: "Sat", hours: 9.0, quality: 88 },
-    { day: "Sun", hours: 8.2, quality: 92 },
-  ];
-
-  const sleepMetrics = [
-    {
-      id: "1",
-      title: "Sleep Duration",
-      value: "8.2",
-      unit: "hours",
-      trend: "+0.5h",
-      trendPositive: true,
-      icon: "clock-outline",
-      color: "#8B5CF6",
-    },
-    {
-      id: "2",
-      title: "Sleep Quality",
-      value: "85",
-      unit: "%",
-      trend: "+5%",
-      trendPositive: true,
-      icon: "star",
-      color: "#F59E0B",
-    },
-    {
-      id: "3",
-      title: "Deep Sleep",
-      value: "2.1",
-      unit: "hours",
-      trend: "+0.3h",
-      trendPositive: true,
-      icon: "moon-waning-crescent",
-      color: "#3B82F6",
-    },
-    {
-      id: "4",
-      title: "REM Sleep",
-      value: "1.8",
-      unit: "hours",
-      trend: "-0.2h",
-      trendPositive: false,
-      icon: "eye",
-      color: "#10B981",
-    },
-  ];
+  const [selectedSleepQuality, setSelectedSleepQuality] = useState<string>("good");
+  const [loading, setLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+  const [sleepQualityData, setSleepQualityData] = useState<Array<{
+    day: string;
+    hours: number;
+    quality: number;
+    date?: string;
+    bedtime?: string;
+    wake_time?: string;
+    deep_sleep_hours?: number;
+    rem_sleep_hours?: number;
+    light_sleep_hours?: number;
+    sleep_efficiency?: number;
+  }>>([]);
+  const [sleepMetrics, setSleepMetrics] = useState<Array<{
+    id: string;
+    title: string;
+    value: string;
+    unit: string;
+    trend: string;
+    trendPositive: boolean;
+    icon: string;
+    color: string;
+  }>>([]);
+  const [sleepStages, setSleepStages] = useState<Array<{
+    stage: string;
+    duration: string;
+    percentage: number;
+    color: string;
+  }>>([]);
+  const [totalSleepHours, setTotalSleepHours] = useState("0");
 
   const sleepTips = [
     {
@@ -104,17 +88,302 @@ const SleepTrackingScreen = ({ navigation }: any) => {
     },
   ];
 
-  const sleepStages = [
-    {
-      stage: "Light Sleep",
-      duration: "4.2h",
-      percentage: 51,
-      color: "#E5E7EB",
-    },
-    { stage: "Deep Sleep", duration: "2.1h", percentage: 26, color: "#3B82F6" },
-    { stage: "REM Sleep", duration: "1.8h", percentage: 22, color: "#8B5CF6" },
-    { stage: "Awake", duration: "0.1h", percentage: 1, color: "#F59E0B" },
-  ];
+  useEffect(() => {
+    fetchSleepData();
+  }, []);
+
+  const fetchSleepData = async () => {
+    try {
+      setLoading(true);
+      
+      // Check if user is logged in
+      const userId = await apiService.getUserId();
+      if (!userId) {
+        console.error("No user ID found - user may not be logged in");
+        // Set default data if user is not logged in
+        setSleepQualityData([
+          { day: "Mon", hours: 0, quality: 0 },
+          { day: "Tue", hours: 0, quality: 0 },
+          { day: "Wed", hours: 0, quality: 0 },
+          { day: "Thu", hours: 0, quality: 0 },
+          { day: "Fri", hours: 0, quality: 0 },
+          { day: "Sat", hours: 0, quality: 0 },
+          { day: "Sun", hours: 0, quality: 0 },
+        ]);
+        return;
+      }
+      
+      // Fetch weekly sleep data
+      const weeklyResponse = await api.getWeeklySleepData();
+      if (weeklyResponse.success && weeklyResponse.data && weeklyResponse.data.daily_breakdown) {
+        // Transform the API response to match the expected format
+        const transformedData = weeklyResponse.data.daily_breakdown.map((day: any) => ({
+          day: new Date(day.date).toLocaleDateString('en-US', { weekday: 'short' }),
+          hours: day.total_hours || 0,
+          quality: day.quality ? getQualityScore(day.quality) : 0,
+          date: day.date,
+          bedtime: day.bedtime,
+          wake_time: day.wake_time,
+        }));
+        
+        setSleepQualityData(transformedData);
+        
+        // Calculate total sleep hours for today (last entry with data)
+        const todayData = transformedData.find((day: any) => day.hours > 0);
+        if (todayData && todayData.hours) {
+          setTotalSleepHours(todayData.hours.toFixed(1));
+          setSelectedSleepTime(todayData.bedtime || "22:30");
+          setSelectedWakeTime(todayData.wake_time || "07:00");
+        }
+      } else {
+        // Set default data if API fails or no data
+        setSleepQualityData([
+          { day: "Mon", hours: 0, quality: 0 },
+          { day: "Tue", hours: 0, quality: 0 },
+          { day: "Wed", hours: 0, quality: 0 },
+          { day: "Thu", hours: 0, quality: 0 },
+          { day: "Fri", hours: 0, quality: 0 },
+          { day: "Sat", hours: 0, quality: 0 },
+          { day: "Sun", hours: 0, quality: 0 },
+        ]);
+      }
+
+      // Fetch sleep analysis
+      const analysisResponse = await api.getSleepAnalysis();
+      if (analysisResponse.success && analysisResponse.data) {
+        const analysis = analysisResponse.data;
+        setSleepMetrics([
+          {
+            id: "1",
+            title: "Sleep Duration",
+            value: analysis.average_sleep_hours?.toFixed(1) || "0",
+            unit: "hours",
+            trend: "Stable",
+            trendPositive: true,
+            icon: "clock-outline",
+            color: "#8B5CF6",
+          },
+          {
+            id: "2",
+            title: "Sleep Quality",
+            value: analysis.average_sleep_quality?.toFixed(1) || "0",
+            unit: "%",
+            trend: "Stable",
+            trendPositive: true,
+            icon: "star",
+            color: "#F59E0B",
+          },
+          {
+            id: "3",
+            title: "Sleep Consistency",
+            value: analysis.sleep_consistency?.toFixed(1) || "0",
+            unit: "%",
+            trend: "Stable",
+            trendPositive: true,
+            icon: "moon-waning-crescent",
+            color: "#3B82F6",
+          },
+          {
+            id: "4",
+            title: "Sleep Efficiency",
+            value: analysis.average_sleep_efficiency?.toFixed(1) || "0",
+            unit: "%",
+            trend: "Stable",
+            trendPositive: true,
+            icon: "eye",
+            color: "#10B981",
+          },
+        ]);
+      } else {
+        // Set default metrics if API fails
+        setSleepMetrics([
+          {
+            id: "1",
+            title: "Sleep Duration",
+            value: "0",
+            unit: "hours",
+            trend: "Stable",
+            trendPositive: true,
+            icon: "clock-outline",
+            color: "#8B5CF6",
+          },
+          {
+            id: "2",
+            title: "Sleep Quality",
+            value: "0",
+            unit: "%",
+            trend: "Stable",
+            trendPositive: true,
+            icon: "star",
+            color: "#F59E0B",
+          },
+          {
+            id: "3",
+            title: "Sleep Consistency",
+            value: "0",
+            unit: "%",
+            trend: "Stable",
+            trendPositive: true,
+            icon: "moon-waning-crescent",
+            color: "#3B82F6",
+          },
+          {
+            id: "4",
+            title: "Sleep Efficiency",
+            value: "0",
+            unit: "%",
+            trend: "Stable",
+            trendPositive: true,
+            icon: "eye",
+            color: "#10B981",
+          },
+        ]);
+      }
+
+      // Fetch sleep stages
+      const stagesResponse = await api.getSleepStages();
+      if (stagesResponse.success && stagesResponse.data && Array.isArray(stagesResponse.data)) {
+        setSleepStages(stagesResponse.data);
+      } else {
+        // Set default sleep stages if API fails
+        setSleepStages([
+          {
+            stage: "Deep Sleep",
+            duration: "2h 30m",
+            percentage: 25,
+            color: "#3B82F6",
+          },
+          {
+            stage: "REM Sleep",
+            duration: "1h 45m",
+            percentage: 18,
+            color: "#10B981",
+          },
+          {
+            stage: "Light Sleep",
+            duration: "4h 15m",
+            percentage: 42,
+            color: "#F59E0B",
+          },
+          {
+            stage: "Awake",
+            duration: "30m",
+            percentage: 5,
+            color: "#EF4444",
+          },
+        ]);
+      }
+    } catch (error) {
+      console.error("Error fetching sleep data:", error);
+      // Set default data if API fails
+      setSleepQualityData([
+        { day: "Mon", hours: 0, quality: 0 },
+        { day: "Tue", hours: 0, quality: 0 },
+        { day: "Wed", hours: 0, quality: 0 },
+        { day: "Thu", hours: 0, quality: 0 },
+        { day: "Fri", hours: 0, quality: 0 },
+        { day: "Sat", hours: 0, quality: 0 },
+        { day: "Sun", hours: 0, quality: 0 },
+      ]);
+      // Set default sleep stages if API fails
+      setSleepStages([
+        {
+          stage: "Deep Sleep",
+          duration: "2h 30m",
+          percentage: 25,
+          color: "#3B82F6",
+        },
+        {
+          stage: "REM Sleep",
+          duration: "1h 45m",
+          percentage: 18,
+          color: "#10B981",
+        },
+        {
+          stage: "Light Sleep",
+          duration: "4h 15m",
+          percentage: 42,
+          color: "#F59E0B",
+        },
+        {
+          stage: "Awake",
+          duration: "30m",
+          percentage: 5,
+          color: "#EF4444",
+        },
+      ]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSaveSleep = async () => {
+    if (!isAuthenticated) {
+      Alert.alert("Authentication Required", "Please log in to save your sleep data");
+      return;
+    }
+
+    setIsSaving(true);
+
+    try {
+      // Calculate sleep duration in hours and minutes
+      const [sleepHour, sleepMinute] = selectedSleepTime.split(':').map(Number);
+      const [wakeHour, wakeMinute] = selectedWakeTime.split(':').map(Number);
+      
+      let sleepDurationMinutes = (wakeHour * 60 + wakeMinute) - (sleepHour * 60 + sleepMinute);
+      if (sleepDurationMinutes <= 0) {
+        sleepDurationMinutes += 24 * 60; // Add 24 hours if wake time is next day
+      }
+
+      const sleepHours = Math.floor(sleepDurationMinutes / 60);
+      const sleepMinutes = sleepDurationMinutes % 60;
+
+      const sleepData = {
+        sleep_date: new Date().toISOString().split('T')[0],
+        sleep_hours: sleepHours,
+        sleep_minutes: sleepMinutes,
+        sleep_quality: selectedSleepQuality,
+        bedtime: selectedSleepTime,
+        wake_time: selectedWakeTime,
+        notes: `Sleep duration: ${sleepHours}h ${sleepMinutes}m, Quality: ${selectedSleepQuality}`
+      };
+
+      const response = await apiService.createSleepEntry(sleepData);
+
+      if (response.success) {
+        Alert.alert(
+          "Success",
+          "Sleep data saved successfully!",
+          [
+            {
+              text: "OK",
+              onPress: () => {
+                navigation.goBack();
+              },
+            },
+          ]
+        );
+      } else {
+        Alert.alert("Error", response.message || "Failed to save sleep data");
+      }
+    } catch (error: any) {
+      console.error("Error saving sleep data:", error);
+      Alert.alert("Error", "Failed to save sleep data. Please try again.");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // Helper function to convert quality string to numeric score
+  const getQualityScore = (quality: string): number => {
+    const qualityScores = {
+      excellent: 4,
+      good: 3,
+      fair: 2,
+      poor: 1,
+    };
+    return qualityScores[quality as keyof typeof qualityScores] || 0;
+  };
 
   const renderSleepMetric = ({ item }: any) => (
     <View style={styles.sleepMetricCard}>
@@ -191,6 +460,20 @@ const SleepTrackingScreen = ({ navigation }: any) => {
     </View>
   );
 
+  if (loading) {
+    return (
+      <LinearGradient colors={["#F8FAFF", "#E8EAFF"]} style={styles.container}>
+        <StatusBar barStyle="dark-content" backgroundColor="#F8FAFF" />
+        <SafeAreaView style={styles.safeArea}>
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color="#8B5CF6" />
+            <Text style={styles.loadingText}>Loading sleep data...</Text>
+          </View>
+        </SafeAreaView>
+      </LinearGradient>
+    );
+  }
+
   return (
     <LinearGradient colors={["#F8FAFF", "#E8EAFF"]} style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#F8FAFF" />
@@ -205,8 +488,8 @@ const SleepTrackingScreen = ({ navigation }: any) => {
               <Icon name="arrow-left" size={24} color="#1F2937" />
             </TouchableOpacity>
             <Text style={styles.headerTitle}>Sleep Tracking</Text>
-            <TouchableOpacity style={styles.settingsButton}>
-              <Icon name="cog" size={24} color="#1F2937" />
+            <TouchableOpacity style={styles.settingsButton} onPress={fetchSleepData}>
+              <Icon name="refresh" size={24} color="#1F2937" />
             </TouchableOpacity>
           </View>
 
@@ -235,7 +518,61 @@ const SleepTrackingScreen = ({ navigation }: any) => {
               </View>
               <View style={styles.sleepDurationContainer}>
                 <Text style={styles.sleepDurationLabel}>Total Sleep</Text>
-                <Text style={styles.sleepDurationValue}>8.5 hours</Text>
+                <Text style={styles.sleepDurationValue}>{totalSleepHours} hours</Text>
+              </View>
+              
+              {/* Sleep Quality Selector */}
+              <View style={styles.sleepQualitySelector}>
+                <Text style={styles.sleepQualityLabel}>Sleep Quality</Text>
+                <View style={styles.sleepQualityOptions}>
+                  {[
+                    { value: "excellent", label: "Excellent", color: "#10B981" },
+                    { value: "good", label: "Good", color: "#34D399" },
+                    { value: "fair", label: "Fair", color: "#F59E0B" },
+                    { value: "poor", label: "Poor", color: "#EF4444" },
+                    { value: "very_poor", label: "Very Poor", color: "#DC2626" },
+                  ].map((quality) => (
+                    <TouchableOpacity
+                      key={quality.value}
+                      style={[
+                        styles.sleepQualityOption,
+                        selectedSleepQuality === quality.value && styles.sleepQualityOptionSelected,
+                      ]}
+                      onPress={() => setSelectedSleepQuality(quality.value)}
+                    >
+                      <View
+                        style={[
+                          styles.sleepQualityIndicator,
+                          { backgroundColor: quality.color },
+                        ]}
+                      />
+                      <Text style={styles.sleepQualityOptionText}>{quality.label}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+              
+              {/* Save Button */}
+              <View style={styles.saveButtonContainer}>
+                <TouchableOpacity
+                  style={[styles.saveButton, isSaving && styles.saveButtonDisabled]}
+                  onPress={handleSaveSleep}
+                  disabled={isSaving}
+                >
+                  <LinearGradient
+                    colors={["#8B5CF6", "#7C3AED"]}
+                    style={styles.saveButtonGradient}
+                  >
+                    {isSaving ? (
+                      <View style={styles.loadingContainer}>
+                        <ActivityIndicator size="small" color="#FFFFFF" />
+                        <Text style={styles.saveButtonText}>Saving...</Text>
+                      </View>
+                    ) : (
+                      <Text style={styles.saveButtonText}>Save Sleep Data</Text>
+                    )}
+                  </LinearGradient>
+                </TouchableOpacity>
               </View>
             </View>
           </View>
@@ -316,7 +653,7 @@ const SleepTrackingScreen = ({ navigation }: any) => {
           <View style={styles.sleepStagesContainer}>
             <Text style={styles.sectionTitle}>Sleep Stages</Text>
             <View style={styles.sleepStagesCard}>
-              {sleepStages.map((stage, index) => (
+              {sleepStages?.map((stage, index) => (
                 <View key={index} style={styles.sleepStageCard}>
                   <View style={styles.sleepStageHeader}>
                     <View
@@ -385,6 +722,17 @@ const styles = StyleSheet.create({
   },
   safeArea: {
     flex: 1,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  loadingText: {
+    marginTop: 16,
+    fontSize: 16,
+    color: "#6B7280",
+    fontWeight: "500",
   },
   header: {
     flexDirection: "row",
@@ -471,6 +819,72 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: "700",
     color: "#8B5CF6",
+  },
+  sleepQualitySelector: {
+    marginTop: 20,
+    paddingTop: 20,
+    borderTopWidth: 1,
+    borderTopColor: "#E5E7EB",
+  },
+  sleepQualityLabel: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#1F2937",
+    marginBottom: 12,
+  },
+  sleepQualityOptions: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  sleepQualityOption: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#F9FAFB",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 2,
+    borderColor: "transparent",
+  },
+  sleepQualityOptionSelected: {
+    borderColor: "#8B5CF6",
+    backgroundColor: "#F3F4F6",
+  },
+  sleepQualityIndicator: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    marginRight: 6,
+  },
+  sleepQualityOptionText: {
+    fontSize: 14,
+    fontWeight: "500",
+    color: "#1F2937",
+  },
+  saveButtonContainer: {
+    marginTop: 20,
+  },
+  saveButton: {
+    borderRadius: 12,
+    overflow: "hidden",
+  },
+  saveButtonDisabled: {
+    opacity: 0.6,
+  },
+  saveButtonGradient: {
+    paddingVertical: 16,
+    alignItems: "center",
+  },
+  saveButtonText: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#FFFFFF",
+  },
+  loadingContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
   },
   sleepQualityContainer: {
     paddingHorizontal: 20,

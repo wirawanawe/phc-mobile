@@ -14,7 +14,7 @@ import HealthEducationScreen from "./src/screens/HealthEducationScreen";
 import FitnessScreen from "./src/screens/FitnessScreen";
 import WellnessScreen from "./src/screens/WellnessScreen";
 import DashboardScreen from "./src/screens/DashboardScreen";
-import ConsultationScreen from "./src/screens/ConsultationScreen";
+import DetailDoctor from "./src/screens/DetailDoctor";
 import NewsPortalScreen from "./src/screens/NewsPortalScreen";
 import WellnessDetailsScreen from "./src/screens/WellnessDetailsScreen";
 import PersonalizedContentScreen from "./src/screens/PersonalizedContentScreen";
@@ -29,6 +29,8 @@ import PersonalInformationScreen from "./src/screens/PersonalInformationScreen";
 import MissionDetailScreen from "./src/screens/MissionDetailScreen";
 import NotificationScreen from "./src/screens/NotificationScreen";
 import ChatAssistantScreen from "./src/screens/ChatAssistantScreen";
+
+import ChatDetailScreen from "./src/screens/ChatDetailScreen";
 import LoginScreen from "./src/screens/LoginScreen";
 import RegisterScreen from "./src/screens/RegisterScreen";
 import MoodTrackingScreen from "./src/screens/MoodTrackingScreen";
@@ -36,9 +38,23 @@ import HealthInsightsScreen from "./src/screens/HealthInsightsScreen";
 import WaterTrackingScreen from "./src/screens/WaterTrackingScreen";
 import SleepTrackingScreen from "./src/screens/SleepTrackingScreen";
 import MealLoggingScreen from "./src/screens/MealLoggingScreen";
+import FitnessTrackingScreen from "./src/screens/FitnessTrackingScreen";
+import RealtimeFitnessScreen from "./src/screens/RealtimeFitnessScreen";
 import ClinicBookingScreen from "./src/screens/ClinicBookingScreen";
 import BookingConfirmationScreen from "./src/screens/BookingConfirmationScreen";
 import BookingSuccessScreen from "./src/screens/BookingSuccessScreen";
+import AdminDashboardScreen from "./src/screens/AdminDashboardScreen";
+import BookingDetailScreen from "./src/screens/BookingDetailScreen";
+import ConsultationBookingScreen from "./src/screens/ConsultationBookingScreen";
+import ConsultationPaymentScreen from "./src/screens/ConsultationPaymentScreen";
+import ConsultationDetailScreen from "./src/screens/ConsultationDetailScreen";
+import ConsultationHistoryScreen from "./src/screens/ConsultationHistoryScreen";
+
+// Import new separated apps
+import WellnessApp, { TestWellnessApp } from "./src/screens/WellnessApp";
+import ClinicsApp from "./src/screens/ClinicsApp";
+import ActivityScreen from "./src/screens/ActivityScreen";
+import WellnessActivityDetailScreen from "./src/screens/WellnessActivityDetailScreen";
 
 // Import theme and context
 import { theme } from "./src/theme/theme";
@@ -47,7 +63,7 @@ import { AuthProvider, useAuth } from "./src/contexts/AuthContext";
 const Stack = createStackNavigator();
 
 function AppContent() {
-  const { isLoading } = useAuth();
+  const { isLoading, isAuthenticated } = useAuth();
   const [isFirstLaunch, setIsFirstLaunch] = React.useState<boolean | null>(
     null
   );
@@ -59,11 +75,18 @@ function AppContent() {
     checkAppState();
   }, []);
 
+  // Debug effect to monitor state changes
+  React.useEffect(() => {
+    console.log("State changed:", { isFirstLaunch, hasAcceptedTerms, isLoading });
+  }, [isFirstLaunch, hasAcceptedTerms, isLoading]);
+
   const checkAppState = async () => {
     try {
       const firstLaunch = await AsyncStorage.getItem("isFirstLaunch");
       const termsAccepted = await AsyncStorage.getItem("hasAcceptedTerms");
 
+      console.log("Checking app state:", { firstLaunch, termsAccepted });
+      
       setIsFirstLaunch(firstLaunch === null);
       setHasAcceptedTerms(termsAccepted === "true");
     } catch (error) {
@@ -73,13 +96,65 @@ function AppContent() {
     }
   };
 
-  if (isLoading || isFirstLaunch === null || hasAcceptedTerms === null) {
+  const handleTermsAccepted = async () => {
+    try {
+      console.log("Terms accepted, updating app state...");
+      await AsyncStorage.setItem("isFirstLaunch", "false");
+      await AsyncStorage.setItem("hasAcceptedTerms", "true");
+      
+      // Force immediate state update
+      setIsFirstLaunch(false);
+      setHasAcceptedTerms(true);
+      
+      console.log("App state updated successfully");
+      
+      // Add a small delay to ensure state is properly updated
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+    } catch (error) {
+      console.error("Error updating app state:", error);
+    }
+  };
+
+  // Debug logging
+  console.log("App state:", { isLoading, isFirstLaunch, hasAcceptedTerms, isAuthenticated });
+
+  // For testing: always show Main screen if not loading
+  if (isLoading) {
     return null; // Loading state
   }
 
+  // If first launch, show welcome
+  if (isFirstLaunch) {
+    return (
+      <PaperProvider theme={theme}>
+        <NavigationContainer key="first-launch">
+          <StatusBar style="light" backgroundColor="#D32F2F" />
+          <Stack.Navigator>
+            <Stack.Screen
+              name="Welcome"
+              component={WelcomeScreen}
+              options={{ headerShown: false }}
+            />
+            <Stack.Screen
+              name="Terms"
+              component={(props: any) => (
+                <TermsScreen {...props} onTermsAccepted={handleTermsAccepted} />
+              )}
+              options={{ headerShown: false }}
+            />
+          </Stack.Navigator>
+        </NavigationContainer>
+      </PaperProvider>
+    );
+  }
+
+  // Show main app with proper navigation
+  console.log("Showing main app with proper navigation");
+
   return (
     <PaperProvider theme={theme}>
-      <NavigationContainer>
+      <NavigationContainer key="main-app">
         <StatusBar style="light" backgroundColor="#D32F2F" />
         <Stack.Navigator
           screenOptions={{
@@ -92,23 +167,19 @@ function AppContent() {
             },
           }}
         >
-          {isFirstLaunch && (
-            <Stack.Screen
-              name="Welcome"
-              component={WelcomeScreen}
-              options={{ headerShown: false }}
-            />
-          )}
-          {!hasAcceptedTerms && (
-            <Stack.Screen
-              name="Terms"
-              component={TermsScreen}
-              options={{ headerShown: false }}
-            />
-          )}
+          {/* Main app screens - accessible without authentication */}
           <Stack.Screen
             name="Main"
             component={MainScreen}
+            options={{ headerShown: false }}
+          />
+          
+          {/* Authentication screens - always available */}
+          <Stack.Screen
+            name="Terms"
+            component={(props: any) => (
+              <TermsScreen {...props} onTermsAccepted={handleTermsAccepted} />
+            )}
             options={{ headerShown: false }}
           />
           <Stack.Screen
@@ -142,13 +213,18 @@ function AppContent() {
             options={{ title: "Wellness Activities" }}
           />
           <Stack.Screen
-            name="Dashboard"
-            component={DashboardScreen}
-            options={{ title: "Dashboard & Reports" }}
+            name="Activity"
+            component={ActivityScreen}
+            options={{ title: "Activity Tracking" }}
           />
           <Stack.Screen
-            name="Consultation"
-            component={ConsultationScreen}
+            name="WellnessActivityDetail"
+            component={WellnessActivityDetailScreen}
+            options={{ headerShown: false }}
+          />
+          <Stack.Screen
+            name="DetailDoctor"
+            component={DetailDoctor}
             options={{ title: "Expert Consultation" }}
           />
           <Stack.Screen
@@ -167,11 +243,6 @@ function AppContent() {
             options={{ title: "Personalized Content" }}
           />
           <Stack.Screen
-            name="DailyMission"
-            component={DailyMissionScreen}
-            options={{ title: "Daily Mission" }}
-          />
-          <Stack.Screen
             name="NutritionDetails"
             component={NutritionDetailsScreen}
             options={{ title: "Nutrition Details" }}
@@ -183,13 +254,8 @@ function AppContent() {
           />
           <Stack.Screen
             name="ArticleDetail"
-            component={ArticleDetailScreen}
+            component={(props: any) => <ArticleDetailScreen {...props} />}
             options={{ title: "Article Details" }}
-          />
-          <Stack.Screen
-            name="Profile"
-            component={ProfileScreen}
-            options={{ title: "Profile" }}
           />
           <Stack.Screen
             name="Calculator"
@@ -202,16 +268,6 @@ function AppContent() {
             options={{ title: "All Calculators" }}
           />
           <Stack.Screen
-            name="PersonalInformation"
-            component={PersonalInformationScreen}
-            options={{ title: "Personal Information" }}
-          />
-          <Stack.Screen
-            name="MissionDetail"
-            component={MissionDetailScreen}
-            options={{ title: "Mission Details" }}
-          />
-          <Stack.Screen
             name="Notification"
             component={NotificationScreen}
             options={{ title: "Notifications" }}
@@ -220,6 +276,12 @@ function AppContent() {
             name="ChatAssistant"
             component={ChatAssistantScreen}
             options={{ title: "AI Health Assistant" }}
+          />
+
+          <Stack.Screen
+            name="ChatDetail"
+            component={ChatDetailScreen}
+            options={{ headerShown: false }}
           />
           <Stack.Screen
             name="MoodTracking"
@@ -247,20 +309,117 @@ function AppContent() {
             options={{ title: "Log Meal" }}
           />
           <Stack.Screen
-            name="ClinicBooking"
-            component={ClinicBookingScreen}
-            options={{ title: "Booking Klinik" }}
+            name="FitnessTracking"
+            component={FitnessTrackingScreen}
+            options={{ title: "Track Fitness" }}
           />
           <Stack.Screen
-            name="BookingConfirmation"
-            component={BookingConfirmationScreen}
-            options={{ title: "Konfirmasi Booking" }}
+            name="RealtimeFitness"
+            component={RealtimeFitnessScreen}
+            options={{ title: "Real-time Fitness" }}
           />
-          <Stack.Screen
-            name="BookingSuccess"
-            component={BookingSuccessScreen}
-            options={{ title: "Booking Berhasil" }}
-          />
+          
+          {/* Authentication-required screens */}
+          {isAuthenticated && (
+            <>
+              <Stack.Screen
+                name="Dashboard"
+                component={DashboardScreen}
+                options={{ title: "Dashboard & Reports" }}
+              />
+              <Stack.Screen
+                name="DailyMission"
+                component={DailyMissionScreen}
+                options={{ title: "Daily Mission" }}
+              />
+              <Stack.Screen
+                name="Profile"
+                component={ProfileScreen}
+                options={{ title: "Profile" }}
+              />
+              <Stack.Screen
+                name="PersonalInformation"
+                component={PersonalInformationScreen}
+                options={{ title: "Personal Information" }}
+              />
+              <Stack.Screen
+                name="MissionDetail"
+                component={MissionDetailScreen}
+                options={{ title: "Mission Details" }}
+              />
+              <Stack.Screen
+                name="ClinicBooking"
+                component={ClinicBookingScreen}
+                options={{ title: "Booking Klinik" }}
+              />
+              <Stack.Screen
+                name="BookingConfirmation"
+                component={BookingConfirmationScreen}
+                options={{ title: "Konfirmasi Booking" }}
+              />
+              <Stack.Screen
+                name="BookingSuccess"
+                component={BookingSuccessScreen}
+                options={{ title: "Booking Berhasil" }}
+              />
+              <Stack.Screen
+                name="BookingDetail"
+                component={BookingDetailScreen}
+                options={{ headerShown: false }}
+              />
+              <Stack.Screen
+                name="AdminDashboard"
+                component={AdminDashboardScreen}
+                options={{ title: "Admin Dashboard" }}
+              />
+              
+              {/* Consultation Screens */}
+              <Stack.Screen
+                name="ConsultationBooking"
+                component={ConsultationBookingScreen}
+                options={{ headerShown: false }}
+              />
+              <Stack.Screen
+                name="ConsultationPayment"
+                component={ConsultationPaymentScreen}
+                options={{ headerShown: false }}
+              />
+              <Stack.Screen
+                name="ConsultationDetail"
+                component={ConsultationDetailScreen}
+                options={{ headerShown: false }}
+              />
+              <Stack.Screen
+                name="ConsultationHistory"
+                component={ConsultationHistoryScreen}
+                options={{ headerShown: false }}
+              />
+              
+              {/* New separated apps - require authentication */}
+              <Stack.Screen
+                name="WellnessApp"
+                component={WellnessApp}
+                options={{ headerShown: false }}
+              />
+              <Stack.Screen
+                name="ClinicsApp"
+                component={ClinicsApp}
+                options={{ headerShown: false }}
+              />
+              
+              {/* Clinics App Screens */}
+              <Stack.Screen
+                name="ClinicDetail"
+                component={ClinicBookingScreen}
+                options={{ title: "Detail Klinik" }}
+              />
+              <Stack.Screen
+                name="BookingHistory"
+                component={ClinicBookingScreen}
+                options={{ title: "Riwayat Booking" }}
+              />
+            </>
+          )}
         </Stack.Navigator>
       </NavigationContainer>
     </PaperProvider>

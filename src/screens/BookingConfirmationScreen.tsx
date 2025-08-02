@@ -16,7 +16,7 @@ import apiService from "../services/api";
 
 const BookingConfirmationScreen = ({ navigation, route }: any) => {
   const theme = useTheme<CustomTheme>();
-  const { bookingData, isExistingBooking } = route.params || {};
+  const { bookingData, isExistingBooking, onBookingUpdate } = route.params || {};
   const [userProfile, setUserProfile] = useState<any>(null);
 
   // Fetch user profile on component mount
@@ -392,10 +392,11 @@ const BookingConfirmationScreen = ({ navigation, route }: any) => {
               {
                 text: "OK",
                 onPress: () => {
-                  // Navigate back to booking history with refresh
-                  navigation.navigate("ClinicBooking", {
-                    refreshHistory: true,
-                  });
+                  // Call refresh callback if provided
+                  if (onBookingUpdate) {
+                    onBookingUpdate();
+                  }
+                  navigation.goBack();
                 },
               },
             ]

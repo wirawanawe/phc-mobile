@@ -7,6 +7,7 @@ export interface User {
   healthScore: number;
   points: number;
   level: number;
+  role: "user" | "admin" | "doctor";
 }
 
 export interface HealthAssessment {
@@ -94,4 +95,35 @@ export interface HealthReport {
   pointsEarned: number;
   recommendations: string[];
   date: Date;
+}
+
+export interface Mission {
+  id: number;
+  title: string;
+  description: string;
+  category: string;
+  type: string;
+  target_value: number;
+  unit?: string;
+  points: number;
+  icon?: string;
+  color?: string;
+  difficulty: string;
+}
+
+export interface UserMission {
+  id: number;
+  user_id: number;
+  mission_id: number;
+  status: string;
+  progress: number;
+  current_value: number;
+  start_date: string;
+  completed_date?: string;
+  due_date?: string;
+  points_earned?: number;
+  streak_count: number;
+  last_completed_date?: string;
+  notes?: string;
+  mission?: Mission;
 }

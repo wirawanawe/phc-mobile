@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   Alert,
 } from "react-native";
+import { useFocusEffect } from "@react-navigation/native";
 import {
   Text,
   Card,
@@ -87,6 +88,15 @@ const DashboardScreen = ({ navigation }: any) => {
     }
   }, [isAuthenticated]);
 
+  // Refresh data when screen comes into focus
+  useFocusEffect(
+    React.useCallback(() => {
+      if (isAuthenticated) {
+        loadMissionData();
+      }
+    }, [isAuthenticated])
+  );
+
   const loadMissionData = async () => {
     try {
       setLoading(true);
@@ -109,8 +119,7 @@ const DashboardScreen = ({ navigation }: any) => {
         setAvailableMissions(availableMissionsResponse.data);
       }
     } catch (error) {
-      console.error("Error loading mission data:", error);
-      // Don't show alert for non-critical errors
+      // Handle error silently
     } finally {
       setLoading(false);
     }
@@ -242,7 +251,7 @@ const DashboardScreen = ({ navigation }: any) => {
       "Participate in structured wellness programs for better health outcomes",
     priority: "medium",
     color: theme.customColors.warmOrange,
-    action: () => navigation.navigate("Wellness"),
+            action: () => navigation.navigate("Activity"),
   });
 
   // Add clinic booking recommendation
@@ -567,6 +576,103 @@ const DashboardScreen = ({ navigation }: any) => {
           </Card>
         </View>
 
+        {/* Active Missions */}
+        {userMissions.filter((um) => um.status === "active").length > 0 && (
+          <View style={styles.section}>
+            <Text
+              style={[styles.sectionTitle, { color: theme.colors.onBackground }]}
+            >
+              Active Missions
+            </Text>
+            <Card
+              style={[
+                styles.activitiesCard,
+                { backgroundColor: "rgba(255,255,255,0.95)" },
+              ]}
+            >
+              <Card.Content>
+                                {userMissions
+                  .filter((um) => um.status === "active")
+                  .map((userMission, index) => {
+                    const mission = userMission.mission;
+                    const progressPercentage = mission?.target_value 
+                      ? Math.min((userMission.current_value / mission.target_value) * 100, 100)
+                      : 0;
+                    
+                    return (
+                      <TouchableOpacity
+                        key={userMission.id}
+                        onPress={() => {
+                          // Prevent navigation for completed missions
+                          if (userMission.status === "completed") {
+                            Alert.alert(
+                              "Mission Completed",
+                              "This mission has been completed. You cannot update completed missions.",
+                              [{ text: "OK" }]
+                            );
+                            return;
+                          }
+                          navigation.navigate("MissionDetail", {
+                            mission: mission,
+                            userMission: userMission,
+                            onMissionUpdate: loadMissionData
+                          });
+                        }}
+                      >
+                        <View
+                          style={[
+                            styles.activityItem,
+                            index < userMissions.filter((um) => um.status === "active").length - 1 &&
+                              styles.activityBorder,
+                          ]}
+                        >
+                          <View
+                            style={[
+                              styles.activityIcon,
+                              { backgroundColor: mission?.color || theme.customColors.successGreen },
+                            ]}
+                          >
+                            <Icon
+                              name={mission?.icon || "flag-checkered"}
+                              size={16}
+                              color="#FFFFFF"
+                            />
+                          </View>
+                          <View style={styles.activityContent}>
+                            <Text
+                              style={[
+                                styles.activityTitle,
+                                { color: theme.colors.onBackground },
+                              ]}
+                            >
+                              {mission?.title || "Mission"}
+                            </Text>
+                            <View style={styles.missionProgressContainer}>
+                              <ProgressBar
+                                progress={progressPercentage / 100}
+                                color={mission?.color || theme.customColors.successGreen}
+                                style={styles.missionProgressBar}
+                              />
+                              <Text
+                                style={[
+                                  styles.missionProgressText,
+                                  { color: theme.colors.onBackground },
+                                ]}
+                              >
+                                {userMission.current_value} / {mission?.target_value} {mission?.unit}
+                                {` (${Math.round(progressPercentage)}%)`}
+                              </Text>
+                            </View>
+                          </View>
+                        </View>
+                      </TouchableOpacity>
+                    );
+                  })}
+              </Card.Content>
+            </Card>
+          </View>
+        )}
+
         {/* Health Recommendations */}
         <View style={styles.section}>
           <Text
@@ -691,7 +797,7 @@ const DashboardScreen = ({ navigation }: any) => {
                 styles.actionCard,
                 { backgroundColor: "rgba(255,255,255,0.95)" },
               ]}
-              onPress={() => navigation.navigate("Wellness")}
+                              onPress={() => navigation.navigate("Activity")}
             >
               <Card.Content style={styles.actionContent}>
                 <View

@@ -15,6 +15,7 @@ import Icon from "react-native-vector-icons/MaterialCommunityIcons";
 import { LinearGradient } from "expo-linear-gradient";
 import { CustomTheme } from "../theme/theme";
 import apiService from "../services/api";
+import { handleError } from "../utils/errorHandler";
 
 const { width } = Dimensions.get("window");
 
@@ -40,6 +41,39 @@ const ClinicBookingScreen = ({ navigation, route }: any) => {
     fetchBookingHistory();
     fetchUserProfile();
   }, []);
+
+  // Handle clinic data from navigation params
+  useEffect(() => {
+    if (route.params?.clinic) {
+      const clinicFromParams = route.params.clinic;
+      setSelectedClinic(clinicFromParams.id);
+      
+      // If this clinic is not in our clinics list, add it
+      setClinics(prevClinics => {
+        const clinicExists = prevClinics.find(c => c.id === clinicFromParams.id);
+        if (!clinicExists) {
+          return [...prevClinics, clinicFromParams];
+        }
+        return prevClinics;
+      });
+
+      // Set services for this clinic
+      if (clinicFromParams.services) {
+        const servicesData = clinicFromParams.services.map((service: any) => ({
+          ...service,
+          price: `Rp ${parseFloat(service.price).toLocaleString()}`,
+          duration: `${service.duration} min`,
+          doctors: clinicFromParams.doctors?.filter(
+            (doctor: any) => doctor.service_id === service.id
+          ) || [],
+        }));
+        setServicesByClinic((prev: any) => ({
+          ...prev,
+          [clinicFromParams.id]: servicesData
+        }));
+      }
+    }
+  }, [route.params?.clinic]);
 
   // Handle navigation focus to refresh booking history
   useEffect(() => {
@@ -80,7 +114,9 @@ const ClinicBookingScreen = ({ navigation, route }: any) => {
               duration: `${service.duration} min`,
               doctors:
                 clinic.doctors?.filter(
-                  (doctor: any) => doctor.service_id === service.id
+                  (doctor: any) => 
+                    doctor.service_id === service.id && 
+                    (doctor.doctor_type === 'clinic' || doctor.doctor_type === 'both')
                 ) || [],
             }));
           }
@@ -101,8 +137,12 @@ const ClinicBookingScreen = ({ navigation, route }: any) => {
       if (response.success) {
         setBookingHistory(response.data);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error fetching booking history:", error);
+      // Don't show alert for authentication errors as they're handled by AuthContext
+      if (!error.message?.includes("Authentication failed")) {
+        Alert.alert("Error", "Failed to load booking history");
+      }
     }
   };
 
@@ -112,8 +152,14 @@ const ClinicBookingScreen = ({ navigation, route }: any) => {
       if (response.success) {
         setUserProfile(response.data);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error fetching user profile:", error);
+      // Don't show alert for authentication errors as they're handled by AuthContext
+      if (!error.message?.includes("Authentication failed")) {
+        handleError(error, {
+          title: 'Load User Profile Error'
+        });
+      }
     }
   };
 
@@ -144,7 +190,9 @@ const ClinicBookingScreen = ({ navigation, route }: any) => {
       }
     } catch (error) {
       console.error("Error cancelling booking:", error);
-      Alert.alert("Error", "Terjadi kesalahan saat membatalkan booking");
+      handleError(error, {
+        title: 'Cancel Booking Error'
+      });
     } finally {
       setLoading(false);
     }
@@ -357,9 +405,12 @@ const ClinicBookingScreen = ({ navigation, route }: any) => {
                 onPress: () => {
                   // Refresh booking history
                   fetchBookingHistory();
-                  // Navigate to confirmation screen
-                  navigation.navigate("BookingConfirmation", {
-                    bookingData: response.data,
+                  // Navigate directly to ClinicsApp history tab
+                  navigation.navigate("ClinicsApp", {
+                    screen: "HISTORY",
+                    params: {
+                      refreshTrigger: Date.now(),
+                    },
                   });
                 },
               },
@@ -396,7 +447,7 @@ const ClinicBookingScreen = ({ navigation, route }: any) => {
           </View> */}
 
           {/* Tab Navigation */}
-          <View style={styles.tabContainer}>
+          {/* <View style={styles.tabContainer}>
             <TouchableOpacity
               style={[
                 styles.tabButton,
@@ -439,7 +490,7 @@ const ClinicBookingScreen = ({ navigation, route }: any) => {
                 Riwayat
               </Text>
             </TouchableOpacity>
-          </View>
+          </View> */}
 
           {selectedTab === "book" ? (
             <>
@@ -970,6 +1021,8 @@ const ClinicBookingScreen = ({ navigation, route }: any) => {
                                   ? "#10B981"
                                   : booking.payment_status === "pending"
                                   ? "#F59E0B"
+                                  : booking.payment_status === "canceled"
+                                  ? "#EF4444"
                                   : "#6B7280",
                             },
                           ]}
@@ -979,6 +1032,8 @@ const ClinicBookingScreen = ({ navigation, route }: any) => {
                               ? "Lunas"
                               : booking.payment_status === "pending"
                               ? "Menunggu"
+                              : booking.payment_status === "canceled"
+                              ? "Dibatalkan"
                               : booking.payment_status}
                           </Text>
                         </View>

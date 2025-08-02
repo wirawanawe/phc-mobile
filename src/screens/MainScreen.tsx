@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   View,
   StyleSheet,
@@ -7,7 +7,9 @@ import {
   StatusBar,
   TouchableOpacity,
   FlatList,
+  RefreshControl,
 } from "react-native";
+
 import { Text, useTheme } from "react-native-paper";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
@@ -16,8 +18,20 @@ import { LinearGradient } from "expo-linear-gradient";
 import { CustomTheme } from "../theme/theme";
 import ProgressRing from "../components/ProgressRing";
 import MissionPromptCard from "../components/MissionPromptCard";
+import TodaySummaryCard from "../components/TodaySummaryCard";
+
+import GradientButton from "../components/GradientButton";
+import ModernIconButton from "../components/ModernIconButton";
+import ActivityDetectionService from "../services/ActivityDetectionService";
 import { useAuth } from "../contexts/AuthContext";
+import { useFocusEffect } from "@react-navigation/native";
 import api from "../services/api";
+import { withRetry } from "../utils/errorHandler";
+import RSSService, { RSSItem } from "../services/RSSService";
+import apiService from "../services/api";
+import ConsultationHistoryScreen from "./ConsultationHistoryScreen";
+import ActivityScreen from "./ActivityScreen";
+import FeaturedArticleCard from "../components/FeaturedArticleCard";
 
 const { width } = Dimensions.get("window");
 const Tab = createBottomTabNavigator();
@@ -68,19 +82,73 @@ const HomeTab = ({ navigation }: any) => {
   });
   const [userMissions, setUserMissions] = useState<UserMission[]>([]);
   const [loading, setLoading] = useState(false);
+  const [todaySummary, setTodaySummary] = useState({
+    calories: 0,
+    servings: 0,
+    steps: 0,
+    exerciseMinutes: 0,
+    distance: 0,
+  });
+  const [summaryLoading, setSummaryLoading] = useState(false);
+  const [activityData, setActivityData] = useState({ steps: 0, distance: 0 });
+  const [featuredArticles, setFeaturedArticles] = useState<RSSItem[]>([]);
+  const [articlesLoading, setArticlesLoading] = useState(false);
+  const [hasJoinedWellnessProgram, setHasJoinedWellnessProgram] = useState(false);
 
   useEffect(() => {
     if (isAuthenticated) {
       loadMissionData();
+      checkWellnessProgramStatus();
     }
+    
+    // Load activity data
+    const loadActivityData = () => {
+      const data = ActivityDetectionService.getTodayActivityData();
+      setActivityData(data);
+    };
+    
+    loadActivityData();
+    
+    // Load RSS articles with a small delay to ensure proper initialization
+    const loadArticlesWithDelay = () => {
+      setTimeout(() => {
+        loadRSSArticles();
+      }, 1000);
+    };
+    
+    loadArticlesWithDelay();
+    
+    // Update activity data every 30 seconds
+    const activityInterval = setInterval(loadActivityData, 30000);
+    
+    return () => clearInterval(activityInterval);
   }, [isAuthenticated]);
 
+  // Refresh data when screen comes into focus
+  useFocusEffect(
+    useCallback(() => {
+      if (isAuthenticated) {
+        loadMissionData();
+        checkWellnessProgramStatus();
+      }
+    }, [isAuthenticated])
+  );
+
   const loadMissionData = async () => {
+    // Only load data if user is authenticated
+    if (!isAuthenticated) {
+      return;
+    }
+
     try {
       setLoading(true);
-      const [statsResponse, userMissionsResponse] = await Promise.all([
-        api.getMissionStats(),
-        api.getMyMissions(),
+      setSummaryLoading(true);
+      
+      // Use withRetry for better error handling
+      const [statsResponse, userMissionsResponse, todaySummaryResponse] = await Promise.all([
+        withRetry(() => api.getMissionStats(), 3, 2000),
+        withRetry(() => api.getMyMissions(), 3, 2000),
+        withRetry(() => api.getTodaySummary(), 3, 2000),
       ]);
 
       if (statsResponse.success) {
@@ -90,10 +158,104 @@ const HomeTab = ({ navigation }: any) => {
       if (userMissionsResponse.success) {
         setUserMissions(userMissionsResponse.data);
       }
+
+      if (todaySummaryResponse.success && todaySummaryResponse.data) {
+        const summaryData = todaySummaryResponse.data;
+        console.log('MainScreen - Today summary data received:', summaryData);
+        setTodaySummary({
+          calories: summaryData.meal?.calories || summaryData.calories || 0,
+          servings: summaryData.meal?.meal_count || summaryData.servings || 0,
+          steps: summaryData.fitness?.steps || summaryData.steps || 0,
+          exerciseMinutes: summaryData.fitness?.exercise_minutes || summaryData.exercise_minutes || 0,
+          distance: summaryData.fitness?.distance_km || 0,
+        });
+        console.log('MainScreen - Mapped today summary:', {
+          calories: summaryData.meal?.calories || summaryData.calories || 0,
+          servings: summaryData.meal?.meal_count || summaryData.servings || 0,
+          steps: summaryData.fitness?.steps || summaryData.steps || 0,
+          exerciseMinutes: summaryData.fitness?.exercise_minutes || summaryData.exercise_minutes || 0,
+          distance: summaryData.fitness?.distance_km || 0,
+        });
+      } else {
+        console.warn('MainScreen - Failed to load today summary:', todaySummaryResponse);
+      }
     } catch (error) {
       console.error("Error loading mission data:", error);
+      // Set default values instead of showing errors for background data loading
+      setMissionStats({
+        totalMissions: 0,
+        completedMissions: 0,
+        totalPoints: 0,
+      });
+      setUserMissions([]);
+      setTodaySummary({
+        calories: 0,
+        servings: 0,
+        steps: 0,
+        exerciseMinutes: 0,
+        distance: 0,
+      });
     } finally {
       setLoading(false);
+      setSummaryLoading(false);
+    }
+  };
+
+  const checkWellnessProgramStatus = async () => {
+    if (!isAuthenticated) {
+      return;
+    }
+
+    try {
+      const wellnessResponse = await apiService.getWellnessProgramStatus();
+      
+      if (wellnessResponse.success && wellnessResponse.data) {
+        const wellnessData = wellnessResponse.data;
+        setHasJoinedWellnessProgram(wellnessData.has_joined);
+      } else {
+        setHasJoinedWellnessProgram(false);
+      }
+    } catch (error) {
+      console.error("Error checking wellness program status:", error);
+      // Don't show alert for background status checks
+      setHasJoinedWellnessProgram(false);
+    }
+  };
+
+  const loadRSSArticles = async () => {
+    try {
+      setArticlesLoading(true);
+      const articles = await RSSService.getHealthNews();
+      setFeaturedArticles(articles);
+    } catch (error) {
+      console.error("Error loading RSS articles:", error);
+      const fallbackArticles = [
+        {
+          id: 'fallback_1',
+          title: 'Tips Menjaga Kesehatan Mental di Era Digital',
+          description: 'Panduan lengkap untuk menjaga kesehatan mental di tengah kemajuan teknologi.',
+          readTime: '5 min read',
+          image: 'brain',
+          color: '#9F7AEA',
+          bgColor: '#FAF5FF',
+          category: 'Mental Health',
+          source: 'Health Tips'
+        },
+        {
+          id: 'fallback_2',
+          title: 'Pentingnya Olahraga Rutin untuk Kesehatan',
+          description: 'Manfaat olahraga rutin dan tips memulai kebiasaan sehat.',
+          readTime: '4 min read',
+          image: 'dumbbell',
+          color: '#F59E0B',
+          bgColor: '#FFFBEB',
+          category: 'Fitness',
+          source: 'Fitness Guide'
+        }
+      ];
+      setFeaturedArticles(fallbackArticles);
+    } finally {
+      setArticlesLoading(false);
     }
   };
 
@@ -114,177 +276,168 @@ const HomeTab = ({ navigation }: any) => {
     {
       id: "1",
       icon: "food-fork-drink",
-      value: "523",
+      value: (todaySummary.calories || 0) > 0 ? (todaySummary.calories || 0).toString() : '--',
       unit: "kcal",
-      color: "#E0E7FF",
+      color: "#FF6B8A",
+      bgColor: "#FEF2F2",
+      label: "Kalori",
+      emptyMessage: "Belum ada data makanan",
     },
     {
       id: "2",
       icon: "basket",
-      value: "2.0",
+      value: (todaySummary?.servings || 0) > 0 ? (todaySummary?.servings || 0).toFixed(1) : '--',
       unit: "serve",
-      color: "#E0E7FF",
+      color: "#38A169",
+      bgColor: "#F0FDF4",
+      label: "Porsi",
+      emptyMessage: "Belum ada data porsi",
     },
     {
       id: "3",
       icon: "walk",
-      value: "5990",
+      value: (activityData?.steps || 0) > 0 ? (activityData?.steps || 0).toString() : '--',
       unit: "step",
-      color: "#E0E7FF",
+      color: "#3182CE",
+      bgColor: "#EBF8FF",
+      label: "Langkah",
+      emptyMessage: "Belum ada data langkah",
     },
     {
       id: "4",
       icon: "run",
-      value: "45",
+      value: (todaySummary?.exerciseMinutes || 0) > 0 ? (todaySummary?.exerciseMinutes || 0).toString() : '--',
       unit: "min",
-      color: "#E0E7FF",
+      color: "#ED8936",
+      bgColor: "#FFFAF0",
+      label: "Olahraga",
+      emptyMessage: "Belum ada data olahraga",
+    },
+    {
+      id: "5",
+      icon: "map-marker-distance",
+      unit: "km",
+      color: "#A1887F",
+      bgColor: "#F5F5F5",
+      label: "Jarak",
+      emptyMessage: "Belum ada data jarak",
     },
   ];
 
-  // Quick Actions Data
+  // Quick Actions Data - Updated for non-authenticated users
   const quickActions = [
     {
       id: "1",
-      title: "Book Clinic",
-      icon: "hospital-building",
-      color: "#EF4444",
-      action: () => navigation.navigate("ClinicBooking"),
+      title: "Auto Fitness",
+      icon: "radar",
+      color: "#38A169",
+      gradient: ["#38A169", "#2F855A"] as const,
+      action: () => {
+        try {
+          navigation.navigate("RealtimeFitness");
+        } catch (error) {
+          console.warn("RealtimeFitness screen not found, navigating to Fitness instead");
+          navigation.navigate("Fitness");
+        }
+      },
     },
     {
-      id: "2",
+      id: "3",
       title: "Log Meal",
       icon: "food-apple",
-      color: "#10B981",
-      action: () => navigation.navigate("MealLogging"),
+      color: "#38A169",
+      gradient: ["#38A169", "#2F855A"] as const,
+      action: () => {
+        if (isAuthenticated) {
+          try {
+            navigation.navigate("MealLogging");
+          } catch (error) {
+            console.warn("MealLogging screen not found, navigating to WellnessApp instead");
+            navigation.navigate("WellnessApp");
+          }
+        } else {
+          navigation.navigate("Login");
+        }
+      },
     },
     {
-      id: "3",
+      id: "4",
       title: "Track Water",
       icon: "water",
-      color: "#3B82F6",
-      action: () => navigation.navigate("WaterTracking"),
+      color: "#3182CE",
+      gradient: ["#3182CE", "#2B6CB0"] as const,
+      action: () => {
+        if (isAuthenticated) {
+          try {
+            navigation.navigate("WaterTracking");
+          } catch (error) {
+            console.warn("WaterTracking screen not found, navigating to WellnessApp instead");
+            navigation.navigate("WellnessApp");
+          }
+        } else {
+          navigation.navigate("Login");
+        }
+      },
     },
     {
-      id: "4",
+      id: "5",
       title: "Log Exercise",
       icon: "dumbbell",
-      color: "#E22345",
-      action: () => navigation.navigate("Fitness"),
+      color: "#E53E3E",
+      gradient: ["#E53E3E", "#C53030"] as const,
+      action: () => {
+        if (isAuthenticated) {
+          try {
+            navigation.navigate("FitnessTracking");
+          } catch (error) {
+            console.warn("FitnessTracking screen not found, navigating to Fitness instead");
+            navigation.navigate("Fitness");
+          }
+        } else {
+          navigation.navigate("Login");
+        }
+      },
     },
     {
-      id: "5",
+      id: "6",
       title: "Mood Check",
       icon: "emoticon",
-      color: "#F59E0B",
-      action: () => navigation.navigate("MoodTracking"),
+      color: "#D69E2E",
+      gradient: ["#D69E2E", "#B7791F"] as const,
+      action: () => {
+        if (isAuthenticated) {
+          try {
+            navigation.navigate("MoodTracking");
+          } catch (error) {
+            console.warn("MoodTracking screen not found, navigating to WellnessApp instead");
+            navigation.navigate("WellnessApp");
+          }
+        } else {
+          navigation.navigate("Login");
+        }
+      },
     },
     {
-      id: "6",
+      id: "7",
       title: "Sleep Track",
       icon: "sleep",
-      color: "#8B5CF6",
-      action: () => navigation.navigate("SleepTracking"),
+      color: "#9F7AEA",
+      gradient: ["#9F7AEA", "#805AD5"] as const,
+      action: () => {
+        if (isAuthenticated) {
+          try {
+            navigation.navigate("SleepTracking");
+          } catch (error) {
+            console.warn("SleepTracking screen not found, navigating to WellnessApp instead");
+            navigation.navigate("WellnessApp");
+          }
+        } else {
+          navigation.navigate("Login");
+        }
+      },
     },
   ];
 
-  // Health Insights Data - Updated to show mission-related data
-  const healthInsights = [
-    {
-      id: "1",
-      title: "Mission Progress",
-      value: `${missionStats.completedMissions}/${missionStats.totalMissions}`,
-      trend:
-        userMissions.length === 0
-          ? "Start Now"
-          : "+" + Math.floor(missionStats.totalPoints / 10),
-      trendPositive: true,
-      icon: "flag-checkered",
-      color: "#8B5CF6",
-    },
-    {
-      id: "2",
-      title: "Points Earned",
-      value: `${missionStats.totalPoints} pts`,
-      trend:
-        missionStats.totalPoints > 0
-          ? "+" + Math.floor(missionStats.totalPoints / 5)
-          : "0",
-      trendPositive: true,
-      icon: "star",
-      color: "#EF4444",
-    },
-    {
-      id: "3",
-      title: "Active Missions",
-      value: userMissions.filter((um) => um.status === "active").length,
-      trend:
-        userMissions.filter((um) => um.status === "active").length > 0
-          ? "Active"
-          : "None",
-      trendPositive:
-        userMissions.filter((um) => um.status === "active").length > 0,
-      icon: "play-circle",
-      color: "#10B981",
-    },
-  ];
-
-  // Featured Articles Data
-  const featuredArticles = [
-    {
-      id: "1",
-      title: "Understanding Macronutrients",
-      description: "Learn about proteins, carbs, and fats",
-      readTime: "5 min read",
-      image: "food-apple",
-      color: "#10B981",
-      category: "Nutrition",
-    },
-    {
-      id: "2",
-      title: "The Benefits of Regular Exercise",
-      description: "How physical activity improves your health",
-      readTime: "4 min read",
-      image: "heart-pulse",
-      color: "#3B82F6",
-      category: "Fitness",
-    },
-    {
-      id: "3",
-      title: "Stress Management Techniques",
-      description: "Effective ways to manage daily stress",
-      readTime: "6 min read",
-      image: "meditation",
-      color: "#E22345",
-      category: "Wellness",
-    },
-    {
-      id: "4",
-      title: "Sleep Quality and Health",
-      description: "Improve your sleep for better health",
-      readTime: "7 min read",
-      image: "sleep",
-      color: "#E22345",
-      category: "Health",
-    },
-    {
-      id: "5",
-      title: "Mindful Eating Practices",
-      description: "Transform your relationship with food",
-      readTime: "5 min read",
-      image: "food-variant",
-      color: "#F59E0B",
-      category: "Nutrition",
-    },
-    {
-      id: "6",
-      title: "Mental Health Awareness",
-      description: "Understanding and supporting mental health",
-      readTime: "8 min read",
-      image: "brain",
-      color: "#EC4899",
-      category: "Wellness",
-    },
-  ];
 
   // Calculator Programs Data
   const calculatorPrograms = [
@@ -293,28 +446,32 @@ const HomeTab = ({ navigation }: any) => {
       title: "BMI Calculator",
       description: "Calculate your Body Mass Index",
       icon: "scale-bathroom",
-      color: "#10B981",
+      color: "#38A169",
+      bgColor: "#F0FDF4",
     },
     {
       id: "2",
       title: "PHQ-9 Assessment",
       description: "Depression screening tool",
       icon: "brain",
-      color: "#3B82F6",
+      color: "#3182CE",
+      bgColor: "#EBF8FF",
     },
     {
       id: "3",
       title: "GAD-7 Assessment",
       description: "Anxiety screening tool",
       icon: "heart-pulse",
-      color: "#E22345",
+      color: "#E53E3E",
+      bgColor: "#FEF2F2",
     },
     {
       id: "4",
       title: "Calorie Calculator",
       description: "Calculate daily calorie needs",
       icon: "calculator",
-      color: "#F59E0B",
+      color: "#D69E2E",
+      bgColor: "#FFFAF0",
     },
     {
       id: "5",
@@ -322,13 +479,15 @@ const HomeTab = ({ navigation }: any) => {
       description: "Calculate daily water needs",
       icon: "water",
       color: "#06B6D4",
+      bgColor: "#ECFEFF",
     },
     {
       id: "6",
       title: "Sleep Tracker",
       description: "Track your sleep patterns",
       icon: "sleep",
-      color: "#E22345",
+      color: "#9F7AEA",
+      bgColor: "#FAF5FF",
     },
   ];
 
@@ -343,47 +502,56 @@ const HomeTab = ({ navigation }: any) => {
     </TouchableOpacity>
   );
 
-  const renderFeaturedArticle = ({ item }: any) => (
-    <TouchableOpacity
-      style={styles.featuredArticleCard}
-      onPress={() => navigation.navigate("ArticleDetail", { article: item })}
-    >
-      <View
-        style={[
-          styles.featuredArticleIcon,
-          { backgroundColor: item.color + "20" },
-        ]}
-      >
-        <Icon name={item.image} size={24} color={item.color} />
-      </View>
-      <View style={styles.featuredArticleContent}>
-        <Text style={styles.featuredArticleTitle} numberOfLines={2}>
-          {item.title}
-        </Text>
-        <Text style={styles.featuredArticleCategory}>{item.category}</Text>
-        <Text style={styles.featuredArticleReadTime}>{item.readTime}</Text>
-      </View>
-    </TouchableOpacity>
+  const renderFeaturedArticle = ({ item }: { item: RSSItem }) => (
+    <FeaturedArticleCard
+      article={item}
+      onPress={() => {
+        try {
+          navigation.navigate("ArticleDetail", { article: item });
+        } catch (error) {
+          console.warn("ArticleDetail screen not found, navigating to NewsPortal instead");
+          navigation.navigate("NewsPortal");
+        }
+      }}
+    />
   );
 
   const renderCalculatorProgram = ({ item }: any) => (
-    <TouchableOpacity style={styles.calculatorCard}>
+    <TouchableOpacity 
+      style={styles.calculatorCard}
+      onPress={() => {
+        try {
+          navigation.navigate("Calculator", { program: item });
+        } catch (error) {
+          console.warn("Calculator screen not found, navigating to WellnessApp instead");
+          navigation.navigate("WellnessApp");
+        }
+      }}
+    >
       <View
-        style={[styles.calculatorIcon, { backgroundColor: item.color + "20" }]}
+        style={[styles.calculatorIcon, { backgroundColor: item.bgColor }]}
       >
-        <Icon name={item.icon} size={24} color={item.color} />
+        <Icon name={item.icon} size={20} color={item.color} />
       </View>
       <Text style={styles.calculatorTitle}>{item.title}</Text>
-      <Text style={styles.calculatorDescription}>{item.description}</Text>
     </TouchableOpacity>
   );
 
   return (
-    <LinearGradient colors={["#F8FAFF", "#E8EAFF"]} style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor="#F8FAFF" />
+    <LinearGradient colors={["#FAFBFC", "#F7FAFC"]} style={styles.container}>
+      <StatusBar barStyle="dark-content" backgroundColor="#FAFBFC" />
+      
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.contentContainer}
+        refreshControl={
+          <RefreshControl
+            refreshing={loading}
+            onRefresh={loadMissionData}
+            colors={["#E53E3E"]}
+            tintColor="#E53E3E"
+          />
+        }
       >
         {/* Header */}
         <View style={styles.header}>
@@ -393,49 +561,52 @@ const HomeTab = ({ navigation }: any) => {
                 style={styles.profileThumbnail}
                 onPress={() => navigation.navigate("Profile")}
               >
-                <View style={styles.avatar}>
+                <LinearGradient
+                  colors={["#E53E3E", "#C53030"]}
+                  style={styles.avatar}
+                >
                   <Text style={styles.avatarText}>
                     {getInitials(user?.name || "")}
                   </Text>
-                </View>
+                </LinearGradient>
               </TouchableOpacity>
-            ) : null}
+            ) : (
+              <View style={styles.logoContainer}>
+                <Icon name="heart-pulse" size={32} color="#E53E3E" />
+              </View>
+            )}
             <View style={styles.headerText}>
               {isAuthenticated ? (
                 <>
                   <Text style={styles.greetingText}>
                     Hi, {user?.name || "User"}
                   </Text>
-                  <View style={styles.badgeContainer}>
+                  <LinearGradient
+                    colors={["#E53E3E", "#C53030"]}
+                    style={styles.badgeContainer}
+                  >
                     <Icon name="star" size={12} color="#FFFFFF" />
                     <Text style={styles.badgeText}>
                       {user?.points ?? missionStats.totalPoints}
                     </Text>
-                  </View>
+                  </LinearGradient>
                 </>
               ) : (
-                <TouchableOpacity
-                  onPress={() => navigation.navigate("Login")}
-                  style={{
-                    paddingVertical: 6,
-                    paddingHorizontal: 16,
-                    backgroundColor: "#E22345",
-                    borderRadius: 16,
-                  }}
-                >
-                  <Text
-                    style={{ color: "#fff", fontWeight: "700", fontSize: 15 }}
-                  >
-                    Masuk/Daftar
+                <>
+                  <Text style={styles.greetingText}>
+                    Selamat Datang di PHC
                   </Text>
-                </TouchableOpacity>
+                  <Text style={styles.subtitleText}>
+                    Platform Kesehatan Terpercaya
+                  </Text>
+                </>
               )}
             </View>
           </View>
           <View style={styles.headerRight}>
             <TouchableOpacity
-              style={styles.headerIcon}
               onPress={() => navigation.navigate("Notification")}
+              style={styles.bellButton}
             >
               <Icon name="bell-outline" size={24} color="#6B7280" />
             </TouchableOpacity>
@@ -444,158 +615,146 @@ const HomeTab = ({ navigation }: any) => {
 
         {/* Good Afternoon */}
         <View style={styles.afternoonContainer}>
-          <Icon name="weather-sunny" size={20} color="#F59E0B" />
+          <Icon name="weather-sunny" size={20} color="#D69E2E" />
           <Text style={styles.afternoonText}>Good afternoon</Text>
         </View>
 
-        {/* Mission Status Card - Show when user has no missions */}
-        {isAuthenticated && userMissions.length === 0 && (
-          <MissionPromptCard
-            title="Start Your Mission Journey"
-            subtitle="Complete missions to earn points and track your wellness progress"
-            icon="flag-checkered"
-            iconColor="#E22345"
-            backgroundColor="#FFFFFF"
-            onPress={() => navigation.navigate("DailyMission")}
-          />
-        )}
-
-        {/* Wellness Program Card - Show when user has no active missions */}
-        {isAuthenticated &&
-          userMissions.filter((um) => um.status === "active").length === 0 &&
-          userMissions.length > 0 && (
-            <MissionPromptCard
-              title="Join Wellness Programs"
-              subtitle="Participate in structured wellness programs for better health outcomes"
-              icon="yoga"
-              iconColor="#F59E0B"
-              backgroundColor="#FFFFFF"
-              onPress={() => navigation.navigate("Wellness")}
-            />
-          )}
-
-        {/* Clinic Booking Card - Show when user has no missions */}
-        {isAuthenticated && userMissions.length === 0 && (
-          <MissionPromptCard
-            title="Book Clinic Consultation"
-            subtitle="Regular health checkups help maintain your wellness goals"
-            icon="hospital-building"
-            iconColor="#3B82F6"
-            backgroundColor="#FFFFFF"
-            onPress={() => navigation.navigate("ClinicBooking")}
-          />
-        )}
-
-        {/* Quick Actions */}
-        <View style={styles.quickActionsContainer}>
-          <Text style={styles.sectionTitle}>Quick Actions</Text>
-          <FlatList
-            data={quickActions}
-            renderItem={renderQuickAction}
-            keyExtractor={(item) => item.id}
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.quickActionsListContainer}
-            style={styles.quickActionsFlatList}
-          />
-        </View>
-
-        {/* Today's Summary - Modern Card Design */}
-        <View style={styles.summaryContainer}>
-          <Text style={styles.sectionTitle}>Showing for Today</Text>
-          <View style={styles.summaryContent}>
-            <View style={styles.metricsContainer}>
-              {todayMetrics.map((metric) => (
-                <View key={metric.id} style={styles.metricCard}>
-                  <Icon name={metric.icon} size={20} color="#E22345" />
-                  <Text style={styles.metricValue}>{metric.value}</Text>
-                  <Text style={styles.metricUnit}>{metric.unit}</Text>
-                </View>
-              ))}
-            </View>
-            <View style={styles.wellnessScoreContainer}>
-              <ProgressRing
-                progress={
-                  userMissions.length === 0
-                    ? 0
-                    : Math.min(
-                        (missionStats.completedMissions /
-                          Math.max(missionStats.totalMissions, 1)) *
-                          100,
-                        100
-                      )
-                }
-                size={120}
-                strokeWidth={12}
-                strokeColor="#F59E0B"
-              >
-                <Text style={styles.wellnessScoreValue}>
-                  {userMissions.length === 0
-                    ? "0"
-                    : Math.round(
-                        (missionStats.completedMissions /
-                          Math.max(missionStats.totalMissions, 1)) *
-                          100
-                      )}
-                </Text>
-                <Text style={styles.wellnessScoreLabel}>
-                  {userMissions.length === 0
-                    ? "Start Missions"
-                    : "Mission Progress"}
-                </Text>
-              </ProgressRing>
-              <TouchableOpacity
-                style={styles.moreDetailsContainer}
-                onPress={() => navigation.navigate("DailyMission")}
-              >
-                <Text style={styles.moreDetailsText}>
-                  {userMissions.length === 0 ? "Get Started" : "View Missions"}
-                </Text>
-                <Icon name="arrow-right" size={16} color="#E22345" />
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-
-        {/* Health Insights */}
-        <View style={styles.healthInsightsContainer}>
-          <Text style={styles.sectionTitle}>Health Insights</Text>
-          <View style={styles.healthInsightsGrid}>
-            {healthInsights.map((insight) => (
-              <View key={insight.id} style={styles.healthInsightCard}>
-                <View style={styles.healthInsightHeader}>
-                  <View
-                    style={[
-                      styles.healthInsightIcon,
-                      { backgroundColor: insight.color + "20" },
-                    ]}
-                  >
-                    <Icon name={insight.icon} size={20} color={insight.color} />
+        {/* Welcome Card for Non-Authenticated Users */}
+        {!isAuthenticated && (
+          <TouchableOpacity 
+            style={styles.welcomeCard}
+            onPress={() => navigation.navigate("Login")}
+          >
+            <LinearGradient
+              colors={["#E53E3E", "#C53030"]}
+              style={styles.welcomeCardGradient}
+            >
+              <View style={styles.welcomeCardContent}>
+                <View style={styles.welcomeCardLeft}>
+                  <View style={styles.welcomeIconContainer}>
+                    <Icon name="account-plus" size={28} color="#FFFFFF" />
                   </View>
-                  <Text style={styles.healthInsightTitle}>{insight.title}</Text>
+                  <View style={styles.welcomeTextContainer}>
+                    <Text style={styles.welcomeCardTitle}>Mulai Perjalanan Kesehatan Anda</Text>
+                    <Text style={styles.welcomeCardSubtitle}>
+                      Login atau daftar untuk akses fitur lengkap wellness program
+                    </Text>
+                  </View>
                 </View>
-                <Text style={styles.healthInsightValue}>{insight.value}</Text>
-                <View style={styles.healthInsightTrend}>
-                  <Icon
-                    name={
-                      insight.trendPositive ? "trending-up" : "trending-down"
-                    }
-                    size={14}
-                    color={insight.trendPositive ? "#10B981" : "#EF4444"}
-                  />
-                  <Text
-                    style={[
-                      styles.healthInsightTrendText,
-                      { color: insight.trendPositive ? "#10B981" : "#EF4444" },
-                    ]}
-                  >
-                    {insight.trend}
-                  </Text>
+                <View style={styles.welcomeCardRight}>
+                  <Icon name="arrow-right" size={24} color="#FFFFFF" />
                 </View>
               </View>
-            ))}
+            </LinearGradient>
+          </TouchableOpacity>
+        )}
+
+        {/* Wellness Program Card - Only for authenticated users */}
+        {isAuthenticated && (
+          <TouchableOpacity 
+            style={styles.wellnessCard}
+            onPress={() => {
+              try {
+                navigation.navigate("WellnessApp");
+              } catch (error) {
+                console.warn("WellnessApp screen not found, navigating to Login instead");
+                navigation.navigate("Login");
+              }
+            }}
+          >
+            <LinearGradient
+              colors={["#E53E3E", "#C53030"]}
+              style={styles.wellnessCardGradient}
+            >
+              <View style={styles.wellnessCardContent}>
+                <View style={styles.wellnessCardLeft}>
+                  <View style={styles.wellnessIconContainer}>
+                    <Icon name="heart-pulse" size={28} color="#FFFFFF" />
+                  </View>
+                  <View style={styles.wellnessTextContainer}>
+                    <Text style={styles.wellnessCardTitle}>Wellness Program</Text>
+                    <Text style={styles.wellnessCardSubtitle}>
+                      Mission, Auto Fitness, Log meal, Track Water, Log Exercise
+                    </Text>
+                  </View>
+                </View>
+                <View style={styles.wellnessCardRight}>
+                  <View style={styles.wellnessBadge}>
+                    <Text style={styles.wellnessBadgeText}>NEW</Text>
+                  </View>
+                  <Icon name="arrow-right" size={24} color="#FFFFFF" />
+                </View>
+              </View>
+            </LinearGradient>
+          </TouchableOpacity>
+        )}
+
+        {/* Clinics Booking Card - Only for authenticated users */}
+        {isAuthenticated && (
+          <TouchableOpacity 
+            style={styles.clinicsCard}
+            onPress={() => {
+              try {
+                navigation.navigate("ClinicsApp");
+              } catch (error) {
+                console.warn("ClinicsApp screen not found, navigating to Login instead");
+                navigation.navigate("Login");
+              }
+            }}
+          >
+            <LinearGradient
+              colors={["#3182CE", "#2B6CB0"]}
+              style={styles.clinicsCardGradient}
+            >
+              <View style={styles.clinicsCardContent}>
+                <View style={styles.clinicsCardLeft}>
+                  <View style={styles.clinicsIconContainer}>
+                    <Icon name="hospital-building" size={28} color="#FFFFFF" />
+                  </View>
+                  <View style={styles.clinicsTextContainer}>
+                    <Text style={styles.clinicsCardTitle}>Clinics Booking</Text>
+                    <Text style={styles.clinicsCardSubtitle}>
+                      Booking konsultasi dengan dokter dan layanan kesehatan
+                    </Text>
+                  </View>
+                </View>
+                <View style={styles.clinicsCardRight}>
+                  <Icon name="arrow-right" size={24} color="#FFFFFF" />
+                </View>
+              </View>
+            </LinearGradient>
+          </TouchableOpacity>
+        )}
+
+        {/* Today Summary Card - Only for authenticated users */}
+        {isAuthenticated && (
+          <TodaySummaryCard 
+            onMoreDetailsPress={() => {
+              try {
+                navigation.navigate("WellnessDetails");
+              } catch (error) {
+                console.warn("WellnessDetails screen not found, navigating to WellnessApp instead");
+                navigation.navigate("WellnessApp");
+              }
+            }} 
+          />
+        )}
+
+        {/* Quick Actions - Only show if user has joined wellness program */}
+        {isAuthenticated && hasJoinedWellnessProgram && (
+          <View style={styles.quickActionsContainer}>
+            <Text style={styles.sectionTitle}>Quick Actions</Text>
+            <FlatList
+              data={quickActions}
+              renderItem={renderQuickAction}
+              keyExtractor={(item) => item.id}
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.quickActionsListContainer}
+              style={styles.quickActionsFlatList}
+            />
           </View>
-        </View>
+        )}
 
         {/* Calculator Programs */}
         <View style={styles.calculatorContainer}>
@@ -610,7 +769,7 @@ const HomeTab = ({ navigation }: any) => {
                 <View
                   style={[
                     styles.calculatorIconSmall,
-                    { backgroundColor: program.color + "20" },
+                    { backgroundColor: program.bgColor },
                   ]}
                 >
                   <Icon name={program.icon} size={20} color={program.color} />
@@ -620,7 +779,14 @@ const HomeTab = ({ navigation }: any) => {
             ))}
             <TouchableOpacity
               style={styles.calculatorCardSmall}
-              onPress={() => navigation.navigate("AllCalculators")}
+              onPress={() => {
+                try {
+                  navigation.navigate("AllCalculators");
+                } catch (error) {
+                  console.warn("AllCalculators screen not found, navigating to Calculator instead");
+                  navigation.navigate("Calculator", { program: { id: "all", title: "All Calculators" } });
+                }
+              }}
             >
               <View style={styles.calculatorIconSmall}>
                 <Icon name="apps" size={20} color="#6366F1" />
@@ -630,354 +796,379 @@ const HomeTab = ({ navigation }: any) => {
           </View>
         </View>
 
-        {/* Featured Articles */}
+        {/* Featured Health Articles */}
         <View style={styles.featuredContainer}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Featured Articles</Text>
-            <TouchableOpacity
-              onPress={() => navigation.navigate("PersonalizedContent")}
-            >
-              <Text style={styles.seeAllText}>See all</Text>
-            </TouchableOpacity>
-          </View>
-          <FlatList
-            data={featuredArticles}
-            renderItem={renderFeaturedArticle}
-            keyExtractor={(item) => item.id}
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.featuredListContainer}
-            style={styles.featuredFlatList}
-          />
-        </View>
-
-        {/* Personalized Content */}
-        <View style={styles.personalizedContainer}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Personalized Content</Text>
-            <View style={styles.hashtags}>
-              <Text style={styles.hashtag}>#nutrition</Text>
-              <Text style={styles.hashtag}>#wellbeing</Text>
-            </View>
-          </View>
-          <TouchableOpacity
-            style={styles.contentCard}
-            onPress={() => navigation.navigate("PersonalizedContent")}
-          >
-            <View style={styles.contentCardContent}>
-              <View style={styles.contentImageContainer}>
-                <View style={styles.contentImage}>
-                  <Icon name="bone" size={40} color="#F59E0B" />
-                  <View style={styles.vitaminBottle}>
-                    <Text style={styles.vitaminText}>D</Text>
-                  </View>
-                </View>
-              </View>
-              <Text style={styles.contentTitle}>
-                Lifestyle Changes To Adopt For Strength
+          <View style={styles.featuredSectionHeader}>
+            <View style={styles.featuredHeaderLeft}>
+              <Text style={styles.featuredSectionTitle}>📰 Featured Health Articles</Text>
+              <Text style={styles.featuredSectionSubtitle}>
+                Latest from DetikHealth - Health & Lifestyle
               </Text>
             </View>
-          </TouchableOpacity>
-        </View>
+            <View style={styles.featuredHeaderRight}>
+              <TouchableOpacity
+                style={styles.refreshButton}
+                onPress={loadRSSArticles}
+                disabled={articlesLoading}
+              >
+                <Icon 
+                  name={articlesLoading ? "loading" : "refresh"} 
+                  size={16} 
+                  color="#E53E3E" 
+                />
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.seeAllButton}
+                onPress={() => {
+                  try {
+                    navigation.navigate("NewsPortal");
+                  } catch (error) {
+                    console.warn("NewsPortal screen not found");
+                  }
+                }}
+              >
+                <Text style={styles.seeAllText}>See all</Text>
+                <Icon name="arrow-right" size={16} color="#E53E3E" />
+              </TouchableOpacity>
+            </View>
+          </View>
+          
+          {articlesLoading ? (
+            <View style={styles.articlesLoadingContainer}>
+              <Icon name="loading" size={24} color="#E53E3E" />
+              <Text style={styles.loadingText}>Loading health articles...</Text>
+            </View>
+          ) : featuredArticles.length > 0 ? (
+            <FlatList
+              data={featuredArticles}
+              renderItem={renderFeaturedArticle}
+              keyExtractor={(item) => item.id}
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.featuredListContainer}
+              style={styles.featuredFlatList}
+            />
+          ) : (
+            <View style={styles.articlesErrorContainer}>
+              <Icon name="newspaper-variant" size={32} color="#E53E3E" />
+              <Text style={styles.errorText}>Unable to load articles</Text>
+              <TouchableOpacity 
+                style={styles.retryButton}
+                onPress={loadRSSArticles}
+              >
+                <Text style={styles.retryButtonText}>Retry</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+        </View>        
       </ScrollView>
     </LinearGradient>
   );
 };
 
-// Mission Tab Component
-const MissionTab = ({ navigation }: any) => {
-  const { isAuthenticated } = useAuth();
+// Wellness Tab Component - Show wellness content or login prompt
+const ActivityTab = ({ navigation }: any) => {
+  return <ActivityScreen navigation={navigation} />;
+};
 
-  const handleMissionPress = () => {
-    if (isAuthenticated) {
-      navigation.navigate("DailyMission");
-    } else {
-      // Show login prompt
-      navigation.navigate("Login");
+// Health Tab Component
+const DoctorTab = ({ navigation }: any) => {
+  const { isAuthenticated } = useAuth();
+  const [doctors, setDoctors] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  // Fetch doctors data from API
+  const fetchDoctors = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      // Get consultation doctors (doctors available for online consultation)
+      const response = await api.getConsultationDoctors();
+      
+      if (response.success && response.data) {
+        // Transform the data to match the UI format
+        const transformedDoctors = response.data.map((doctor: any, index: number) => {
+          // Generate avatar emoji based on doctor name or use default
+          const avatar = doctor.name?.includes('Sarah') || doctor.name?.includes('Lisa') || doctor.name?.includes('Maya') ? "👩‍⚕️" : "👨‍⚕️";
+          
+          // Generate status based on consultation schedule or random
+          const now = new Date();
+          const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+          const dayOfWeek = dayNames[now.getDay()];
+          const schedule = doctor.consultation_schedule?.[dayOfWeek];
+          let status = "offline";
+          
+          if (schedule?.available) {
+            const currentHour = now.getHours();
+            const availableHours = schedule.hours || [];
+            const isAvailableNow = availableHours.some((hour: string) => {
+              const hourNum = parseInt(hour.split(':')[0]);
+              return Math.abs(currentHour - hourNum) <= 1; // Available if within 1 hour
+            });
+            status = isAvailableNow ? "online" : "busy";
+          }
+          
+          // Generate color based on specialization
+          const colors = ["#E22345", "#38A169", "#3182CE", "#9F7AEA", "#ED8936", "#06B6D4"];
+          const color = colors[index % colors.length];
+          const bgColor = color + "20";
+          
+          return {
+            id: (doctor.id || 0).toString(),
+            name: doctor.name,
+            specialty: doctor.specialization,
+            experience: `${doctor.experience_years || 5} tahun`,
+            rating: parseFloat(doctor.rating) || 4.5,
+            reviews: doctor.total_reviews || 0,
+            avatar: avatar,
+            status: status,
+            hospital: "RS PHC", // Default hospital name
+            price: `Rp ${(doctor.price_per_consultation || 150000).toLocaleString()}`,
+            color: color,
+            bgColor: bgColor,
+            // Add original data for detail screen
+            originalData: doctor
+          };
+        });
+        
+        setDoctors(transformedDoctors);
+      } else {
+        setError("Failed to fetch doctors data");
+      }
+    } catch (err) {
+      console.error("Error fetching doctors:", err);
+      setError("Failed to load doctors. Please try again.");
+    } finally {
+      setLoading(false);
     }
-  };
+  }, []);
+
+  // Load doctors data on component mount
+  useEffect(() => {
+    fetchDoctors();
+  }, [fetchDoctors]);
+
+  const renderDoctor = ({ item }: any) => (
+    <TouchableOpacity 
+      style={styles.doctorCard}
+             onPress={() => {
+         if (isAuthenticated) {
+           navigation.navigate("DetailDoctor", { doctor: item });
+         } else {
+           navigation.navigate("Login");
+         }
+       }}
+    >
+      <View style={styles.doctorCardHeader}>
+        <View style={styles.doctorAvatarContainer}>
+          <View style={[styles.doctorAvatar, { backgroundColor: item.bgColor }]}>
+            <Text style={styles.doctorAvatarText}>{item.avatar}</Text>
+          </View>
+          <View style={[styles.doctorStatus, { 
+            backgroundColor: item.status === 'online' ? '#10B981' : 
+                           item.status === 'busy' ? '#F59E0B' : '#6B7280' 
+          }]} />
+        </View>
+        <View style={styles.doctorInfo}>
+          <Text style={styles.doctorName}>{item.name}</Text>
+          <Text style={styles.doctorSpecialty}>{item.specialty}</Text>
+          <Text style={styles.doctorHospital}>{item.hospital}</Text>
+          <View style={styles.doctorRating}>
+            <Icon name="star" size={14} color="#F59E0B" />
+            <Text style={styles.ratingText}>{item.rating}</Text>
+            <Text style={styles.reviewsText}>({item.reviews} ulasan)</Text>
+          </View>
+        </View>
+        <View style={styles.doctorPrice}>
+          <Text style={styles.priceText}>{item.price}</Text>
+          <Text style={styles.experienceText}>{item.experience}</Text>
+        </View>
+      </View>
+      <View style={styles.doctorCardFooter}>
+        <View style={styles.consultationInfo}>
+          <Icon name="video" size={16} color="#3182CE" />
+          <Text style={styles.consultationText}>Video Call</Text>
+        </View>
+        <View style={styles.consultationInfo}>
+          <Icon name="message-text" size={16} color="#38A169" />
+          <Text style={styles.consultationText}>Chat</Text>
+        </View>
+        <View style={styles.wellnessDataShare}>
+          <Icon name="share-variant" size={16} color="#E53E3E" />
+          <Text style={styles.shareText}>Share Data Wellness</Text>
+        </View>
+      </View>
+    </TouchableOpacity>
+  );
 
   return (
-    <LinearGradient colors={["#F8FAFF", "#E8EAFF"]} style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor="#F8FAFF" />
+    <LinearGradient colors={["#FAFBFC", "#F7FAFC"]} style={styles.container}>
+      <StatusBar barStyle="dark-content" backgroundColor="#FAFBFC" />
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.contentContainer}
       >
         {/* Header */}
-        {/* <View style={styles.header}>
+        <View style={styles.header}>
           <View style={styles.headerLeft}>
+            <View style={styles.logoContainer}>
+              <Icon name="doctor" size={28} color="#E53E3E" />
+            </View>
             <View style={styles.headerText}>
-              <Text style={styles.greetingText}>Daily Missions</Text>
-              {!isAuthenticated && (
-                <Text style={styles.subtitleText}>
-                  Login untuk mengakses misi harian
-                </Text>
-              )}
+              <Text style={styles.greetingText}>Konsultasi Dokter</Text>
+              <Text style={styles.subtitleText}>
+                {isAuthenticated ? "Konsultasi wellness program Anda" : "Login untuk konsultasi dokter"}
+              </Text>
             </View>
           </View>
-          <View style={styles.headerRight}>
-            {!isAuthenticated && (
-              <TouchableOpacity
-                onPress={() => navigation.navigate("Login")}
-                style={{
-                  paddingVertical: 6,
-                  paddingHorizontal: 16,
-                  backgroundColor: "#E22345",
-                  borderRadius: 16,
-                }}
-              >
-                <Text
-                  style={{ color: "#fff", fontWeight: "700", fontSize: 15 }}
-                >
-                  Masuk/Daftar
-                </Text>
-              </TouchableOpacity>
-            )}
-          </View>
-        </View> */}
+        </View>
 
-        <TouchableOpacity
-          style={styles.missionSectionContainer}
-          onPress={handleMissionPress}
-        >
-          <Text style={styles.sectionTitle}>Daily Missions</Text>
-          <View style={styles.missionButtonContainer}>
+        {/* Login Prompt for Non-Authenticated Users */}
+        {!isAuthenticated && (
+          <TouchableOpacity 
+            style={styles.welcomeCard}
+            onPress={() => navigation.navigate("Login")}
+          >
             <LinearGradient
-              colors={["#E22345", "#E22345"]}
-              style={styles.missionButton}
+              colors={["#3182CE", "#2B6CB0"]}
+              style={styles.welcomeCardGradient}
             >
-              <Icon name="plus" size={24} color="#FFFFFF" />
+              <View style={styles.welcomeCardContent}>
+                <View style={styles.welcomeCardLeft}>
+                  <View style={styles.welcomeIconContainer}>
+                    <Icon name="stethoscope" size={28} color="#FFFFFF" />
+                  </View>
+                  <View style={styles.welcomeTextContainer}>
+                    <Text style={styles.welcomeCardTitle}>Konsultasi dengan Dokter</Text>
+                    <Text style={styles.welcomeCardSubtitle}>
+                      Login untuk berkonsultasi dan berbagi data wellness program
+                    </Text>
+                  </View>
+                </View>
+                <View style={styles.welcomeCardRight}>
+                  <Icon name="arrow-right" size={24} color="#FFFFFF" />
+                </View>
+              </View>
             </LinearGradient>
-            <Text style={styles.moreText}>More</Text>
-          </View>
-        </TouchableOpacity>
-      </ScrollView>
-    </LinearGradient>
-  );
-};
+          </TouchableOpacity>
+        )}
 
-// Health Tab Component
-const HealthTab = ({ navigation }: any) => {
-  const macronutrients = [
-    {
-      id: "1",
-      icon: "food-steak",
-      label: "Protein",
-      value: "10",
-      color: "#E22345",
-    },
-    {
-      id: "2",
-      icon: "bread-slice",
-      label: "Carb",
-      value: "100",
-      color: "#60A5FA",
-    },
-    {
-      id: "3",
-      icon: "oil",
-      label: "Fat",
-      value: "20",
-      color: "#FB923C",
-    },
-    {
-      id: "4",
-      icon: "leaf",
-      label: "PBWF",
-      value: "3.0",
-      color: "#34D399",
-    },
-  ];
-
-  return (
-    <LinearGradient colors={["#F8FAFF", "#E8EAFF"]} style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor="#F8FAFF" />
-      <ScrollView
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.contentContainer}
-      >
-        {/* <View style={styles.header}>
-          <View style={styles.headerLeft}>
-            <View style={styles.avatar}>
-              <Text style={styles.avatarText}>W</Text>
-            </View>
-            <View style={styles.headerText}>
-              <Text style={styles.greetingText}>Hi, Wellness WeCare</Text>
-              <View style={styles.badgeContainer}>
-                <Icon name="star" size={12} color="#FFFFFF" />
-                <Text style={styles.badgeText}>12</Text>
+        {/* Wellness Data Share Info - Only for authenticated users */}
+        {isAuthenticated && (
+          <View style={styles.wellnessShareInfo}>
+            <View style={styles.shareInfoCard}>
+              <Icon name="share-variant" size={24} color="#E53E3E" />
+              <View style={styles.shareInfoText}>
+                <Text style={styles.shareInfoTitle}>Bagikan Data Wellness</Text>
+                <Text style={styles.shareInfoSubtitle}>
+                  Data mission, progress, dan kesehatan Anda dapat dibagikan ke dokter untuk analisis yang lebih baik
+                </Text>
               </View>
             </View>
           </View>
-          <View style={styles.headerRight}>
-            <Icon
-              name="view-grid"
-              size={24}
-              color="#6B7280"
-              style={styles.headerIcon}
-            />
-            <Icon
-              name="menu"
-              size={24}
-              color="#6B7280"
-              style={styles.headerIcon}
-            />
-          </View>
-        </View> */}
+        )}
 
-        {/* <View style={styles.afternoonContainer}>
-          <Icon name="weather-sunny" size={20} color="#F59E0B" />
-          <Text style={styles.afternoonText}>Good afternoon</Text>
-        </View> */}
-
-        {/* Total Calories */}
-        <TouchableOpacity
-          style={styles.caloriesContainer}
-          onPress={() => navigation.navigate("NutritionDetails")}
-        >
-          <Text style={styles.sectionTitle}>Total</Text>
-          <View style={styles.caloriesContent}>
-            <Text style={styles.caloriesText}>623 / 1617 kcal</Text>
-            <View style={styles.caloriesActions}>
-              <Icon
-                name="pencil"
-                size={20}
-                color="#6B7280"
-                style={styles.caloriesIcon}
-              />
-              <Icon
-                name="plus"
-                size={20}
-                color="#6B7280"
-                style={styles.caloriesIcon}
-              />
+        {/* Doctors List */}
+        <View style={styles.doctorsContainer}>
+          <Text style={styles.sectionTitle}>Dokter Tersedia</Text>
+          
+          {loading && (
+            <View style={styles.loadingContainer}>
+              <Text style={styles.loadingText}>Memuat data dokter...</Text>
             </View>
-          </View>
-        </TouchableOpacity>
-
-        {/* Macronutrients */}
-        <View style={styles.macrosContainer}>
-          {macronutrients.map((macro) => (
-            <View
-              key={macro.id}
-              style={[styles.macroCard, { backgroundColor: macro.color }]}
-            >
-              <Icon name={macro.icon} size={20} color="#FFFFFF" />
-              <Text style={styles.macroLabel}>{macro.label}</Text>
-              <Text style={styles.macroValue}>{macro.value}</Text>
+          )}
+          
+          {error && (
+            <View style={styles.errorContainer}>
+              <Text style={styles.errorText}>{error}</Text>
+              <TouchableOpacity style={styles.retryButton} onPress={fetchDoctors}>
+                <Text style={styles.retryButtonText}>Coba Lagi</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+          
+          {!loading && !error && doctors.length === 0 && (
+            <View style={styles.emptyContainer}>
+              <Text style={styles.emptyText}>Tidak ada dokter tersedia saat ini</Text>
+            </View>
+          )}
+          
+          {!loading && !error && doctors.length > 0 && doctors.map((doctor) => (
+            <View key={doctor.id}>
+              {renderDoctor({ item: doctor })}
             </View>
           ))}
         </View>
 
-        {/* Personalized Content */}
-        <View style={styles.personalizedContainer}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Personalized Content</Text>
-            <View style={styles.hashtags}>
-              <Text style={styles.hashtag}>#nutrition</Text>
-              <Text style={styles.hashtag}>#wellbeing</Text>
-            </View>
-          </View>
-          <View style={styles.contentCard}>
-            <View style={styles.contentCardContent}>
-              <View style={styles.contentImageContainer}>
-                <View style={styles.healthContentImage}>
-                  <Icon
-                    name="star"
-                    size={20}
-                    color="#F59E0B"
-                    style={styles.starIcon}
-                  />
-                  <View style={styles.healthIcons}>
-                    <Icon name="human" size={30} color="#E22345" />
-                    <Icon name="emoticon" size={25} color="#F59E0B" />
-                    <Icon name="food-apple" size={25} color="#10B981" />
-                    <Icon name="leaf" size={25} color="#34D399" />
-                  </View>
-                </View>
+        {/* Specialties for Non-Authenticated Users */}
+        {!isAuthenticated && (
+          <View style={styles.missionSectionContainer}>
+            <Text style={styles.wellnessSectionTitle}>Spesialisasi Dokter</Text>
+            <View style={styles.benefitsList}>
+              <View style={styles.benefitItem}>
+                <Icon name="heart-pulse" size={20} color="#E53E3E" />
+                <Text style={styles.benefitText}>Dokter Spesialis Kedokteran Olahraga</Text>
               </View>
-              <Text style={styles.contentTitle}>
-                7 Easy Meals You Can Rustle Up At Home For A Healthy Gut
-              </Text>
-            </View>
-          </View>
-        </View>
-      </ScrollView>
-    </LinearGradient>
-  );
-};
-
-// Chat Tab Component
-const ChatTab = ({ navigation }: any) => {
-  return (
-    <LinearGradient colors={["#F8FAFF", "#E8EAFF"]} style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor="#F8FAFF" />
-      <ScrollView
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.contentContainer}
-      >
-        {/* <View style={styles.header}>
-          <View style={styles.headerLeft}>
-            <View style={styles.avatar}>
-              <Text style={styles.avatarText}>W</Text>
-            </View>
-            <View style={styles.headerText}>
-              <Text style={styles.greetingText}>Hi, Wellness WeCare</Text>
-              <View style={styles.badgeContainer}>
-                <Icon name="star" size={12} color="#FFFFFF" />
-                <Text style={styles.badgeText}>12</Text>
+              <View style={styles.benefitItem}>
+                <Icon name="food-apple" size={20} color="#38A169" />
+                <Text style={styles.benefitText}>Dokter Spesialis Gizi Klinik</Text>
+              </View>
+              <View style={styles.benefitItem}>
+                <Icon name="brain" size={20} color="#3182CE" />
+                <Text style={styles.benefitText}>Dokter Spesialis Kesehatan Jiwa</Text>
+              </View>
+              <View style={styles.benefitItem}>
+                <Icon name="hospital" size={20} color="#9F7AEA" />
+                <Text style={styles.benefitText}>Dokter Spesialis Penyakit Dalam</Text>
               </View>
             </View>
           </View>
-          <View style={styles.headerRight}>
-            <Icon
-              name="view-grid"
-              size={24}
-              color="#6B7280"
-              style={styles.headerIcon}
-            />
-            <Icon
-              name="menu"
-              size={24}
-              color="#6B7280"
-              style={styles.headerIcon}
-            />
-          </View>
-        </View>
-
-        <View style={styles.afternoonContainer}>
-          <Icon name="weather-sunny" size={20} color="#F59E0B" />
-          <Text style={styles.afternoonText}>Good afternoon</Text>
-        </View> */}
-
-        <TouchableOpacity
-          style={styles.chatSectionContainer}
-          onPress={() => navigation.navigate("ChatAssistant")}
-        >
-          <Text style={styles.sectionTitle}>AI Health Assistant</Text>
-          <View style={styles.chatCard}>
-            <View style={styles.chatCardContent}>
-              <Icon name="robot" size={50} color="#E22345" />
-              <Text style={styles.chatTitle}>
-                Ask me anything about your health
-              </Text>
-              <Text style={styles.chatSubtitle}>
-                I'm here to help you with nutrition, fitness, and wellness
-                advice
-              </Text>
-            </View>
-          </View>
-        </TouchableOpacity>
+        )}
       </ScrollView>
     </LinearGradient>
   );
 };
 
 // Daily Mission Tab Component (Empty component for the center button)
-const DailyMissionTab = () => {
+const DailyMissionTab = ({ navigation }: any) => {
+  useEffect(() => {
+    navigation.navigate("WellnessApp");
+  }, [navigation]);
+  
   return <View style={{ flex: 1 }} />;
 };
+
+// Consultation Tab Component
+const ConsultationTab = ({ navigation }: any) => {
+  const { isAuthenticated } = useAuth();
+
+  if (!isAuthenticated) {
+    return (
+      <LinearGradient colors={["#FAFBFC", "#F7FAFC"]} style={styles.container}>
+        <StatusBar barStyle="dark-content" backgroundColor="#FAFBFC" />
+        <View style={styles.authPrompt}>
+          <Icon name="calendar-account" size={64} color="#E22345" />
+          <Text style={styles.authPromptTitle}>Konsultasi dengan Dokter</Text>
+          <Text style={styles.authPromptSubtitle}>
+            Login untuk melihat riwayat konsultasi dan booking konsultasi baru dengan dokter
+          </Text>
+          <TouchableOpacity
+            style={styles.loginButton}
+            onPress={() => navigation.navigate("Login")}
+          >
+            <Text style={styles.loginButtonText}>Login</Text>
+          </TouchableOpacity>
+        </View>
+      </LinearGradient>
+    );
+  }
+
+  return <ConsultationHistoryScreen navigation={navigation} />;
+};
+
+
 
 // Main Screen with Tabs
 const MainScreen = ({ navigation }: any) => {
@@ -992,27 +1183,38 @@ const MainScreen = ({ navigation }: any) => {
 
             if (route.name === "HOME") {
               iconName = focused ? "home" : "home-outline";
-            } else if (route.name === "MISSION") {
-              iconName = focused ? "flag" : "flag-outline";
+            } else if (route.name === "ACTIVITY") {
+              iconName = focused ? "run" : "run";
             } else if (route.name === "HEALTH") {
-              iconName = focused ? "heart" : "heart-outline";
-            } else if (route.name === "CHAT") {
-              iconName = focused ? "chat" : "chat-outline";
+              iconName = focused ? "doctor" : "stethoscope";
+            } else if (route.name === "CONSULTATION") {
+              iconName = focused ? "calendar-account" : "calendar-account-outline";
             }
-
             return <Icon name={iconName} size={size} color={color} />;
           },
           tabBarActiveTintColor: "#E22345",
           tabBarInactiveTintColor: "#6B7280",
+          tabBarLabelStyle: {
+            fontSize: 11,
+            fontWeight: "600",
+            marginTop: 2,
+          },
+          tabBarIconStyle: {
+            marginTop: 4,
+          },
           tabBarStyle: {
             backgroundColor: "#FFFFFF",
             borderTopColor: "#E5E7EB",
             borderTopWidth: 1,
-            paddingBottom: 10,
-            paddingTop: 10,
-            height: 80,
+            paddingBottom: 8,
+            paddingTop: 8,
+            height: 70,
             elevation: 0,
             shadowOpacity: 0,
+            position: 'absolute',
+            bottom: 0,
+            left: 0,
+            right: 0,
           },
           headerShown: false,
         })}
@@ -1023,36 +1225,50 @@ const MainScreen = ({ navigation }: any) => {
           options={{ tabBarLabel: "HOME" }}
         />
         <Tab.Screen
-          name="MISSION"
-          component={MissionTab}
-          options={{ tabBarLabel: "MISSION" }}
+          name="ACTIVITY"
+          component={ActivityTab}
+          options={{ tabBarLabel: "ACTIVITY" }}
         />
         <Tab.Screen
           name="DAILY_MISSION"
           component={DailyMissionTab}
           options={{
             tabBarLabel: "",
-            tabBarButton: (props) => (
-              <View style={styles.dailyMissionButton}>
-                <TouchableOpacity
-                  onPress={() => navigation.navigate("DailyMission")}
-                  style={styles.dailyMissionGradient}
-                >
-                  <Icon name="plus" size={28} color="#FFFFFF" />
-                </TouchableOpacity>
-              </View>
-            ),
+            tabBarButton: (props) => {
+              const { isAuthenticated } = useAuth();
+              return (
+                <View style={styles.dailyMissionButton}>
+                  <TouchableOpacity
+                    onPress={() => {
+                      if (isAuthenticated) {
+                        try {
+                          navigation.navigate("WellnessApp");
+                        } catch (error) {
+                          console.warn("WellnessApp screen not found, navigating to Login instead");
+                          navigation.navigate("Login");
+                        }
+                      } else {
+                        navigation.navigate("Login");
+                      }
+                    }}
+                    style={styles.dailyMissionGradient}
+                  >
+                    <Icon name="heart-pulse" size={32} color="#FFFFFF" />
+                  </TouchableOpacity>
+                </View>
+              );
+            },
           }}
         />
         <Tab.Screen
           name="HEALTH"
-          component={HealthTab}
-          options={{ tabBarLabel: "HEALTH" }}
+          component={DoctorTab}
+          options={{ tabBarLabel: "DOCTOR" }}
         />
         <Tab.Screen
-          name="CHAT"
-          component={ChatTab}
-          options={{ tabBarLabel: "CHAT" }}
+          name="CONSULTATION"
+          component={ConsultationTab}
+          options={{ tabBarLabel: "KONSULTASI" }}
         />
       </Tab.Navigator>
     </SafeAreaView>
@@ -1062,12 +1278,13 @@ const MainScreen = ({ navigation }: any) => {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
+    backgroundColor: "#FAFBFC",
   },
   container: {
     flex: 1,
   },
   contentContainer: {
-    paddingBottom: 20,
+    paddingBottom: 90,
   },
   header: {
     flexDirection: "row",
@@ -1083,8 +1300,18 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   logoContainer: {
-    alignItems: "center",
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "#FEF2F2",
     justifyContent: "center",
+    alignItems: "center",
+    marginRight: 14,
+    shadowColor: "#E53E3E",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
   },
   profileThumbnail: {
     alignItems: "center",
@@ -1173,17 +1400,22 @@ const styles = StyleSheet.create({
   summaryContainer: {
     marginHorizontal: 20,
     marginBottom: 25,
-    backgroundColor: "#F8FAFC",
-    borderRadius: 20,
-    padding: 24,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    elevation: 6,
-    borderWidth: 1,
-    borderColor: "#F1F5F9",
   },
+  summaryHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 16,
+  },
+  summaryActionButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: "#FEF2F2",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  // Removed summaryCard styling to avoid conflicts with TodaySummaryCard
   sectionTitle: {
     fontSize: 20,
     fontWeight: "700",
@@ -1203,82 +1435,176 @@ const styles = StyleSheet.create({
     marginBottom: 20,
     alignItems: "center",
   },
-  metricsContainer: {
-    flex: 1,
-    flexDirection: "row",
-    flexWrap: "wrap",
-    justifyContent: "space-between",
-    marginRight: 20,
-  },
-  metricCard: {
-    width: "48%",
-    // borderWidth: 1,
-    // borderColor: "#E2E8F0",
-    // borderRadius: 16,
-    padding: 16,
-    // alignItems: "center",
-    // marginBottom: 12,
-    // backgroundColor: "#FFFFFF",
-    // shadowColor: "#000",
-    // shadowOffset: { width: 0, height: 2 },
-    // shadowOpacity: 0.05,
-    // shadowRadius: 6,
+  // Removed metrics styling to avoid conflicts with TodaySummaryCard
+  // Removed wellness score styling to avoid conflicts with TodaySummaryCard
+  // Removed unused styling to avoid conflicts with TodaySummaryCard
+  metricCardCompact: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 10,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
     elevation: 2,
   },
-  metricValue: {
-    fontSize: 18,
+  metricTextContainer: {
+    flex: 1,
+    marginLeft: 10,
+  },
+  metricValueCompact: {
+    fontSize: 16,
     fontWeight: "700",
     color: "#1F2937",
-    marginTop: 6,
   },
-  metricUnit: {
-    fontSize: 13,
+  metricUnitCompact: {
+    fontSize: 12,
     color: "#64748B",
-    marginTop: 3,
     fontWeight: "500",
   },
-  wellnessScoreContainer: {
-    width: 140,
+  progressSection: {
+    width: 120,
     alignItems: "center",
     justifyContent: "center",
   },
-  wellnessScoreCircle: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    borderWidth: 8,
-    borderColor: "#F59E0B",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  wellnessScoreInner: {
-    alignItems: "center",
-  },
-  wellnessScoreValue: {
-    fontSize: 28,
+  wellnessScoreValueCompact: {
+    fontSize: 24,
     fontWeight: "800",
     color: "#3B82F6",
     letterSpacing: -0.5,
   },
-  wellnessScoreLabel: {
-    fontSize: 10,
+  wellnessScoreLabelCompact: {
+    fontSize: 9,
     color: "#64748B",
     textAlign: "center",
     fontWeight: "500",
     marginTop: 2,
   },
-  moreDetailsContainer: {
+  moreDetailsContainerCompact: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    marginTop: 12,
-    paddingHorizontal: 10,
+    marginTop: 8,
+    paddingHorizontal: 8,
   },
-  moreDetailsText: {
-    fontSize: 14,
+  moreDetailsTextCompact: {
+    fontSize: 12,
     color: "#E22345",
     fontWeight: "600",
     marginRight: 4,
+  },
+  // Wellness Card Styles
+  wellnessCard: {
+    marginHorizontal: 20,
+    marginBottom: 15,
+    borderRadius: 20,
+    overflow: "hidden",
+    shadowColor: "#E53E3E",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  wellnessCardGradient: {
+    padding: 20,
+  },
+  wellnessCardContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  wellnessCardLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    flex: 1,
+  },
+  wellnessIconContainer: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: "rgba(255, 255, 255, 0.2)",
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 15,
+  },
+  wellnessTextContainer: {
+    flex: 1,
+  },
+  wellnessCardTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#FFFFFF",
+    marginBottom: 4,
+  },
+  wellnessCardSubtitle: {
+    fontSize: 13,
+    color: "rgba(255, 255, 255, 0.9)",
+    lineHeight: 18,
+  },
+  wellnessCardRight: {
+    alignItems: "center",
+  },
+  wellnessBadge: {
+    backgroundColor: "#38A169",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    marginBottom: 8,
+  },
+  wellnessBadgeText: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: "#FFFFFF",
+  },
+  // Clinics Card Styles
+  clinicsCard: {
+    marginHorizontal: 20,
+    marginBottom: 15,
+    borderRadius: 20,
+    overflow: "hidden",
+    shadowColor: "#3182CE",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  clinicsCardGradient: {
+    padding: 20,
+  },
+  clinicsCardContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  clinicsCardLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    flex: 1,
+  },
+  clinicsIconContainer: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: "rgba(255, 255, 255, 0.2)",
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 15,
+  },
+  clinicsTextContainer: {
+    flex: 1,
+  },
+  clinicsCardTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#FFFFFF",
+    marginBottom: 4,
+  },
+  clinicsCardSubtitle: {
+    fontSize: 13,
+    color: "rgba(255, 255, 255, 0.9)",
+    lineHeight: 18,
+  },
+  clinicsCardRight: {
+    alignItems: "center",
   },
   personalizedContainer: {
     marginHorizontal: 20,
@@ -1501,50 +1827,65 @@ const styles = StyleSheet.create({
     paddingBottom: 10,
   },
   featuredFlatList: {
-    minHeight: 140,
+    height: 300, // Fixed height to match card height + padding
   },
-  featuredArticleCard: {
-    width: width * 0.7,
-    marginRight: 15,
-    backgroundColor: "#FFFFFF",
-    borderRadius: 16,
-    padding: 16,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    elevation: 4,
-    borderWidth: 1,
-    borderColor: "#E2E8F0",
-    minHeight: 120,
+  featuredSectionHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    marginBottom: 20,
   },
-  featuredArticleIcon: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    justifyContent: "center",
-    alignItems: "center",
-    marginBottom: 10,
-  },
-  featuredArticleContent: {
+  featuredHeaderLeft: {
     flex: 1,
   },
-  featuredArticleTitle: {
-    fontSize: 15,
-    fontWeight: "700",
+  featuredHeaderRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  refreshButton: {
+    padding: 8,
+    borderRadius: 8,
+    backgroundColor: "#FEF2F2",
+  },
+  featuredSectionTitle: {
+    fontSize: 20,
+    fontWeight: "800",
     color: "#1F2937",
-    marginBottom: 5,
-    lineHeight: 20,
+    marginBottom: 4,
+    letterSpacing: -0.3,
   },
-  featuredArticleCategory: {
-    fontSize: 12,
-    color: "#E22345",
-    fontWeight: "600",
-    marginBottom: 5,
-  },
-  featuredArticleReadTime: {
-    fontSize: 11,
+  featuredSectionSubtitle: {
+    fontSize: 14,
     color: "#64748B",
+    fontWeight: "500",
+    lineHeight: 18,
+  },
+  seeAllButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#FEF2F2",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+  },
+  articlesLoadingContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 40,
+    gap: 12,
+  },
+  articlesErrorContainer: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 40,
+    gap: 12,
+  },
+  loadingText: {
+    fontSize: 14,
+    color: "#64748B",
+    fontWeight: "500",
   },
   calculatorContainer: {
     marginHorizontal: 20,
@@ -1626,23 +1967,23 @@ const styles = StyleSheet.create({
     marginLeft: 10,
   },
   dailyMissionButton: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
+    width: 70,
+    height: 70,
+    borderRadius: 35,
     justifyContent: "center",
     alignItems: "center",
-    marginTop: -25,
+    marginTop: -35,
     shadowColor: "#E22345",
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.4,
-    shadowRadius: 10,
-    elevation: 10,
+    shadowRadius: 12,
+    elevation: 12,
     zIndex: 999,
   },
   dailyMissionGradient: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
+    width: 70,
+    height: 70,
+    borderRadius: 35,
     justifyContent: "center",
     alignItems: "center",
     backgroundColor: "#E22345",
@@ -1793,6 +2134,509 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: "500",
     marginLeft: 4,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  // Wellness Tab Styles
+  wellnessGradient: {
+    padding: 24,
+  },
+  wellnessContent: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  wellnessLeft: {
+    flex: 1,
+    marginRight: 20,
+  },
+  wellnessTitle: {
+    fontSize: 20,
+    fontWeight: "700",
+    color: "#FFFFFF",
+    marginBottom: 8,
+    lineHeight: 28,
+  },
+  wellnessDescription: {
+    fontSize: 14,
+    color: "#FFFFFF",
+    opacity: 0.9,
+    lineHeight: 20,
+    marginBottom: 16,
+  },
+  wellnessButton: {
+    backgroundColor: "rgba(255, 255, 255, 0.2)",
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 20,
+    alignSelf: "flex-start",
+  },
+  wellnessButtonText: {
+    color: "#FFFFFF",
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  wellnessRight: {
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  wellnessSectionTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#1F2937",
+    marginBottom: 16,
+  },
+  featuresGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  featureItem: {
+    width: "48%",
+    backgroundColor: "#FFFFFF",
+    borderRadius: 16,
+    padding: 20,
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 4,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+  },
+  featureText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#1F2937",
+    marginTop: 8,
+    textAlign: "center",
+  },
+  // Additional styles
+  metricIconContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 10,
+  },
+  // Modern metric styles
+  metricCardModern: {
+    width: "48%",
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 16,
+    marginBottom: 12,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 16,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 3,
+    borderWidth: 1,
+    borderColor: "#F1F5F9",
+  },
+  metricIconContainerModern: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 12,
+  },
+  metricValueModern: {
+    fontSize: 18,
+    fontWeight: "800",
+    color: "#1F2937",
+    letterSpacing: -0.5,
+  },
+  metricUnitModern: {
+    fontSize: 13,
+    color: "#64748B",
+    fontWeight: "600",
+    marginTop: 2,
+  },
+  progressSectionModern: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 20,
+    paddingTop: 20,
+    borderTopWidth: 1,
+    borderTopColor: "#F1F5F9",
+  },
+  progressRingContainer: {
+    marginRight: 20,
+  },
+  progressContent: {
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  wellnessScoreValueModern: {
+    fontSize: 28,
+    fontWeight: "900",
+    color: "#E53E3E",
+    letterSpacing: -1,
+  },
+  wellnessScoreLabelModern: {
+    fontSize: 12,
+    color: "#64748B",
+    fontWeight: "700",
+    marginTop: 2,
+  },
+  progressInfo: {
+    flex: 1,
+  },
+  progressTitle: {
+    fontSize: 18,
+    fontWeight: "800",
+    color: "#1F2937",
+    marginBottom: 4,
+    letterSpacing: -0.5,
+  },
+  progressSubtitle: {
+    fontSize: 14,
+    color: "#64748B",
+    fontWeight: "500",
+    marginBottom: 12,
+    lineHeight: 20,
+  },
+  progressActionButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#FEF2F2",
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 20,
+    alignSelf: "flex-start",
+  },
+  progressActionText: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#E53E3E",
+    marginRight: 6,
+  },
+  welcomeCard: {
+    marginHorizontal: 20,
+    marginBottom: 25,
+    borderRadius: 20,
+    overflow: "hidden",
+    shadowColor: "#E53E3E",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  welcomeCardGradient: {
+    padding: 20,
+  },
+  welcomeCardContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  welcomeCardLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    flex: 1,
+  },
+  welcomeIconContainer: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: "rgba(255, 255, 255, 0.2)",
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 15,
+  },
+  welcomeTextContainer: {
+    flex: 1,
+  },
+  welcomeCardTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#FFFFFF",
+    marginBottom: 4,
+  },
+  welcomeCardSubtitle: {
+    fontSize: 13,
+    color: "rgba(255, 255, 255, 0.9)",
+    lineHeight: 18,
+  },
+  welcomeCardRight: {
+    alignItems: "center",
+  },
+  // Welcome message styles
+  welcomeMessageContainer: {
+    marginHorizontal: 20,
+    marginBottom: 20,
+    padding: 20,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 16,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 4,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+  },
+  welcomeMessageTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#1F2937",
+    marginBottom: 8,
+    textAlign: "center",
+  },
+  welcomeMessageText: {
+    fontSize: 14,
+    color: "#64748B",
+    lineHeight: 20,
+    textAlign: "center",
+    fontWeight: "500",
+  },
+  // Benefits list styles
+  benefitsList: {
+    gap: 12,
+  },
+  benefitItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 8,
+  },
+  benefitText: {
+    fontSize: 14,
+    color: "#1F2937",
+    marginLeft: 12,
+    fontWeight: "500",
+  },
+  bellButton: {
+    padding: 8,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  doctorCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 16,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  doctorCardHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 12,
+  },
+  doctorAvatarContainer: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: "rgba(255, 255, 255, 0.2)",
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 12,
+  },
+  doctorAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  doctorAvatarText: {
+    fontSize: 24,
+    fontWeight: "700",
+    color: "#FFFFFF",
+  },
+  doctorStatus: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    marginLeft: 4,
+  },
+  doctorInfo: {
+    flex: 1,
+  },
+  doctorName: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#1F2937",
+    marginBottom: 4,
+  },
+  doctorSpecialty: {
+    fontSize: 14,
+    color: "#64748B",
+    marginBottom: 4,
+  },
+  doctorHospital: {
+    fontSize: 14,
+    color: "#64748B",
+    marginBottom: 4,
+  },
+  doctorRating: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 4,
+  },
+  ratingText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#1F2937",
+    marginLeft: 4,
+  },
+  reviewsText: {
+    fontSize: 12,
+    color: "#64748B",
+    marginLeft: 4,
+  },
+  doctorPrice: {
+    alignItems: "flex-end",
+  },
+  priceText: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#E53E3E",
+    marginBottom: 4,
+  },
+  experienceText: {
+    fontSize: 12,
+    color: "#64748B",
+    fontWeight: "500",
+  },
+  doctorCardFooter: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  consultationInfo: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginRight: 16,
+  },
+  consultationText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#3182CE",
+    marginLeft: 4,
+  },
+  wellnessDataShare: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  shareText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#E53E3E",
+    marginLeft: 4,
+  },
+  wellnessShareInfo: {
+    marginHorizontal: 20,
+    marginBottom: 25,
+  },
+  shareInfoCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 16,
+    padding: 16,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  shareInfoText: {
+    flex: 1,
+    marginLeft: 12,
+  },
+  shareInfoTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#1F2937",
+    marginBottom: 8,
+  },
+  shareInfoSubtitle: {
+    fontSize: 14,
+    color: "#64748B",
+    lineHeight: 20,
+  },
+  doctorsContainer: {
+    marginHorizontal: 20,
+    marginBottom: 25,
+  },
+  authPrompt: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 32,
+    paddingVertical: 64,
+  },
+  authPromptTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#1F2937',
+    marginTop: 16,
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  authPromptSubtitle: {
+    fontSize: 14,
+    color: '#6B7280',
+    textAlign: 'center',
+    marginBottom: 32,
+    lineHeight: 20,
+  },
+  loginButton: {
+    backgroundColor: '#E22345',
+    borderRadius: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 32,
+  },
+  loginButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#FFFFFF',
+  },
+
+  errorContainer: {
+    alignItems: 'center',
+    paddingVertical: 32,
+  },
+  errorText: {
+    fontSize: 16,
+    color: '#E53E3E',
+    textAlign: 'center',
+    marginBottom: 16,
+    fontWeight: '500',
+  },
+  retryButton: {
+    backgroundColor: '#E22345',
+    borderRadius: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+  },
+  retryButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#FFFFFF',
+  },
+  emptyContainer: {
+    alignItems: 'center',
+    paddingVertical: 32,
+  },
+  emptyText: {
+    fontSize: 16,
+    color: '#6B7280',
+    textAlign: 'center',
+    fontWeight: '500',
   },
 });
 

@@ -17,6 +17,7 @@ import Icon from "react-native-vector-icons/MaterialCommunityIcons";
 import { CustomTheme } from "../theme/theme";
 import LogoPutih from "../components/LogoPutih";
 import { useAuth } from "../contexts/AuthContext";
+import { handleError } from "../utils/errorHandler";
 import DateTimePicker from "@react-native-community/datetimepicker";
 
 const RegisterScreen = ({ navigation }: any) => {
@@ -128,34 +129,16 @@ const RegisterScreen = ({ navigation }: any) => {
       const success = await register(registerData);
 
       if (success) {
-        Alert.alert(
-          "Registrasi Berhasil",
-          "Akun Anda telah berhasil dibuat. Silakan masuk.",
-          [
-            {
-              text: "OK",
-              onPress: () => navigation.navigate("Login"),
-            },
-          ]
-        );
+        // After successful registration, directly navigate to Main screen
+        navigation.replace("Main");
       }
     } catch (error) {
       console.error("Registration error:", error);
-      let errorMessage = "Registrasi gagal. Silakan coba lagi.";
-
-      if (error instanceof Error) {
-        if (error.message.includes("already exists")) {
-          errorMessage = "Email sudah terdaftar. Silakan gunakan email lain.";
-        } else if (error.message.includes("Network request failed")) {
-          errorMessage = "Koneksi gagal. Pastikan internet Anda terhubung.";
-        } else if (error.message.includes("timeout")) {
-          errorMessage = "Koneksi timeout. Silakan coba lagi.";
-        } else {
-          errorMessage = error.message;
-        }
-      }
-
-      Alert.alert("Error Registrasi", errorMessage);
+      
+      // Use the new error handler
+      handleError(error, {
+        title: 'Registration Error'
+      });
     } finally {
       setIsLoading(false);
     }

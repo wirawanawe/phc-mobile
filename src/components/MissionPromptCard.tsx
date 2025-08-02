@@ -1,7 +1,9 @@
 import React from "react";
-import { View, StyleSheet, TouchableOpacity } from "react-native";
+import { View, StyleSheet, TouchableOpacity, Animated } from "react-native";
 import { Text } from "react-native-paper";
 import Icon from "react-native-vector-icons/MaterialCommunityIcons";
+import { LinearGradient } from "expo-linear-gradient";
+import { Shadow } from "react-native-shadow-2";
 
 interface MissionPromptCardProps {
   title: string;
@@ -10,6 +12,11 @@ interface MissionPromptCardProps {
   iconColor: string;
   backgroundColor: string;
   onPress: () => void;
+  gradient?: readonly [string, string, ...string[]];
+  shadow?: boolean;
+  animated?: boolean;
+  badge?: string;
+  badgeColor?: string;
 }
 
 const MissionPromptCard: React.FC<MissionPromptCardProps> = ({
@@ -19,27 +26,135 @@ const MissionPromptCard: React.FC<MissionPromptCardProps> = ({
   iconColor,
   backgroundColor,
   onPress,
+  gradient,
+  shadow = true,
+  animated = true,
+  badge,
+  badgeColor = "#10B981",
 }) => {
-  return (
-    <TouchableOpacity style={styles.container} onPress={onPress}>
-      <View style={[styles.card, { backgroundColor }]}>
-        <View style={styles.content}>
-          <View
-            style={[
-              styles.iconContainer,
-              { backgroundColor: backgroundColor + "20" },
-            ]}
-          >
-            <Icon name={icon} size={40} color={iconColor} />
-          </View>
-          <View style={styles.textContainer}>
-            <Text style={styles.title}>{title}</Text>
-            <Text style={styles.subtitle}>{subtitle}</Text>
-          </View>
-          <Icon name="chevron-right" size={24} color={iconColor} />
+  const scaleAnim = React.useRef(new Animated.Value(1)).current;
+
+  const handlePressIn = () => {
+    if (animated) {
+      Animated.spring(scaleAnim, {
+        toValue: 0.98,
+        useNativeDriver: true,
+      }).start();
+    }
+  };
+
+  const handlePressOut = () => {
+    if (animated) {
+      Animated.spring(scaleAnim, {
+        toValue: 1,
+        useNativeDriver: true,
+      }).start();
+    }
+  };
+
+  const CardContent = () => (
+    <View style={styles.content}>
+      <View style={styles.leftContent}>
+        <View
+          style={[
+            styles.iconContainer,
+            { 
+              backgroundColor: gradient ? "rgba(255, 255, 255, 0.2)" : iconColor + "20",
+            },
+          ]}
+        >
+          <Icon 
+            name={icon} 
+            size={32} 
+            color={gradient ? "#FFFFFF" : iconColor} 
+          />
+          {badge && (
+            <View style={[styles.badge, { backgroundColor: badgeColor }]}>
+              <Text style={styles.badgeText}>{badge}</Text>
+            </View>
+          )}
+        </View>
+        <View style={styles.textContainer}>
+          <Text style={[
+            styles.title, 
+            { color: gradient ? "#FFFFFF" : "#1F2937" }
+          ]}>
+            {title}
+          </Text>
+          <Text style={[
+            styles.subtitle, 
+            { color: gradient ? "rgba(255, 255, 255, 0.9)" : "#64748B" }
+          ]}>
+            {subtitle}
+          </Text>
         </View>
       </View>
-    </TouchableOpacity>
+      <View style={styles.rightContent}>
+        <Icon 
+          name="chevron-right" 
+          size={24} 
+          color={gradient ? "rgba(255, 255, 255, 0.8)" : iconColor} 
+        />
+      </View>
+    </View>
+  );
+
+  const CardWrapper = ({ children }: { children: React.ReactNode }) => {
+    if (gradient) {
+      return (
+        <LinearGradient
+          colors={gradient}
+          style={styles.gradientCard}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+        >
+          {children}
+        </LinearGradient>
+      );
+    }
+
+    return (
+      <View style={[styles.card, { backgroundColor }]}>
+        {children}
+      </View>
+    );
+  };
+
+  const AnimatedCard = () => (
+    <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
+      <TouchableOpacity
+        onPress={onPress}
+        onPressIn={handlePressIn}
+        onPressOut={handlePressOut}
+        activeOpacity={0.9}
+        style={styles.touchable}
+      >
+        <CardWrapper>
+          <CardContent />
+        </CardWrapper>
+      </TouchableOpacity>
+    </Animated.View>
+  );
+
+  if (shadow) {
+    return (
+      <View style={styles.container}>
+        <Shadow
+          distance={8}
+          startColor={gradient ? "rgba(229, 62, 62, 0.15)" : "rgba(16, 24, 40, 0.1)"}
+          offset={[0, 4]}
+          paintInside={false}
+        >
+          <AnimatedCard />
+        </Shadow>
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.container}>
+      <AnimatedCard />
+    </View>
   );
 };
 
@@ -48,29 +163,56 @@ const styles = StyleSheet.create({
     marginHorizontal: 20,
     marginBottom: 25,
   },
-  card: {
-    backgroundColor: "#FFFFFF",
+  touchable: {
     borderRadius: 20,
-    padding: 20,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    elevation: 6,
+    overflow: 'hidden',
+  },
+  card: {
+    borderRadius: 20,
+    padding: 24,
     borderWidth: 1,
-    borderColor: "#F1F5F9",
+    borderColor: "#E2E8F0",
+  },
+  gradientCard: {
+    borderRadius: 20,
+    padding: 24,
   },
   content: {
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "space-between",
+  },
+  leftContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    flex: 1,
+  },
+  rightContent: {
+    marginLeft: 16,
   },
   iconContainer: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
     justifyContent: "center",
     alignItems: "center",
     marginRight: 16,
+    position: "relative",
+  },
+  badge: {
+    position: "absolute",
+    top: -4,
+    right: -4,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  badgeText: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: "#FFFFFF",
   },
   textContainer: {
     flex: 1,
@@ -78,13 +220,12 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 18,
     fontWeight: "700",
-    color: "#1F2937",
-    marginBottom: 4,
+    marginBottom: 6,
     letterSpacing: -0.3,
+    lineHeight: 24,
   },
   subtitle: {
     fontSize: 14,
-    color: "#64748B",
     lineHeight: 20,
     fontWeight: "500",
   },

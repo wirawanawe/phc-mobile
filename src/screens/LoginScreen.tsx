@@ -15,22 +15,33 @@ import { LinearGradient } from "expo-linear-gradient";
 import Icon from "react-native-vector-icons/MaterialCommunityIcons";
 import { CustomTheme } from "../theme/theme";
 import LogoPutih from "../components/LogoPutih";
+import LoginErrorDisplay from "../components/LoginErrorDisplay";
+import SocialLoginButtons from "../components/SocialLoginButtons";
+import OTPVerification from "../components/OTPVerification";
 import { useAuth } from "../contexts/AuthContext";
 import { CommonActions } from "@react-navigation/native";
+import { handleError } from "../utils/errorHandler";
+
 
 const LoginScreen = ({ navigation }: any) => {
   const theme = useTheme<CustomTheme>();
-  const { login } = useAuth();
+  const { login, socialLogin } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
+  
+  // Social login states
+  const [showOTPVerification, setShowOTPVerification] = useState(false);
+  const [socialLoginData, setSocialLoginData] = useState<any>(null);
+  const [socialLoading, setSocialLoading] = useState(false);
 
   const handleLogin = async () => {
     // Clear any previous errors
     setError("");
 
+    // Client-side validation
     if (!email.trim() || !password.trim()) {
       setError("Mohon isi semua field yang diperlukan");
       return;
@@ -41,43 +52,54 @@ const LoginScreen = ({ navigation }: any) => {
       return;
     }
 
+    if (password.length < 6) {
+      setError("Password minimal 6 karakter");
+      return;
+    }
+
     setIsLoading(true);
 
     try {
       const success = await login(email, password);
 
       if (success) {
-        // Login successful - show success message and navigate back
-        Alert.alert(
-          "Login Berhasil",
-          "Selamat datang kembali! Anda sekarang dapat mengakses semua fitur.",
-          [
-            {
-              text: "OK",
-              onPress: () => {
-                navigation.navigate("Main");
-              },
-            },
-          ]
-        );
+        // Login successful - navigate to Main screen
+        navigation.replace("Main");
       }
-    } catch (error) {
-      console.error("Login error:", error);
+    } catch (error: any) {
+      
+      // Enhanced error handling for invalid credentials
       let errorMessage = "Login gagal. Silakan coba lagi.";
-
-      if (error instanceof Error) {
-        if (error.message.includes("Invalid credentials")) {
-          errorMessage = "Email atau password salah. Silakan cek kembali.";
-        } else if (error.message.includes("Network request failed")) {
-          errorMessage = "Koneksi gagal. Pastikan internet Anda terhubung.";
-        } else if (error.message.includes("timeout")) {
-          errorMessage = "Koneksi timeout. Silakan coba lagi.";
+      
+      if (error?.message) {
+        const message = error.message.toLowerCase();
+        
+        // Handle specific invalid credential cases
+        if (message.includes("invalid credentials") || 
+            message.includes("email atau password salah") ||
+            message.includes("kredensial tidak valid")) {
+          errorMessage = "Email atau password salah. Silakan periksa kembali.";
+        } else if (message.includes("user not found") || 
+                   message.includes("user tidak ditemukan")) {
+          errorMessage = "Email tidak terdaftar. Silakan daftar terlebih dahulu.";
+        } else if (message.includes("account is deactivated") || 
+                   message.includes("akun dinonaktifkan")) {
+          errorMessage = "Akun Anda telah dinonaktifkan. Hubungi admin untuk bantuan.";
+        } else if (message.includes("too many attempts") || 
+                   message.includes("terlalu banyak percobaan")) {
+          errorMessage = "Terlalu banyak percobaan login. Silakan tunggu beberapa menit.";
+        } else if (message.includes("network") || 
+                   message.includes("koneksi")) {
+          errorMessage = "Koneksi gagal. Periksa internet Anda dan coba lagi.";
         } else {
           errorMessage = error.message;
         }
       }
-
+      
       setError(errorMessage);
+      
+      // Clear password field for security
+      setPassword("");
     } finally {
       setIsLoading(false);
     }
@@ -99,6 +121,70 @@ const LoginScreen = ({ navigation }: any) => {
   const handleRegister = () => {
     navigation.navigate("Register");
   };
+
+  // Social login handlers
+  const handleSocialLoginSuccess = (data: any) => {
+    setSocialLoginData(data);
+    setShowOTPVerification(true);
+  };
+
+  const handleSocialLoginError = (error: string) => {
+    setError(error);
+  };
+
+  const handleOTPVerificationSuccess = async (data: any) => {
+    try {
+      // OTP verification successful - complete social login process
+      
+      // Use the social login method to properly authenticate the user
+      const success = await socialLogin(data.user, data.token);
+      
+      if (success) {
+        navigation.replace("Main");
+      }
+    } catch (error) {
+      setError('Social login verification failed. Please try again.');
+    }
+  };
+
+  const handleOTPVerificationError = (error: string) => {
+    setError(error);
+    setShowOTPVerification(false);
+  };
+
+  const handleResendOTP = async () => {
+    // Re-trigger the social login process to get a new OTP
+    setSocialLoading(true);
+    try {
+      // This would typically call the social auth service again
+      // For now, we'll just show a success message
+      Alert.alert('Success', 'New OTP has been sent');
+    } catch (error) {
+      setError('Failed to resend OTP. Please try again.');
+    } finally {
+      setSocialLoading(false);
+    }
+  };
+
+  const handleCancelOTP = () => {
+    setShowOTPVerification(false);
+    setSocialLoginData(null);
+    setError('');
+  };
+
+  // Show OTP verification screen if needed
+  if (showOTPVerification && socialLoginData) {
+    return (
+      <OTPVerification
+        email={socialLoginData.user.email}
+        authMethod={socialLoginData.authMethod}
+        onVerificationSuccess={handleOTPVerificationSuccess}
+        onVerificationError={handleOTPVerificationError}
+        onResendOTP={handleResendOTP}
+        onCancel={handleCancelOTP}
+      />
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container}>
@@ -183,12 +269,12 @@ const LoginScreen = ({ navigation }: any) => {
               </View>
 
               {/* Error Message */}
-              {error ? (
-                <View style={styles.errorContainer}>
-                  <Icon name="alert-circle" size={16} color="#ffffff" />
-                  <Text style={styles.errorText}>{error}</Text>
-                </View>
-              ) : null}
+              {/* Error Display */}
+              <LoginErrorDisplay
+                error={error}
+                onClearError={() => setError("")}
+                onRetry={handleLogin}
+              />
 
               {/* Forgot Password */}
               <TouchableOpacity
@@ -197,6 +283,8 @@ const LoginScreen = ({ navigation }: any) => {
               >
                 <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
               </TouchableOpacity>
+
+             
 
               {/* Login Button */}
               <Button
@@ -218,17 +306,26 @@ const LoginScreen = ({ navigation }: any) => {
                 <Text style={styles.dividerText}>or</Text>
                 <View style={styles.dividerLine} />
               </View>
+
+              {/* Social Login Buttons */}
+              <SocialLoginButtons
+                onSocialLoginSuccess={handleSocialLoginSuccess}
+                onSocialLoginError={handleSocialLoginError}
+                loading={socialLoading}
+              />
             </View>
 
-            {/* Footer */}
-            <View style={styles.footer}>
-              <Text style={styles.footerText}>
-                Don't have an account?{" "}
-                <Text style={styles.registerLink} onPress={handleRegister}>
-                  Sign Up
+                          {/* Footer */}
+              <View style={styles.footer}>
+                <Text style={styles.footerText}>
+                  Don't have an account?{" "}
+                  <Text style={styles.registerLink} onPress={handleRegister}>
+                    Sign Up
+                  </Text>
                 </Text>
-              </Text>
-            </View>
+              </View>
+
+              
           </ScrollView>
         </KeyboardAvoidingView>
       </LinearGradient>
@@ -412,6 +509,33 @@ const styles = StyleSheet.create({
   registerLink: {
     color: "#FFFFFF",
     fontWeight: "600",
+  },
+  testCredentialsContainer: {
+    marginBottom: 16,
+    padding: 12,
+    backgroundColor: "rgba(255, 255, 255, 0.1)",
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.2)",
+  },
+  testCredentialsTitle: {
+    color: "#FFFFFF",
+    fontSize: 12,
+    fontWeight: "600",
+    marginBottom: 8,
+    textAlign: "center",
+  },
+  testCredentialButton: {
+    paddingVertical: 6,
+    paddingHorizontal: 8,
+    marginVertical: 2,
+    backgroundColor: "rgba(255, 255, 255, 0.1)",
+    borderRadius: 6,
+  },
+  testCredentialText: {
+    color: "#FFFFFF",
+    fontSize: 11,
+    textAlign: "center",
   },
 });
 

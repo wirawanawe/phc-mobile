@@ -57,6 +57,14 @@ const ProfileScreen = ({ navigation }: any) => {
       color: "#3B82F6",
       screenName: "PersonalInformation",
     },
+    ...(user?.role === "admin" ? [{
+      id: "admin",
+      title: "Admin Dashboard",
+      subtitle: "Manage system and users",
+      icon: "view-dashboard",
+      color: "#DC2626",
+      screenName: "AdminDashboard",
+    }] : []),
     {
       id: "2",
       title: "Health Goals",

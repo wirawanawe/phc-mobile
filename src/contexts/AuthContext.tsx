@@ -1,5 +1,7 @@
-import React, { createContext, useContext, useState, useEffect } from "react";
+import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import apiService from "../services/api";
+import { handleAuthError, handleError } from "../utils/errorHandler";
 
 interface User {
   id: string;
@@ -10,15 +12,17 @@ interface User {
   gender?: string;
   points: number;
   level?: number;
+  role?: "user" | "admin" | "doctor";
 }
 
 interface AuthContextType {
   user: User | null;
   isLoading: boolean;
   isAuthenticated: boolean;
-  login: (email: string, password: string) => Promise<boolean>;
+  login: (email: string, password: string) => Promise<{ success: boolean; message?: string }>;
+  socialLogin: (userData: any, token: string) => Promise<boolean>;
   logout: () => Promise<void>;
-  register: (userData: any) => Promise<boolean>;
+  register: (userData: any) => Promise<{ success: boolean; message?: string }>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -31,6 +35,55 @@ export const useAuth = () => {
   return context;
 };
 
+// Helper functions for token management
+const getAuthToken = async (): Promise<string | null> => {
+  try {
+    return await AsyncStorage.getItem('authToken');
+  } catch (error) {
+    console.error('Error getting auth token:', error);
+    return null;
+  }
+};
+
+const setAuthToken = async (token: string): Promise<void> => {
+  try {
+    await AsyncStorage.setItem('authToken', token);
+  } catch (error) {
+    console.error('Error setting auth token:', error);
+  }
+};
+
+const setUserData = async (userData: any): Promise<void> => {
+  try {
+    await AsyncStorage.setItem('userData', JSON.stringify(userData));
+  } catch (error) {
+    console.error('Error setting user data:', error);
+  }
+};
+
+const clearAuthData = async (): Promise<void> => {
+  try {
+    await AsyncStorage.multiRemove(['authToken', 'refreshToken', 'userData']);
+  } catch (error) {
+    console.error('Error clearing auth data:', error);
+  }
+};
+
+const refreshAccessToken = async (): Promise<boolean> => {
+  try {
+    const refreshToken = await AsyncStorage.getItem('refreshToken');
+    if (!refreshToken) {
+      return false;
+    }
+    
+    const response = await apiService.refreshAccessToken();
+    return response.success;
+  } catch (error) {
+    console.error('Error refreshing access token:', error);
+    return false;
+  }
+};
+
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
   children,
 }) => {
@@ -38,189 +91,161 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    checkAuthStatus();
+    // Add timeout to prevent infinite loading
+    const timeoutId = setTimeout(() => {
+      setIsLoading(false);
+    }, 5000); // 5 second timeout
+
+    checkAuthStatus().finally(() => {
+      clearTimeout(timeoutId);
+    });
   }, []);
 
-  const checkAuthStatus = async () => {
+  const checkAuthStatus = useCallback(async () => {
     try {
-      const authToken = await AsyncStorage.getItem("authToken");
-      const userData = await AsyncStorage.getItem("userData");
-
-      if (authToken && userData) {
-        const parsedUser = JSON.parse(userData);
-        setUser(parsedUser);
+      console.log("AuthContext: Checking auth status...");
+      const token = await getAuthToken();
+      console.log("AuthContext: Token found:", !!token);
+      
+      if (token) {
+        try {
+          console.log("AuthContext: Attempting to get user profile...");
+          const response = await apiService.getUserProfile();
+          console.log("AuthContext: Profile response:", response);
+          
+          if (response.success) {
+            console.log("AuthContext: Setting user data");
+            setUser(response.data);
+          } else {
+            console.log("AuthContext: Profile request failed, trying token refresh");
+            throw new Error('Token verification failed');
+          }
+        } catch (error: unknown) {
+          console.log("AuthContext: Profile request error, attempting token refresh");
+          try {
+            const refreshSuccess = await refreshAccessToken();
+            if (refreshSuccess) {
+              console.log("AuthContext: Token refresh successful, getting profile again");
+              const response = await apiService.getUserProfile();
+              if (response.success) {
+                console.log("AuthContext: Setting user data after refresh");
+                setUser(response.data);
+              } else {
+                throw new Error('Token refresh failed');
+              }
+            } else {
+              throw new Error('Token refresh failed');
+            }
+          } catch (refreshError: unknown) {
+            console.log("AuthContext: Token refresh failed, trying to load cached user data");
+            try {
+              // Try to load user data from AsyncStorage as fallback
+              const cachedUserData = await AsyncStorage.getItem('userData');
+              if (cachedUserData) {
+                const userData = JSON.parse(cachedUserData);
+                console.log("AuthContext: Loading cached user data");
+                setUser(userData);
+              } else {
+                console.log("AuthContext: No cached user data, clearing auth data");
+                await clearAuthData();
+                setUser(null);
+              }
+            } catch (storageError: unknown) {
+              console.log("AuthContext: Error loading cached data, clearing auth data");
+              await clearAuthData();
+              setUser(null);
+            }
+          }
+        }
+      } else {
+        console.log("AuthContext: No token found, user not authenticated");
+        setUser(null);
       }
-    } catch (error) {
-      console.error("Error checking auth status:", error);
+    } catch (error: unknown) {
+      console.error("AuthContext: Error checking auth status:", error);
+      await clearAuthData();
+      setUser(null);
+    } finally {
+      console.log("AuthContext: Setting loading to false");
+      setIsLoading(false);
+    }
+  }, []);
+
+  const login = useCallback(async (email: string, password: string) => {
+    try {
+      setIsLoading(true);
+      const response = await apiService.login(email, password);
+      
+      if (response.success) {
+        // Store user data in AsyncStorage
+        await setUserData(response.data.user);
+        setUser(response.data.user);
+        return { success: true };
+      } else {
+        return { success: false, message: response.message };
+      }
+    } catch (error: unknown) {
+      return { success: false, message: error instanceof Error ? error.message : 'Unknown error' };
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
 
-  const login = async (email: string, password: string): Promise<boolean> => {
+  const socialLogin = useCallback(async (userData: any, token: string) => {
     try {
-      const response = await fetch("http://10.0.2.2:5432/api/auth/login", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ email, password }),
-      });
-
-      const responseText = await response.text();
-
-      let responseData;
-      try {
-        responseData = JSON.parse(responseText);
-      } catch (parseError) {
-        console.error("Failed to parse response:", parseError);
-        throw new Error("Invalid response from server");
-      }
-
-      if (response.ok && responseData.success) {
-        const userData: User = {
-          id: responseData.data.user.id.toString(),
-          name: responseData.data.user.name,
-          email: responseData.data.user.email,
-          phone: responseData.data.user.phone || "",
-          date_of_birth: responseData.data.user.date_of_birth || "",
-          gender: responseData.data.user.gender || "",
-          points: responseData.data.user.points || 0,
-          level: responseData.data.user.level || 1,
-        };
-
-        await AsyncStorage.setItem("authToken", responseData.data.token);
-        await AsyncStorage.setItem("userData", JSON.stringify(userData));
-
-        setUser(userData);
-        return true;
-      } else {
-        console.error("Login failed:", responseData);
-        // Provide more specific error messages
-        let errorMessage = "Login gagal. Silakan coba lagi.";
-
-        if (responseData.message) {
-          if (responseData.message.includes("Invalid credentials")) {
-            errorMessage = "Email atau password salah. Silakan cek kembali.";
-          } else if (responseData.message.includes("Account is deactivated")) {
-            errorMessage = "Akun telah dinonaktifkan. Hubungi admin.";
-          } else {
-            errorMessage = responseData.message;
-          }
-        }
-
-        throw new Error(errorMessage);
-      }
-    } catch (error) {
-      console.error("Login error:", error);
-
-      // Handle network errors specifically
-      if (
-        error instanceof TypeError &&
-        error.message.includes("Network request failed")
-      ) {
-        throw new Error(
-          "Koneksi gagal. Pastikan internet Anda terhubung dan backend berjalan."
-        );
-      } else if (
-        error instanceof TypeError &&
-        error.message.includes("fetch")
-      ) {
-        throw new Error(
-          "Tidak dapat terhubung ke server. Pastikan backend berjalan."
-        );
-      }
-
-      throw error;
+      setIsLoading(true);
+      
+      // Store the social login data
+      await setAuthToken(token);
+      await setUserData(userData);
+      
+      setUser(userData);
+      
+      return true;
+    } catch (error: unknown) {
+      return false;
+    } finally {
+      setIsLoading(false);
     }
-  };
+  }, []);
 
-  const logout = async (): Promise<void> => {
+  const register = useCallback(async (userData: any) => {
     try {
-      await AsyncStorage.removeItem("authToken");
-      await AsyncStorage.removeItem("userData");
+      setIsLoading(true);
+      const response = await apiService.register(userData);
+      
+      if (response.success) {
+        // Store user data in AsyncStorage
+        await setUserData(response.data.user);
+        setUser(response.data.user);
+        return { success: true };
+      } else {
+        return { success: false, message: response.message };
+      }
+    } catch (error: unknown) {
+      return { success: false, message: error instanceof Error ? error.message : 'Unknown error' };
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  const logout = useCallback(async () => {
+    try {
+      await apiService.logout();
+    } catch (error: unknown) {
+      // Continue with logout even if API call fails
+    } finally {
+      await clearAuthData();
       setUser(null);
-    } catch (error) {
-      console.error("Logout error:", error);
-      throw error;
     }
-  };
-
-  const register = async (userData: any): Promise<boolean> => {
-    try {
-      const response = await fetch("http://10.0.2.2:5432/api/auth/register", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(userData),
-      });
-
-      const responseText = await response.text();
-
-      let responseData;
-      try {
-        responseData = JSON.parse(responseText);
-      } catch (parseError) {
-        console.error("Failed to parse registration response:", parseError);
-        throw new Error("Invalid response from server");
-      }
-
-      if (response.ok && responseData.success) {
-        return true;
-      } else {
-        console.error("Registration failed:", responseData);
-        // Provide more specific error messages
-        let errorMessage = "Registrasi gagal. Silakan coba lagi.";
-
-        if (responseData.message) {
-          if (responseData.message.includes("already exists")) {
-            errorMessage = "Email sudah terdaftar. Silakan gunakan email lain.";
-          } else if (responseData.message.includes("validation")) {
-            errorMessage = "Data tidak valid. Silakan cek kembali.";
-          } else {
-            errorMessage = responseData.message;
-          }
-        }
-
-        throw new Error(errorMessage);
-      }
-    } catch (error) {
-      console.error("Registration error:", error);
-
-      // Handle network errors specifically
-      if (
-        error instanceof TypeError &&
-        error.message.includes("Network request failed")
-      ) {
-        throw new Error(
-          "Koneksi gagal. Pastikan internet Anda terhubung dan backend berjalan."
-        );
-      } else if (
-        error instanceof TypeError &&
-        error.message.includes("fetch")
-      ) {
-        throw new Error(
-          "Tidak dapat terhubung ke server. Pastikan backend berjalan."
-        );
-      }
-
-      if (error instanceof Error) {
-        console.error("Error details:", {
-          message: error.message,
-          stack: error.stack,
-          type: error.constructor.name,
-        });
-      }
-      throw error;
-    }
-  };
+  }, []);
 
   const value: AuthContextType = {
     user,
     isLoading,
     isAuthenticated: !!user,
     login,
+    socialLogin,
     logout,
     register,
   };

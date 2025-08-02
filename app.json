@@ -4,7 +4,7 @@
     "slug": "doctor-phc-indonesia",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
+    "icon": "./assets/icon.png", // <- Ganti file ini dengan logo baru 512x512px
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "splash": {
@@ -13,17 +13,67 @@
       "backgroundColor": "#D32F2F"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.phc.doctorapp",
+      "infoPlist": {
+        "CFBundleURLTypes": [
+          {
+            "CFBundleURLName": "phc-mobile",
+            "CFBundleURLSchemes": [
+              "phc-mobile"
+            ]
+          }
+        ]
+      }
     },
     "android": {
+      "package": "com.phc.doctorapp",
+      "versionCode": 1,
       "adaptiveIcon": {
-        "foregroundImage": "./assets/icon.png",
+        "foregroundImage": "./assets/icon.png", // <- Ganti file ini dengan logo baru
         "backgroundColor": "#D32F2F"
       },
-      "edgeToEdgeEnabled": true
+      "edgeToEdgeEnabled": true,
+      "permissions": [
+        "android.permission.INTERNET",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.ACCESS_COARSE_LOCATION"
+      ]
     },
+    "jsEngine": "hermes",
+    "plugins": [
+      "expo-dev-client",
+      [
+        "expo-apple-authentication",
+        {
+          "services": ["signin"]
+        }
+      ]
+    ],
     "web": {
       "favicon": "./assets/favicon.png"
+    },
+    "build": {
+      "development": {
+        "developmentClient": true,
+        "distribution": "internal"
+      },
+      "preview": {
+        "distribution": "internal",
+        "android": {
+          "buildType": "apk"
+        }
+      },
+      "production": {
+        "android": {
+          "buildType": "apk"
+        }
+      }
+    },
+    "extra": {
+      "eas": {
+        "projectId": "3321a868-1277-46c4-ba63-3f18b884b5ff"
+      }
     }
   }
 }

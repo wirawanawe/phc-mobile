@@ -41,18 +41,18 @@ const OnboardingSlider: React.FC<OnboardingSliderProps> = ({ onComplete }) => {
     },
     {
       id: "2",
-      title: "Assesmen Kesehatan",
+      title: "Pendaftaran Klinik online",
       description:
-        "Dapatkan evaluasi kesehatan komprehensif yang dipersonalisasi untuk kebutuhan Anda. Lacak kemajuan kesehatan dengan mudah.",
-      icon: "📊",
+        "Daftar klinik online dengan mudah. Tersedia klinik terdepan di Indonesia.",
+      icon: "🏥",
       gradient: ["#E22345", "#E22345"],
     },
     {
       id: "3",
-      title: "Edukasi Kesehatan",
+      title: "Konsultasi dengan Dokter",
       description:
-        "Akses artikel kesehatan terpercaya dan konten edukasi yang disusun oleh para ahli kesehatan berpengalaman.",
-      icon: "📚",
+        "Konsultasi langsung dengan dokter berpengalaman. Layanan kesehatan yang cepat dan terpercaya.",
+      icon: "👨‍⚕️",
       gradient: ["#E22345", "#E22345"],
     },
     {
