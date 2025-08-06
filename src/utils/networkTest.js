@@ -1,6 +1,9 @@
 import { Platform } from 'react-native';
 
 const ENDPOINTS = [
+  'http://10.242.90.103:3000', // Server IP from server.js
+  'http://192.168.18.30:3000', // Local network IP
+  'http://192.168.193.150:3000', // Local network IP
   'http://192.168.1.100:3000',
   'http://192.168.1.101:3000',
   'http://192.168.1.102:3000',
@@ -13,7 +16,7 @@ const testEndpoint = async (endpoint) => {
   const startTime = Date.now();
   
   try {
-    const response = await fetch(`${endpoint}/health`, {
+    const response = await fetch(`${endpoint}/api/health`, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',

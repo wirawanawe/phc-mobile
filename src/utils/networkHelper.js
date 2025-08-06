@@ -40,6 +40,9 @@ export class NetworkHelper {
 
   static async findBestServer() {
     const servers = [
+      'http://10.242.90.103:3000', // Server IP from server.js
+      'http://192.168.18.30:3000', // Local network IP
+      'http://192.168.193.150:3000', // Local network IP
       'http://localhost:3000',
       'http://192.168.1.100:3000',
       'http://10.0.2.2:3000',
@@ -50,7 +53,7 @@ export class NetworkHelper {
       servers.map(async (url) => {
         try {
           const startTime = Date.now();
-          const response = await fetch(`${url}/health`, {
+          const response = await fetch(`${url}/api/health`, {
             method: 'GET',
             timeout: 5000,
           });
@@ -84,7 +87,7 @@ export class NetworkHelper {
   static async testConnection(url) {
     try {
       const startTime = Date.now();
-      const response = await fetch(`${url}/health`, {
+      const response = await fetch(`${url}/api/health`, {
         method: 'GET',
         timeout: 5000,
       });

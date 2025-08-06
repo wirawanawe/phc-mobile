@@ -17,6 +17,7 @@ import { CustomTheme } from "../theme/theme";
 import { useAuth } from "../contexts/AuthContext";
 import api from "../services/api";
 import { handleError, handleAuthError } from "../utils/errorHandler";
+import eventEmitter from "../utils/eventEmitter";
 
 const FitnessTrackingScreen = ({ navigation }: any) => {
   const theme = useTheme<CustomTheme>();
@@ -96,6 +97,9 @@ const FitnessTrackingScreen = ({ navigation }: any) => {
             },
           ]
         );
+        
+        // Emit event to notify other components that fitness data has been updated
+        eventEmitter.emitFitnessLogged();
       }
     } catch (error) {
       console.error("Error saving fitness data:", error);

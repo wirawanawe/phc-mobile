@@ -102,7 +102,7 @@ const DashboardScreen = ({ navigation }: any) => {
       setLoading(true);
       const [statsResponse, userMissionsResponse, availableMissionsResponse] =
         await Promise.all([
-          api.getMissionStats(),
+          api.getMissionStats({ date: new Date().toISOString().split('T')[0] }),
           api.getMyMissions(),
           api.getMissions(),
         ]);

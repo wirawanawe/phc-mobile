@@ -16,6 +16,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { CustomTheme } from "../theme/theme";
 import { useAuth } from "../contexts/AuthContext";
 import apiService from "../services/api";
+import eventEmitter from "../utils/eventEmitter";
 
 const { width } = Dimensions.get("window");
 
@@ -363,6 +364,9 @@ const SleepTrackingScreen = ({ navigation }: any) => {
             },
           ]
         );
+        
+        // Emit event to notify other components that sleep data has been updated
+        eventEmitter.emitSleepLogged();
       } else {
         Alert.alert("Error", response.message || "Failed to save sleep data");
       }

@@ -16,6 +16,7 @@ import Icon from "react-native-vector-icons/MaterialCommunityIcons";
 import { LinearGradient } from "expo-linear-gradient";
 import { CustomTheme } from "../theme/theme";
 import apiService from "../services/api";
+import eventEmitter from "../utils/eventEmitter";
 
 const { width, height } = Dimensions.get("window");
 
@@ -391,6 +392,9 @@ const WaterTrackingScreen = ({ navigation }: any) => {
         // Also refresh from database to ensure consistency
         await loadTodayWaterIntake();
         await loadWeeklyWaterIntake();
+        
+        // Emit event to notify other components that water data has been updated
+        eventEmitter.emitWaterLogged();
       } else {
         console.error("Failed to save water entry:", response.message);
         Alert.alert("Error", "Failed to save water intake. Please try again.");

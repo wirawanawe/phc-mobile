@@ -32,6 +32,8 @@ import apiService from "../services/api";
 import ConsultationHistoryScreen from "./ConsultationHistoryScreen";
 import ActivityScreen from "./ActivityScreen";
 import FeaturedArticleCard from "../components/FeaturedArticleCard";
+import eventEmitter from "../utils/eventEmitter";
+import { getTimeBasedGreeting } from "../utils/greetingUtils";
 
 const { width } = Dimensions.get("window");
 const Tab = createBottomTabNavigator();
@@ -71,6 +73,8 @@ interface UserMission {
   };
 }
 
+
+
 // Home Tab Component
 const HomeTab = ({ navigation }: any) => {
   const theme = useTheme<CustomTheme>();
@@ -94,6 +98,7 @@ const HomeTab = ({ navigation }: any) => {
   const [featuredArticles, setFeaturedArticles] = useState<RSSItem[]>([]);
   const [articlesLoading, setArticlesLoading] = useState(false);
   const [hasJoinedWellnessProgram, setHasJoinedWellnessProgram] = useState(false);
+  const [currentGreeting, setCurrentGreeting] = useState(getTimeBasedGreeting());
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -121,7 +126,79 @@ const HomeTab = ({ navigation }: any) => {
     // Update activity data every 30 seconds
     const activityInterval = setInterval(loadActivityData, 30000);
     
-    return () => clearInterval(activityInterval);
+    // Update greeting every minute to ensure it stays current
+    const greetingInterval = setInterval(() => {
+      setCurrentGreeting(getTimeBasedGreeting());
+    }, 60000);
+    
+    // Listen for data refresh events
+    const handleDataRefresh = () => {
+      console.log('MainScreen - Data refresh event received, refreshing mission data...');
+      if (isAuthenticated) {
+        loadMissionData();
+        checkWellnessProgramStatus();
+      }
+    };
+    
+    const handleMealLogged = () => {
+      console.log('MainScreen - Meal logged event received, refreshing mission data...');
+      if (isAuthenticated) {
+        loadMissionData();
+        checkWellnessProgramStatus();
+      }
+    };
+    
+    const handleWaterLogged = () => {
+      console.log('MainScreen - Water logged event received, refreshing mission data...');
+      if (isAuthenticated) {
+        loadMissionData();
+        checkWellnessProgramStatus();
+      }
+    };
+    
+    const handleFitnessLogged = () => {
+      console.log('MainScreen - Fitness logged event received, refreshing mission data...');
+      if (isAuthenticated) {
+        loadMissionData();
+        checkWellnessProgramStatus();
+      }
+    };
+    
+    const handleSleepLogged = () => {
+      console.log('MainScreen - Sleep logged event received, refreshing mission data...');
+      if (isAuthenticated) {
+        loadMissionData();
+        checkWellnessProgramStatus();
+      }
+    };
+    
+    const handleMoodLogged = () => {
+      console.log('MainScreen - Mood logged event received, refreshing mission data...');
+      if (isAuthenticated) {
+        loadMissionData();
+        checkWellnessProgramStatus();
+      }
+    };
+    
+    // Add event listeners
+    eventEmitter.on('dataRefresh', handleDataRefresh);
+    eventEmitter.on('mealLogged', handleMealLogged);
+    eventEmitter.on('waterLogged', handleWaterLogged);
+    eventEmitter.on('fitnessLogged', handleFitnessLogged);
+    eventEmitter.on('sleepLogged', handleSleepLogged);
+    eventEmitter.on('moodLogged', handleMoodLogged);
+    
+    return () => {
+      clearInterval(activityInterval);
+      clearInterval(greetingInterval);
+      // Remove event listeners
+      eventEmitter.off('dataRefresh', handleDataRefresh);
+      eventEmitter.off('mealLogged', handleMealLogged);
+      eventEmitter.off('waterLogged', handleWaterLogged);
+      eventEmitter.off('fitnessLogged', handleFitnessLogged);
+      eventEmitter.off('sleepLogged', handleSleepLogged);
+      eventEmitter.off('moodLogged', handleMoodLogged);
+    };
   }, [isAuthenticated]);
 
   // Refresh data when screen comes into focus
@@ -146,7 +223,7 @@ const HomeTab = ({ navigation }: any) => {
       
       // Use withRetry for better error handling
       const [statsResponse, userMissionsResponse, todaySummaryResponse] = await Promise.all([
-        withRetry(() => api.getMissionStats(), 3, 2000),
+        withRetry(() => api.getMissionStats({ date: new Date().toISOString().split('T')[0] }), 3, 2000),
         withRetry(() => api.getMyMissions(), 3, 2000),
         withRetry(() => api.getTodaySummary(), 3, 2000),
       ]);
@@ -613,10 +690,10 @@ const HomeTab = ({ navigation }: any) => {
           </View>
         </View>
 
-        {/* Good Afternoon */}
+        {/* Time-based Greeting */}
         <View style={styles.afternoonContainer}>
-          <Icon name="weather-sunny" size={20} color="#D69E2E" />
-          <Text style={styles.afternoonText}>Good afternoon</Text>
+          <Icon name={currentGreeting.icon} size={20} color={currentGreeting.color} />
+          <Text style={styles.afternoonText}>{currentGreeting.text}</Text>
         </View>
 
         {/* Welcome Card for Non-Authenticated Users */}
@@ -662,7 +739,7 @@ const HomeTab = ({ navigation }: any) => {
               }
             }}
           >
-            <LinearGradient
+            {/* <LinearGradient
               colors={["#E53E3E", "#C53030"]}
               style={styles.wellnessCardGradient}
             >
@@ -679,13 +756,11 @@ const HomeTab = ({ navigation }: any) => {
                   </View>
                 </View>
                 <View style={styles.wellnessCardRight}>
-                  <View style={styles.wellnessBadge}>
-                    <Text style={styles.wellnessBadgeText}>NEW</Text>
-                  </View>
+                  <Text style={styles.wellnessCardSubtitle}>{user?.wellness_program_joined ? "Joined" : "Not Joined"}</Text>
                   <Icon name="arrow-right" size={24} color="#FFFFFF" />
                 </View>
               </View>
-            </LinearGradient>
+            </LinearGradient> */}
           </TouchableOpacity>
         )}
 

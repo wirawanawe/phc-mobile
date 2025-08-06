@@ -426,7 +426,7 @@ const DashboardTab = ({ navigation }: any) => {
     try {
       setLoading(true);
 
-      const response = await apiService.getMissionStats();
+      const response = await apiService.getMissionStats({ date: new Date().toISOString().split('T')[0] });
       if (response.success) {
         // Map API response to frontend expected format
         const mappedStats = {
@@ -516,7 +516,7 @@ const DashboardTab = ({ navigation }: any) => {
       setSummaryLoading(true);
       
       // Get mission stats for overall completion rate
-      const missionStatsResponse = await apiService.getMissionStats();
+      const missionStatsResponse = await apiService.getMissionStats({ date: new Date().toISOString().split('T')[0] });
       
       // Get today's summary for current day data
       const todaySummaryResponse = await apiService.getTodaySummary();
@@ -1490,7 +1490,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   contentContainer: {
-    paddingBottom: 40,
+    paddingBottom: 60, // Increased from 40 to 60 to prevent cutoff
   },
   loadingContainer: {
     flex: 1,
@@ -2240,6 +2240,7 @@ const styles = StyleSheet.create({
   },
   missionsSection: {
     paddingHorizontal: 20,
+    paddingBottom: 20, // Added bottom padding
   },
   missionsGrid: {
     paddingHorizontal: 20,
@@ -2583,7 +2584,7 @@ const styles = StyleSheet.create({
   },
   activeMissionsScrollContainer: {
     paddingHorizontal: 20,
-    paddingBottom: 20,
+    paddingBottom: 40, // Increased from 20 to 40 to prevent cutoff
   },
   activeMissionCard: {
     width: 280,
@@ -2596,10 +2597,13 @@ const styles = StyleSheet.create({
     shadowRadius: 12,
     elevation: 8,
     marginBottom: 20,
+    minHeight: 180, // Added minimum height to prevent cutoff
   },
   activeMissionCardGradient: {
     padding: 20,
     minHeight: 160,
+    paddingBottom: 24, // Increased bottom padding
+    justifyContent: 'space-between', // Added to ensure proper spacing
   },
   activeMissionHeader: {
     flexDirection: "row",
@@ -2651,6 +2655,7 @@ const styles = StyleSheet.create({
   activeMissionProgressContainer: {
     marginTop: 16,
     marginBottom: 8,
+    paddingBottom: 4, // Added bottom padding
   },
   activeMissionProgressBar: {
     height: 6,

@@ -1,123 +1,95 @@
 #!/usr/bin/env node
 
 /**
- * Mobile Connection Test Script
- * Simulates mobile app connection testing to debug network issues
+ * Test Mobile App Connection
+ * Tests mobile app connection with proper credentials
  */
 
 const fetch = require('node-fetch');
 
-class MobileConnectionTest {
-  static async testEndpoint(url, timeout = 10000) {
-    try {
-      console.log(`🔍 Testing: ${url}`);
-      const startTime = Date.now();
-      
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), timeout);
-      
-      const response = await fetch(url, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        signal: controller.signal
-      });
-      
-      clearTimeout(timeoutId);
-      const endTime = Date.now();
-      const responseTime = endTime - startTime;
-      
-      console.log(`✅ ${url} - ${responseTime}ms (Status: ${response.status})`);
-      return { success: true, responseTime, status: response.status };
-      
-    } catch (error) {
-      console.log(`❌ ${url} - ${error.message}`);
-      return { success: false, error: error.message };
-    }
-  }
+const BASE_URL = 'http://10.242.90.103:3000/api/mobile';
 
-  static async testAllEndpoints() {
-      const endpoints = [
-    'http://10.242.90.103:3000/api/mobile/auth/me'
-  ];
+async function testMobileConnection() {
+  console.log('🔍 Testing mobile app connection...');
+  
+  // Test credentials
+  const loginData = {
+    email: 'john.doe@example.com',
+    password: 'password123'
+  };
 
-    console.log('🔍 Mobile Connection Test');
-    console.log('========================');
-    console.log('');
+  try {
+    // Step 1: Test health endpoint
+    console.log('\n1️⃣ Testing health endpoint...');
+    const healthResponse = await fetch(`${BASE_URL.replace('/api/mobile', '')}/api/health`);
+    console.log('✅ Health endpoint:', healthResponse.status);
 
-    const results = [];
-
-    for (const endpoint of endpoints) {
-      const result = await this.testEndpoint(endpoint);
-      results.push({ endpoint, ...result });
-    }
-
-    return results;
-  }
-
-  static async findBestEndpoint() {
-    const results = await this.testAllEndpoints();
-    const workingEndpoints = results.filter(r => r.success);
-    
-    if (workingEndpoints.length === 0) {
-      console.log('\n❌ No endpoints are working!');
-      console.log('Possible issues:');
-      console.log('1. Server is not running');
-      console.log('2. Wrong IP addresses');
-      console.log('3. Network connectivity issues');
-      return null;
-    }
-
-    const fastest = workingEndpoints.reduce((best, current) => 
-      current.responseTime < best.responseTime ? current : best
-    );
-
-    console.log(`\n🚀 Best endpoint: ${fastest.endpoint} (${fastest.responseTime}ms)`);
-    return fastest.endpoint.replace('/auth/me', '');
-  }
-
-  static async runDiagnostic() {
-    console.log('🔧 Mobile Connection Diagnostic');
-    console.log('==============================');
-    console.log('');
-
-    const results = await this.testAllEndpoints();
-    const workingCount = results.filter(r => r.success).length;
-    const totalCount = results.length;
-
-    console.log(`\n📊 Summary:`);
-    console.log(`   Working endpoints: ${workingCount}/${totalCount}`);
-
-    if (workingCount === 0) {
-      console.log('\n❌ No endpoints are working. Please check:');
-      console.log('   1. Server is running on port 3000');
-      console.log('   2. Network connectivity');
-      console.log('   3. IP address configuration');
-      return false;
-    }
-
-    const bestEndpoint = await this.findBestEndpoint();
-    if (bestEndpoint) {
-      console.log(`\n✅ Connection successful!`);
-      console.log(`   Recommended endpoint: ${bestEndpoint}`);
-      return true;
-    }
-
-    return false;
-  }
-}
-
-// Run the diagnostic if this script is executed directly
-if (require.main === module) {
-  MobileConnectionTest.runDiagnostic()
-    .then(success => {
-      process.exit(success ? 0 : 1);
-    })
-    .catch(error => {
-      console.error('❌ Diagnostic failed:', error.message);
-      process.exit(1);
+    // Step 2: Test login
+    console.log('\n2️⃣ Testing login...');
+    const loginResponse = await fetch(`${BASE_URL}/auth/login`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(loginData)
     });
+
+    const loginResult = await loginResponse.json();
+    
+    if (loginResponse.ok && loginResult.success) {
+      console.log('✅ Login successful!');
+      console.log('👤 User ID:', loginResult.data.user.id);
+      
+      const token = loginResult.data.accessToken;
+      
+      // Step 3: Test authenticated endpoints
+      console.log('\n3️⃣ Testing authenticated endpoints...');
+      
+      const endpoints = [
+        { name: 'Missions', url: `${BASE_URL}/missions` },
+        { name: 'User Profile', url: `${BASE_URL}/auth/me` },
+        { name: 'My Missions', url: `${BASE_URL}/my-missions?user_id=${loginResult.data.user.id}` },
+        { name: 'Clinics', url: `${BASE_URL}/clinics` }
+      ];
+      
+      for (const endpoint of endpoints) {
+        try {
+          console.log(`\n🔍 Testing ${endpoint.name}...`);
+          
+          const response = await fetch(endpoint.url, {
+            method: 'GET',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`
+            }
+          });
+
+          const data = await response.json();
+          
+          if (response.ok) {
+            console.log(`✅ ${endpoint.name}: SUCCESS`);
+            if (data.success && data.data) {
+              console.log(`   📊 Data count: ${Array.isArray(data.data) ? data.data.length : 'Object'}`);
+            }
+          } else {
+            console.log(`❌ ${endpoint.name}: ${response.status} - ${data.message || 'Unknown error'}`);
+          }
+          
+        } catch (error) {
+          console.log(`❌ ${endpoint.name}: ${error.message}`);
+        }
+      }
+      
+      console.log('\n🎉 Mobile app connection test completed!');
+      
+    } else {
+      console.log('❌ Login failed:', loginData.message || 'Unknown error');
+    }
+    
+  } catch (error) {
+    console.error('❌ Mobile connection test failed:', error.message);
+  }
 }
 
-module.exports = MobileConnectionTest; 
+// Run the test
+testMobileConnection().catch(console.error); 

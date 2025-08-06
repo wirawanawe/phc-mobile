@@ -11,6 +11,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { CustomTheme } from '../theme/theme';
 import NetworkDiagnostic from '../utils/networkDiagnostic';
 import apiService from '../services/api';
+import { testApiConnection } from '../utils/testConnection';
 
 const NetworkTestScreen = ({ navigation }: any) => {
   const theme = useTheme<CustomTheme>();
@@ -59,6 +60,33 @@ const NetworkTestScreen = ({ navigation }: any) => {
       console.error('❌ Registration test failed:', error);
       setTestResults(prev => [...prev, {
         type: 'registration',
+        success: false,
+        error: error.message,
+        timestamp: new Date().toISOString()
+      }]);
+      
+      Alert.alert('Test Failed', error.message);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const testConnection = async () => {
+    setIsLoading(true);
+    try {
+      const result = await testApiConnection();
+      setTestResults(prev => [...prev, {
+        type: 'connection',
+        success: true,
+        data: result,
+        timestamp: new Date().toISOString()
+      }]);
+      
+      Alert.alert('Success', `Connection test successful! Using: ${result.endpoint}`);
+    } catch (error) {
+      console.error('❌ Connection test failed:', error);
+      setTestResults(prev => [...prev, {
+        type: 'connection',
         success: false,
         error: error.message,
         timestamp: new Date().toISOString()
@@ -127,6 +155,16 @@ const NetworkTestScreen = ({ navigation }: any) => {
             style={styles.button}
           >
             Run Network Diagnostic
+          </Button>
+
+          <Button
+            mode="outlined"
+            onPress={testConnection}
+            loading={isLoading}
+            disabled={isLoading}
+            style={styles.button}
+          >
+            Test Connection
           </Button>
 
           <Button

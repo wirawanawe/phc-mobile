@@ -130,12 +130,19 @@ const DailyMissionScreen = ({ navigation }: any) => {
       setLoading(true);
       setUsingMockData(false);
       
+      console.log('🔍 DailyMissionScreen: Starting to load mission data...');
+      
       const [missionsResponse, userMissionsResponse, statsResponse] =
         await Promise.all([
           api.getMissions(),
           api.getMyMissions(),
-          api.getMissionStats(),
+          api.getMissionStats({ date: new Date().toISOString().split('T')[0] }),
         ]);
+
+      console.log('📊 DailyMissionScreen: API Responses:');
+      console.log('- Missions:', missionsResponse.success ? 'SUCCESS' : 'FAILED', missionsResponse.missions?.length || 0, 'missions');
+      console.log('- User Missions:', userMissionsResponse.success ? 'SUCCESS' : 'FAILED', userMissionsResponse.data?.length || 0, 'user missions');
+      console.log('- Stats:', statsResponse.success ? 'SUCCESS' : 'FAILED');
 
       // Check if we're using mock data (mock API responses have specific patterns)
       const isUsingMock = missionsResponse.data && missionsResponse.data.length > 0 && 
@@ -157,17 +164,21 @@ const DailyMissionScreen = ({ navigation }: any) => {
       }
 
       // Process and set data
-      if (missionsResponse.success && missionsResponse.data) {
-        const processedMissions = processMissionData(missionsResponse.data);
+      if (missionsResponse.success && missionsResponse.missions) {
+        const processedMissions = processMissionData(missionsResponse.missions);
         setMissions(processedMissions);
+        console.log('✅ DailyMissionScreen: Set', processedMissions.length, 'missions');
       } else {
         setMissions([]);
+        console.log('❌ DailyMissionScreen: No missions data available');
       }
 
       if (userMissionsResponse.success && userMissionsResponse.data) {
         setUserMissions(userMissionsResponse.data);
+        console.log('✅ DailyMissionScreen: Set', userMissionsResponse.data.length, 'user missions');
       } else {
         setUserMissions([]);
+        console.log('❌ DailyMissionScreen: No user missions data available');
       }
 
       if (statsResponse.success && statsResponse.data) {
@@ -180,6 +191,7 @@ const DailyMissionScreen = ({ navigation }: any) => {
           completionRate: statsResponse.data.completion_rate || 0,
         };
         setStats(mappedStats);
+        console.log('✅ DailyMissionScreen: Set stats:', mappedStats);
       } else {
         setStats({
           totalMissions: 0,
@@ -188,9 +200,11 @@ const DailyMissionScreen = ({ navigation }: any) => {
           activeMissions: 0,
           completionRate: 0,
         });
+        console.log('❌ DailyMissionScreen: No stats data available');
       }
 
     } catch (error) {
+      console.error('❌ DailyMissionScreen: Error loading mission data:', error);
       Alert.alert(
         "❌ Error",
         "Failed to load mission data. Please try again.",
@@ -198,6 +212,7 @@ const DailyMissionScreen = ({ navigation }: any) => {
       );
     } finally {
       setLoading(false);
+      console.log('🏁 DailyMissionScreen: Finished loading data');
     }
   }, []);
 
@@ -207,11 +222,11 @@ const DailyMissionScreen = ({ navigation }: any) => {
     setRefreshing(false);
   };
 
-  const handleAcceptMission = async (missionId: number) => {
+  const handleAcceptMission = async (missionId: number, missionDate?: string) => {
     try {
       setAcceptingMission(missionId);
       
-      const response = await api.acceptMission(missionId);
+      const response = await api.acceptMission(missionId, missionDate || null);
       
       if (response.success) {
         Alert.alert(
@@ -710,90 +725,7 @@ const DailyMissionScreen = ({ navigation }: any) => {
               )}
             </View>
 
-            {/* Quick Actions */}
-            <View style={styles.quickActionsContainer}>
-              <View style={styles.sectionHeaderModern}>
-                <Icon name="lightning-bolt" size={20} color="#6366F1" />
-                <Text style={styles.sectionTitleModern}>Quick Actions</Text>
-              </View>
-              <View style={styles.quickActionsGrid}>
-                <TouchableOpacity 
-                  style={styles.quickActionCardModern} 
-                  onPress={handleAddCustomMission}
-                  activeOpacity={0.7}
-                >
-                  <LinearGradient
-                    colors={["#6366F1", "#8B5CF6"]}
-                    style={styles.quickActionGradient}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 1 }}
-                  >
-                    <View style={styles.quickActionIconContainer}>
-                      <Icon name="plus-circle" size={28} color="#FFFFFF" />
-                    </View>
-                    <Text style={styles.quickActionTextModern}>Add Custom Mission</Text>
-                    <Text style={styles.quickActionSubtext}>Create your own</Text>
-                  </LinearGradient>
-                </TouchableOpacity>
-                
-                <TouchableOpacity 
-                  style={styles.quickActionCardModern} 
-                  onPress={handleViewHistory}
-                  activeOpacity={0.7}
-                >
-                  <LinearGradient
-                    colors={["#F59E0B", "#F97316"]}
-                    style={styles.quickActionGradient}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 1 }}
-                  >
-                    <View style={styles.quickActionIconContainer}>
-                      <Icon name="calendar-clock" size={28} color="#FFFFFF" />
-                    </View>
-                    <Text style={styles.quickActionTextModern}>View History</Text>
-                    <Text style={styles.quickActionSubtext}>Track progress</Text>
-                  </LinearGradient>
-                </TouchableOpacity>
-                
-                <TouchableOpacity 
-                  style={styles.quickActionCardModern} 
-                  onPress={handleViewAchievements}
-                  activeOpacity={0.7}
-                >
-                  <LinearGradient
-                    colors={["#8B5CF6", "#A855F7"]}
-                    style={styles.quickActionGradient}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 1 }}
-                  >
-                    <View style={styles.quickActionIconContainer}>
-                      <Icon name="trophy-variant" size={28} color="#FFFFFF" />
-                    </View>
-                    <Text style={styles.quickActionTextModern}>Achievements</Text>
-                    <Text style={styles.quickActionSubtext}>Earn badges</Text>
-                  </LinearGradient>
-                </TouchableOpacity>
-                
-                <TouchableOpacity 
-                  style={styles.quickActionCardModern} 
-                  onPress={handleViewProgressStats}
-                  activeOpacity={0.7}
-                >
-                  <LinearGradient
-                    colors={["#10B981", "#059669"]}
-                    style={styles.quickActionGradient}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 1 }}
-                  >
-                    <View style={styles.quickActionIconContainer}>
-                      <Icon name="chart-line-variant" size={28} color="#FFFFFF" />
-                    </View>
-                    <Text style={styles.quickActionTextModern}>Progress Stats</Text>
-                    <Text style={styles.quickActionSubtext}>Detailed analytics</Text>
-                  </LinearGradient>
-                </TouchableOpacity>
-              </View>
-            </View>
+            
           </>
         )}
       </ScrollView>

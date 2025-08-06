@@ -8,6 +8,8 @@ import {
   Alert,
   StatusBar,
   FlatList,
+  Modal,
+  TextInput,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
@@ -45,12 +47,32 @@ interface UserWellnessActivity {
 }
 
 const ActivityScreen = ({ navigation }: any) => {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, user } = useAuth();
   const [wellnessActivities, setWellnessActivities] = useState<WellnessActivity[]>([]);
   const [userActivities, setUserActivities] = useState<UserWellnessActivity[]>([]);
   const [isLoadingWellness, setIsLoadingWellness] = useState(false);
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
   const [activeTab, setActiveTab] = useState<'activities' | 'history'>('activities');
+
+  // Add missing state variables
+  const [showCompletionModal, setShowCompletionModal] = useState(false);
+  const [selectedActivity, setSelectedActivity] = useState<WellnessActivity | null>(null);
+  const [completionData, setCompletionData] = useState({
+    duration: 30,
+    notes: '',
+    activity_type: 'normal',
+    mood_before: 'neutral',
+    mood_after: 'neutral',
+    stress_level_before: 'low',
+    stress_level_after: 'low'
+  });
+  const [calculatedPoints, setCalculatedPoints] = useState(0);
+
+  const activityTypes = {
+    normal: { name: 'Normal', multiplier: 1 },
+    intense: { name: 'Intense', multiplier: 1.5 },
+    relaxed: { name: 'Relaxed', multiplier: 0.8 }
+  };
 
   // Load wellness activities
   useEffect(() => {
@@ -89,9 +111,67 @@ const ActivityScreen = ({ navigation }: any) => {
   };
 
   const handleWellnessActivitySelect = (activity: WellnessActivity) => {
-    // Navigate to detail screen
-    navigation.navigate('WellnessActivityDetail', { activity });
+    setSelectedActivity(activity);
+    setCompletionData({
+      duration: activity.duration_minutes,
+      notes: '',
+      activity_type: 'normal',
+      mood_before: 'neutral',
+      mood_after: 'neutral',
+      stress_level_before: 'low',
+      stress_level_after: 'low'
+    });
+    setCalculatedPoints(activity.points);
+    setShowCompletionModal(true);
   };
+
+  const handleCompleteActivity = async () => {
+    if (!selectedActivity) return;
+
+    try {
+      const activityData = {
+        activity_id: selectedActivity.id,
+        activity_name: selectedActivity.title,
+        activity_type: completionData.activity_type,
+        activity_category: selectedActivity.category,
+        duration: completionData.duration,
+        points_earned: calculatedPoints,
+        notes: completionData.notes,
+        mood_before: completionData.mood_before,
+        mood_after: completionData.mood_after,
+        stress_level_before: completionData.stress_level_before,
+        stress_level_after: completionData.stress_level_after
+      };
+
+      const response = await api.completeWellnessActivity(activityData);
+      
+      if (response.success) {
+        Alert.alert(
+          'Success!',
+          `Activity completed successfully!\n\nYou earned ${calculatedPoints} points.`,
+          [
+            {
+              text: 'OK',
+              onPress: () => {
+                setShowCompletionModal(false);
+                setSelectedActivity(null);
+                // Reload user activity history
+                if (isAuthenticated) {
+                  loadUserActivityHistory();
+                }
+              }
+            }
+          ]
+        );
+      } else {
+        Alert.alert('Error', response.message || 'Failed to complete activity');
+      }
+    } catch (error) {
+      console.error('Error completing activity:', error);
+      Alert.alert('Error', 'Failed to complete activity. Please try again.');
+    }
+  };
+
 
   const renderWellnessActivity = ({ item }: { item: WellnessActivity }) => (
     <TouchableOpacity
@@ -145,6 +225,162 @@ const ActivityScreen = ({ navigation }: any) => {
         )}
       </View>
     </View>
+  );
+
+  const renderCompletionModal = () => (
+    <Modal
+      visible={showCompletionModal}
+      animationType="slide"
+      transparent={true}
+      onRequestClose={() => setShowCompletionModal(false)}
+    >
+      <View style={styles.modalOverlay}>
+        <View style={styles.modalContent}>
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>Complete Activity</Text>
+            <TouchableOpacity
+              onPress={() => setShowCompletionModal(false)}
+              style={styles.closeButton}
+            >
+              <Icon name="close" size={24} color="#6B7280" />
+            </TouchableOpacity>
+          </View>
+
+          <ScrollView style={styles.modalBody}>
+            <View style={styles.activityInfo}>
+              <Text style={styles.activityName}>{selectedActivity?.title}</Text>
+              <Text style={styles.activityDescription}>{selectedActivity?.description}</Text>
+            </View>
+
+            <View style={styles.pointsCalculation}>
+              <Text style={styles.pointsTitle}>Points Calculation</Text>
+              <View style={styles.pointsInfo}>
+                <Text style={styles.pointsText}>Duration: {completionData.duration} min</Text>
+                <Text style={styles.pointsText}>Calculated Points: {calculatedPoints}</Text>
+              </View>
+            </View>
+
+            <View style={styles.formSection}>
+              <Text style={styles.sectionTitle}>Activity Details</Text>
+              
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>Activity Type</Text>
+                <View style={styles.pickerContainer}>
+                  {Object.entries(activityTypes).map(([key, type]) => (
+                    <TouchableOpacity
+                      key={key}
+                      style={[
+                        styles.pickerOption,
+                        completionData.activity_type === key && styles.pickerOptionSelected
+                      ]}
+                      onPress={() => setCompletionData(prev => ({ ...prev, activity_type: key }))}
+                    >
+                      <Text style={[
+                        styles.pickerOptionText,
+                        completionData.activity_type === key && styles.pickerOptionTextSelected
+                      ]}>
+                        {type.name} (x{type.multiplier})
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>Duration (minutes)</Text>
+                <TextInput
+                  style={styles.textInput}
+                  value={completionData.duration.toString()}
+                  onChangeText={(text) => setCompletionData(prev => ({ 
+                    ...prev, 
+                    duration: parseInt(text) || 0 
+                  }))}
+                  keyboardType="numeric"
+                  placeholder="30"
+                />
+              </View>
+
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>Notes (Optional)</Text>
+                <TextInput
+                  style={[styles.textInput, styles.textArea]}
+                  value={completionData.notes}
+                  onChangeText={(text) => setCompletionData(prev => ({ ...prev, notes: text }))}
+                  placeholder="Add any notes about this activity..."
+                  multiline
+                  numberOfLines={3}
+                />
+              </View>
+            </View>
+
+            <View style={styles.formSection}>
+              <Text style={styles.sectionTitle}>Mood & Stress Tracking</Text>
+              
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>Mood Before</Text>
+                <View style={styles.pickerContainer}>
+                  {['very_happy', 'happy', 'neutral', 'sad', 'very_sad'].map((mood) => (
+                    <TouchableOpacity
+                      key={mood}
+                      style={[
+                        styles.pickerOption,
+                        completionData.mood_before === mood && styles.pickerOptionSelected
+                      ]}
+                      onPress={() => setCompletionData(prev => ({ ...prev, mood_before: mood }))}
+                    >
+                      <Text style={[
+                        styles.pickerOptionText,
+                        completionData.mood_before === mood && styles.pickerOptionTextSelected
+                      ]}>
+                        {mood.replace('_', ' ').toUpperCase()}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>Mood After</Text>
+                <View style={styles.pickerContainer}>
+                  {['very_happy', 'happy', 'neutral', 'sad', 'very_sad'].map((mood) => (
+                    <TouchableOpacity
+                      key={mood}
+                      style={[
+                        styles.pickerOption,
+                        completionData.mood_after === mood && styles.pickerOptionSelected
+                      ]}
+                      onPress={() => setCompletionData(prev => ({ ...prev, mood_after: mood }))}
+                    >
+                      <Text style={[
+                        styles.pickerOptionText,
+                        completionData.mood_after === mood && styles.pickerOptionTextSelected
+                      ]}>
+                        {mood.replace('_', ' ').toUpperCase()}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+            </View>
+          </ScrollView>
+
+          <View style={styles.modalFooter}>
+            <TouchableOpacity
+              style={styles.cancelButton}
+              onPress={() => setShowCompletionModal(false)}
+            >
+              <Text style={styles.cancelButtonText}>Cancel</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.completeButton}
+              onPress={handleCompleteActivity}
+            >
+              <Text style={styles.completeButtonText}>Complete Activity</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    </Modal>
   );
 
   return (
@@ -253,6 +489,9 @@ const ActivityScreen = ({ navigation }: any) => {
           </View>
         )}
       </ScrollView>
+
+      {renderCompletionModal()}
+
     </LinearGradient>
   );
 };
@@ -487,6 +726,167 @@ const styles = StyleSheet.create({
   loadingText: {
     fontSize: 16,
     color: "#6B7280",
+  },
+  // Modal Styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContent: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    width: '90%',
+    maxHeight: '80%',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#1F2937',
+  },
+  closeButton: {
+    padding: 4,
+  },
+  modalBody: {
+    flex: 1,
+    padding: 20,
+  },
+  modalFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    padding: 20,
+    borderTopWidth: 1,
+    borderTopColor: '#E5E7EB',
+  },
+  activityInfo: {
+    marginBottom: 20,
+  },
+  activityName: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#1F2937',
+    marginBottom: 8,
+  },
+  activityDescription: {
+    fontSize: 14,
+    color: '#6B7280',
+    lineHeight: 20,
+  },
+  pointsCalculation: {
+    backgroundColor: '#FEF3C7',
+    borderRadius: 8,
+    padding: 16,
+    marginBottom: 20,
+  },
+  pointsTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#92400E',
+    marginBottom: 8,
+  },
+  pointsInfo: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  pointsText: {
+    fontSize: 14,
+    color: '#92400E',
+    fontWeight: '500',
+  },
+  formSection: {
+    marginBottom: 20,
+  },
+  inputGroup: {
+    marginBottom: 16,
+  },
+  inputLabel: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#374151',
+    marginBottom: 8,
+  },
+  textInput: {
+    borderWidth: 1,
+    borderColor: '#D1D5DB',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    fontSize: 16,
+    color: '#1F2937',
+    backgroundColor: '#FFFFFF',
+  },
+  textArea: {
+    height: 80,
+    textAlignVertical: 'top',
+  },
+  pickerContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  pickerOption: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#D1D5DB',
+    backgroundColor: '#FFFFFF',
+  },
+  pickerOptionSelected: {
+    backgroundColor: '#10B981',
+    borderColor: '#10B981',
+  },
+  pickerOptionText: {
+    fontSize: 12,
+    color: '#6B7280',
+    fontWeight: '500',
+  },
+  pickerOptionTextSelected: {
+    color: '#FFFFFF',
+  },
+  cancelButton: {
+    flex: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#D1D5DB',
+    backgroundColor: '#FFFFFF',
+    marginRight: 8,
+  },
+  cancelButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#6B7280',
+    textAlign: 'center',
+  },
+  completeButton: {
+    flex: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    backgroundColor: '#10B981',
+    marginLeft: 8,
+  },
+  completeButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#FFFFFF',
+    textAlign: 'center',
   },
 });
 

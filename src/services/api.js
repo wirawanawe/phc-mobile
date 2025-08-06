@@ -5,6 +5,8 @@ import mockApiService from "./mockApi";
 import NetworkHelper from "../utils/networkHelper";
 import NetworkDiagnostic from "../utils/networkDiagnostic";
 import NetworkTest from "../utils/networkTest";
+import ConnectionTest from "../utils/connectionTest";
+import ConnectionDebugger from "../utils/connectionDebugger";
 
 // Configuration for different environments
 const getApiBaseUrl = () => {
@@ -12,7 +14,7 @@ const getApiBaseUrl = () => {
   if (__DEV__) {
     // Check if running on Android emulator
     if (Platform.OS === "android") {
-      return "http://10.0.2.2:3000/api/mobile";
+      return "http://10.242.90.103:3000/api/mobile";
     }
 
     // Check if running on iOS simulator
@@ -20,8 +22,8 @@ const getApiBaseUrl = () => {
       return "http://localhost:3000/api/mobile";
     }
 
-    // For physical device testing - use localhost
-    return "http://localhost:3000/api/mobile";
+    // For physical device testing - use the working server IP
+    return "http://10.242.90.103:3000/api/mobile";
   }
 
   // For production - use your actual API URL
@@ -58,25 +60,46 @@ const testNetworkConnectivity = async (baseURL) => {
 const getBestApiUrl = async () => {
   if (__DEV__) {
     try {
-      // Try to find the best endpoint using NetworkTest
-      const bestEndpoint = await NetworkTest.findBestEndpoint();
+      console.log('🔍 Finding best API endpoint...');
+      
+      // First try the new ConnectionDebugger with optimized testing
+      console.log('🔍 Using ConnectionDebugger...');
+      const bestEndpoint = await ConnectionDebugger.findWorkingEndpoint();
       
       if (bestEndpoint) {
-        return `${bestEndpoint.endpoint}/api/mobile`;
-      } else {
-        // Try NetworkDiagnostic
-        const diagnostic = await NetworkDiagnostic.diagnoseConnection();
-        
-        if (diagnostic.status === 'SUCCESS') {
-          return `${diagnostic.bestEndpoint}/api/mobile`;
-        } else {
-          // Fallback to NetworkHelper
-          const serverUrl = await NetworkHelper.findBestServer();
-          return serverUrl;
-        }
+        console.log('✅ Found working endpoint:', bestEndpoint);
+        return `${bestEndpoint}/api/mobile`;
       }
+      
+      // Fallback to ConnectionTest
+      console.log('🔄 Trying ConnectionTest fallback...');
+      const platformInfo = ConnectionTest.getPlatformInfo();
+      console.log('📱 Platform info:', platformInfo);
+      
+      const connectionTestEndpoint = await ConnectionTest.findBestEndpoint();
+      
+      if (connectionTestEndpoint) {
+        console.log('✅ Found working endpoint:', connectionTestEndpoint);
+        return connectionTestEndpoint;
+      }
+      
+      // Final fallback to NetworkHelper
+      console.log('🔄 Trying NetworkHelper fallback...');
+      const serverUrl = await NetworkHelper.findBestServer();
+      return serverUrl;
     } catch (error) {
-      return NetworkHelper.getDefaultURL();
+      console.log('❌ All connection methods failed, using default URL');
+      console.log('❌ Error:', error.message);
+      
+      // Only run diagnosis if we have time and it's not too expensive
+      try {
+        const diagnosis = await ConnectionDebugger.diagnoseFullConnection();
+        console.log('🔍 Full diagnosis results:', diagnosis);
+      } catch (diagnosisError) {
+        console.log('❌ Diagnosis failed:', diagnosisError.message);
+      }
+      
+      return getApiBaseUrl();
     }
   }
   
@@ -87,53 +110,112 @@ class ApiService {
   constructor() {
     this.baseURL = null; // Will be set dynamically
     this.isInitialized = false;
+    this.retryCount = 0;
+    this.maxRetries = 3;
   }
 
   // Initialize the API service with the best available URL
   async initialize() {
-    if (this.isInitialized) {
+    console.log('🚀 Initializing API Service...');
+    console.log('🔍 Current baseURL:', this.baseURL);
+    console.log('🔍 Is initialized:', this.isInitialized);
+    
+    // Force re-initialization if needed
+    if (this.isInitialized && this.baseURL && this.baseURL.includes('10.0.2.2')) {
+      console.log('🔄 Forcing re-initialization due to old IP address');
+      this.isInitialized = false;
+      this.baseURL = null;
+    }
+
+    if (this.isInitialized && this.baseURL) {
+      console.log('✅ API Service already initialized with URL:', this.baseURL);
       return;
     }
 
     try {
+      console.log('🔍 Getting best API URL...');
       this.baseURL = await getBestApiUrl();
       console.log('🚀 API Service initialized with URL:', this.baseURL);
       
-      // Test connectivity
-      const connectivityTest = await testNetworkConnectivity(this.baseURL);
+      // Test connectivity with retry mechanism
+      console.log('🔍 Testing connectivity...');
+      const connectivityTest = await this.testConnectivityWithRetry();
+      console.log('📊 Connectivity test result:', connectivityTest);
       
       if (connectivityTest.success) {
         this.isInitialized = true;
+        this.retryCount = 0; // Reset retry count on success
+        console.log('✅ API Service initialization successful');
       } else {
+        console.log('❌ Connectivity test failed, using fallback');
         this.baseURL = null; // Force use of mock API
         this.isInitialized = true;
       }
     } catch (error) {
-      console.error('Error initializing API service:', error);
+      console.error('❌ Error initializing API service:', error);
       this.baseURL = null; // Force use of mock API
       this.isInitialized = true;
     }
   }
 
-  // Helper method to get user ID from storage
+  // Test connectivity with retry mechanism
+  async testConnectivityWithRetry() {
+    for (let attempt = 1; attempt <= 2; attempt++) { // Reduced from 3 to 2 attempts
+      try {
+        console.log(`🔍 Connectivity test attempt ${attempt}/2`);
+        const result = await testNetworkConnectivity(this.baseURL);
+        
+        if (result.success) {
+          console.log(`✅ Connectivity test successful on attempt ${attempt}`);
+          return result;
+        }
+        
+        if (attempt < 2) {
+          console.log(`⏳ Waiting before retry...`);
+          await new Promise(resolve => setTimeout(resolve, 1000 * attempt)); // Reduced delay
+        }
+      } catch (error) {
+        console.log(`❌ Connectivity test attempt ${attempt} failed:`, error.message);
+        if (attempt < 2) {
+          await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
+        }
+      }
+    }
+    
+    return { success: false, error: 'All connectivity tests failed' };
+  }
+
+  // Force re-initialization of the API service
+  async reinitialize() {
+    console.log('🔄 Force re-initializing API Service...');
+    this.isInitialized = false;
+    this.baseURL = null;
+    this.retryCount = 0;
+    await this.initialize();
+  }
+
+  // Helper method to get user ID from storage with better error handling
   async getUserId() {
     try {
       const userData = await AsyncStorage.getItem("userData");
-      console.log('User data from storage:', userData);
+      console.log('🔍 API: User data from storage:', !!userData);
+      
       if (userData) {
         const user = JSON.parse(userData);
-        console.log('Parsed user data:', user);
+        console.log('📊 API: Parsed user data:', user);
+        
         if (user && user.id) {
+          console.log('✅ API: Using user ID from storage:', user.id);
           return user.id;
         }
       }
       
       // If no user data or invalid user data, use a valid default user ID
-      console.log('No valid user data found in storage, using default user ID for testing');
+      console.log('⚠️ API: No valid user data found in storage, using default user ID for testing');
       return 1; // Use Super Admin user ID which exists in database
     } catch (error) {
-      console.error('Error getting user ID:', error);
-      console.log('Using default user ID for testing');
+      console.error('❌ API: Error getting user ID:', error);
+      console.log('⚠️ API: Using default user ID for testing');
       return 1; // Use Super Admin user ID which exists in database
     }
   }
@@ -154,12 +236,14 @@ class ApiService {
     return new URLSearchParams(paramsWithUserId).toString();
   }
 
-  // Get auth token from storage
+  // Get auth token from storage with better error handling
   async getAuthToken() {
     try {
       const token = await AsyncStorage.getItem("authToken");
+      console.log('🔍 API: Auth token retrieved:', !!token);
       return token;
     } catch (error) {
+      console.error('❌ API: Error getting auth token:', error);
       return null;
     }
   }
@@ -168,18 +252,22 @@ class ApiService {
   async getRefreshToken() {
     try {
       const refreshToken = await AsyncStorage.getItem("refreshToken");
+      console.log('🔍 API: Refresh token retrieved:', !!refreshToken);
       return refreshToken;
     } catch (error) {
+      console.error('❌ API: Error getting refresh token:', error);
       return null;
     }
   }
 
-  // Set auth token to storage
+  // Set auth token to storage with better error handling
   async setAuthToken(token) {
     try {
       await AsyncStorage.setItem("authToken", token);
+      console.log('✅ API: Auth token stored successfully');
     } catch (error) {
-      // Token setting failed
+      console.error('❌ API: Error setting auth token:', error);
+      throw new Error('Failed to store authentication token');
     }
   }
 
@@ -187,8 +275,10 @@ class ApiService {
   async setRefreshToken(refreshToken) {
     try {
       await AsyncStorage.setItem("refreshToken", refreshToken);
+      console.log('✅ API: Refresh token stored successfully');
     } catch (error) {
-      // Refresh token setting failed
+      console.error('❌ API: Error setting refresh token:', error);
+      throw new Error('Failed to store refresh token');
     }
   }
 
@@ -197,12 +287,23 @@ class ApiService {
     try {
       await AsyncStorage.removeItem("authToken");
       await AsyncStorage.removeItem("refreshToken");
+      console.log('✅ API: Auth tokens removed successfully');
     } catch (error) {
-      // Token removal failed
+      console.error('❌ API: Error removing auth tokens:', error);
     }
   }
 
-  // Refresh access token
+  // Remove refresh token from storage
+  async removeRefreshToken() {
+    try {
+      await AsyncStorage.removeItem("refreshToken");
+      console.log('✅ API: Refresh token removed successfully');
+    } catch (error) {
+      console.error('❌ API: Error removing refresh token:', error);
+    }
+  }
+
+  // Refresh access token with better error handling
   async refreshAccessToken() {
     // Ensure API service is initialized
     if (!this.isInitialized) {
@@ -216,6 +317,7 @@ class ApiService {
         throw new Error("No refresh token available");
       }
 
+      console.log('🔄 API: Attempting token refresh...');
       const response = await fetch(`${this.baseURL}/auth/refresh`, {
         method: "POST",
         headers: {
@@ -244,170 +346,195 @@ class ApiService {
       if (data.success && data.data) {
         await this.setAuthToken(data.data.accessToken);
         await this.setRefreshToken(data.data.refreshToken);
-        return data.data.accessToken;
+        console.log('✅ API: Token refresh successful');
+        return { success: true, data: data.data.accessToken };
       } else {
         throw new Error(data.message || "Token refresh failed");
       }
     } catch (error) {
+      console.error('❌ API: Token refresh failed:', error.message);
       await this.removeAuthToken();
       await this.removeRefreshToken();
       throw error;
     }
   }
 
-  // Generic request method with automatic token refresh
+  // Generic request method with automatic token refresh and retry mechanism
   async request(endpoint, options = {}) {
     // Ensure API service is initialized
     if (!this.isInitialized) {
       await this.initialize();
     }
 
-    // If baseURL is null, use mock API directly
-    if (!this.baseURL) {
-      return await mockApiService.request(endpoint, options);
+    // Force re-initialization if using old IP
+    if (this.baseURL && this.baseURL.includes('10.0.2.2')) {
+      console.log('🔄 Detected old IP, forcing re-initialization...');
+      await this.reinitialize();
     }
 
-    let token = await this.getAuthToken();
-    let isRetry = false;
+    console.log('🌐 API: Making request to:', endpoint);
+    console.log('🌐 API: Base URL:', this.baseURL);
 
     const makeRequest = async (authToken) => {
-      const config = {
-        headers: {
-          "Content-Type": "application/json",
-          ...(authToken && { Authorization: `Bearer ${authToken}` }),
-          ...options.headers,
-        },
-        ...options,
-      };
-
-      // Add timeout handling
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
-      config.signal = controller.signal;
-      
       try {
-        const fullUrl = `${this.baseURL}${endpoint}`;
-        console.log('🌐 Making request to:', fullUrl);
-        const response = await fetch(fullUrl, config);
+        const url = `${this.baseURL}${endpoint}`;
+        console.log('🌐 API: Full URL:', url);
         
-        clearTimeout(timeoutId);
-        
-        // Check if response is ok before trying to parse JSON
-        if (!response.ok) {
-          // Try to get response text for debugging
-          let errorText = "";
-          try {
-            errorText = await response.text();
-          } catch (textError) {
-            // Could not read response text
-          }
-          
-          // Handle specific authentication errors
-          if (response.status === 401) {
-            // Don't retry auth endpoints or if we already tried refreshing
-            if (endpoint.includes('/auth/') || isRetry) {
-              await this.removeAuthToken();
-              throw new Error("Authentication failed. Please login again.");
-            }
-            
-            // Try to refresh token
-            try {
-              const newToken = await this.refreshAccessToken();
-              isRetry = true;
-              return await makeRequest(newToken);
-            } catch (refreshError) {
-              await this.removeAuthToken();
-              throw new Error("Authentication failed. Please login again.");
-            }
-          }
-          
-          // Handle rate limiting specifically
-          if (response.status === 429) {
-            throw new Error("Too many requests from this IP, please try again later.");
-          }
-          
-          // Handle server errors
-          if (response.status >= 500) {
-            throw new Error(`Server error (${response.status}). Please try again later.`);
-          }
-          
-          // Handle client errors
-          if (response.status >= 400) {
-            // Handle specific 400 errors
-            if (response.status === 400) {
-              if (errorText.includes("User ID is required")) {
-                throw new Error("Please login to access this feature.");
-              } else if (errorText.includes("Invalid")) {
-                throw new Error("Invalid request. Please try again.");
-              }
-            }
-            
-            // Handle 409 Conflict errors specifically for missions
-            if (response.status === 409) {
-              if (errorText.includes("Mission sudah diterima") || errorText.includes("sudah dalam progress")) {
-                throw new Error("Mission sudah diterima dan sedang dalam progress. Silakan cek misi aktif Anda.");
-              } else if (errorText.includes("sudah diselesaikan")) {
-                throw new Error("Mission sudah diselesaikan. Tidak dapat diperbarui lagi.");
-              } else if (errorText.includes("sudah dibatalkan")) {
-                throw new Error("Mission sudah dibatalkan. Tidak dapat diperbarui lagi.");
-              } else if (errorText.includes("tidak dapat ditinggalkan")) {
-                throw new Error("Mission yang sudah diselesaikan tidak dapat ditinggalkan.");
-              }
-              throw new Error(`Konflik data: ${errorText || response.statusText}`);
-            }
-            
-            throw new Error(`Request failed (${response.status}): ${errorText || response.statusText}`);
-          }
-          
-          throw new Error(`HTTP Error: ${response.status} ${response.statusText}`);
+        const headers = {
+          'Content-Type': 'application/json',
+          ...options.headers,
+        };
+
+        if (authToken) {
+          headers.Authorization = `Bearer ${authToken}`;
         }
 
-        // Check content type before parsing JSON
-        const contentType = response.headers.get("content-type");
-        if (!contentType || !contentType.includes("application/json")) {
-          const textResponse = await response.text();
-          throw new Error("Server returned non-JSON response. Please check backend configuration.");
+        const config = {
+          method: options.method || 'GET',
+          headers,
+          ...options,
+        };
+
+        if (options.body) {
+          config.body = options.body;
+        }
+
+        console.log('🌐 API: Request config:', {
+          method: config.method,
+          headers: Object.keys(config.headers),
+          hasBody: !!config.body
+        });
+
+        const response = await fetch(url, config);
+        console.log('🌐 API: Response status:', response.status);
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.log('❌ API: Response error text:', errorText);
+          
+          // Handle specific HTTP errors
+          if (response.status === 401) {
+            throw new Error('Authentication failed. Please login again.');
+          } else if (response.status === 403) {
+            throw new Error('Access denied. You do not have permission to perform this action.');
+          } else if (response.status === 404) {
+            throw new Error('Resource not found.');
+          } else if (response.status === 409) {
+            // Handle conflict errors (like "Mission sudah diselesaikan")
+            try {
+              const errorData = JSON.parse(errorText);
+              throw new Error(errorData.message || 'Conflict: Data already exists or has been processed.');
+            } catch (parseError) {
+              throw new Error('Conflict: Data already exists or has been processed.');
+            }
+          } else if (response.status === 422) {
+            throw new Error(`Validation error: ${errorText}`);
+          } else if (response.status === 429) {
+            throw new Error('Too many requests. Please wait a moment and try again.');
+          } else if (response.status >= 500) {
+            throw new Error('Server error. Please try again later.');
+          }
+          
+          throw new Error(`HTTP ${response.status}: ${errorText || response.statusText}`);
         }
 
         const data = await response.json();
+        console.log('🌐 API: Response data keys:', Object.keys(data));
+        
         return data;
       } catch (error) {
-        clearTimeout(timeoutId);
-        
-        // If it's a network error, try mock API as fallback
-        if (error.message.includes("Network") || error.message.includes("connection") || 
-            error.message.includes("fetch") || error.message.includes("timeout")) {
-          return await mockApiService.request(endpoint, options);
-        }
-        
-        // Use NetworkHelper to handle network errors
-        const networkError = NetworkHelper.handleNetworkError(error);
-        throw new Error(networkError.message);
+        console.error('❌ API: Request failed:', error.message);
+        throw error;
       }
     };
 
-    try {
-      return await makeRequest(token);
-    } catch (error) {
-      // Handle JSON parse errors specifically
-      if (error.message.includes("JSON Parse error") || error.message.includes("Unexpected token")) {
-        throw new Error("Server returned invalid response format. Please check if backend is running correctly.");
-      }
+    // Retry mechanism with exponential backoff
+    for (let attempt = 1; attempt <= this.maxRetries; attempt++) {
+      try {
+        // Get the auth token
+        const token = await this.getAuthToken();
+        return await makeRequest(token);
+      } catch (error) {
+        console.error(`❌ API Request failed (attempt ${attempt}/${this.maxRetries}):`, {
+          endpoint,
+          baseURL: this.baseURL,
+          error: error.message,
+          errorType: error.name
+        });
 
-      // Don't re-process authentication errors that we've already handled
-      if (error.message === "Authentication failed. Please login again.") {
-        throw error; // Re-throw as-is to avoid double processing
-      }
+        // Handle authentication errors
+        if (error.message.includes('Authentication failed') || error.message.includes('401')) {
+          console.log('🔄 API: Authentication failed, attempting token refresh...');
+          try {
+            const refreshResult = await this.refreshAccessToken();
+            if (refreshResult.success) {
+              console.log('✅ API: Token refresh successful, retrying request...');
+              const newToken = await this.getAuthToken();
+              return await makeRequest(newToken);
+            } else {
+              throw new Error('Token refresh failed');
+            }
+          } catch (refreshError) {
+            console.error('❌ API: Token refresh failed:', refreshError.message);
+            throw new Error('Authentication failed. Please login again.');
+          }
+        }
 
-      // Use the new error handler for other errors
-      const errorInfo = handleApiError(error, `API Request to ${endpoint}`);
-      
-      // Re-throw the error with better context
-      const enhancedError = new Error(errorInfo.userMessage);
-      enhancedError.originalError = error;
-      enhancedError.errorInfo = errorInfo;
-      
-      throw enhancedError;
+        // Handle JSON parse errors specifically
+        if (error.message.includes("JSON Parse error") || error.message.includes("Unexpected token")) {
+          throw new Error("Server returned invalid response format. Please check if backend is running correctly.");
+        }
+
+        // Handle network errors
+        if (error.name === 'TypeError' && error.message.includes('fetch')) {
+          console.error('🌐 Network error detected. Running connection diagnosis...');
+          try {
+            const diagnosis = await ConnectionDebugger.diagnoseFullConnection();
+            console.log('🔍 Connection diagnosis:', diagnosis);
+          } catch (diagnosisError) {
+            console.error('❌ Diagnosis failed:', diagnosisError.message);
+          }
+          
+          if (attempt < this.maxRetries) {
+            const delay = Math.min(1000 * Math.pow(2, attempt - 1), 10000); // Max 10 seconds
+            console.log(`⏳ Waiting ${delay}ms before retry...`);
+            await new Promise(resolve => setTimeout(resolve, delay));
+            continue;
+          }
+          
+          throw new Error("Koneksi ke server gagal. Periksa koneksi internet Anda dan pastikan server berjalan.");
+        }
+
+        // Don't retry for certain error types
+        if (error.message.includes('Validation error') || 
+            error.message.includes('Access denied') || 
+            error.message.includes('Resource not found') ||
+            error.message.includes('Conflict:') ||
+            error.message.includes('Mission sudah diselesaikan') ||
+            error.message.includes('sudah dalam progress') ||
+            error.message.includes('sudah diselesaikan') ||
+            error.message.includes('sudah dibatalkan')) {
+          throw error;
+        }
+
+        // Retry for other errors
+        if (attempt < this.maxRetries) {
+          const delay = Math.min(1000 * Math.pow(2, attempt - 1), 10000);
+          console.log(`⏳ Waiting ${delay}ms before retry...`);
+          await new Promise(resolve => setTimeout(resolve, delay));
+          continue;
+        }
+
+        // Use the new error handler for other errors
+        const errorInfo = handleApiError(error, `API Request to ${endpoint}`);
+        
+        // Re-throw the error with better context
+        const enhancedError = new Error(errorInfo.userMessage);
+        enhancedError.originalError = error;
+        enhancedError.errorInfo = errorInfo;
+        
+        throw enhancedError;
+      }
     }
   }
 
@@ -435,25 +562,39 @@ class ApiService {
     };
 
     try {
-      // First, test if the server is reachable
+      console.log('🔗 Attempting login to:', `${this.baseURL}/auth/login`);
+      
+      // Test server connectivity first
       try {
-        const healthResponse = await fetch(`${this.baseURL.replace('/api', '')}/health`);
+        const healthResponse = await fetch(`${this.baseURL.replace('/api/mobile', '')}/api/health`, {
+          method: 'GET',
+          timeout: 5000,
+        });
+        console.log('✅ Server health check passed');
       } catch (healthError) {
+        console.log('⚠️ Server health check failed, but continuing with login attempt');
       }
 
       // Use mobile auth endpoint for mobile users
       const response = await fetch(`${this.baseURL}/auth/login`, config);
       
+      console.log('📡 Login response status:', response.status);
+      
       if (!response.ok) {
         let errorText = "";
         try {
           errorText = await response.text();
+          console.log('📝 Error response text:', errorText);
         } catch (textError) {
-          // Could not read response text
+          console.log('❌ Could not read response text');
         }
         
         if (response.status === 401) {
           throw new Error("Invalid credentials");
+        } else if (response.status === 404) {
+          throw new Error("Login endpoint not found. Please check server configuration.");
+        } else if (response.status >= 500) {
+          throw new Error("Server error. Please try again later.");
         }
         
         throw new Error(`Login failed (${response.status}): ${errorText || response.statusText}`);
@@ -465,16 +606,19 @@ class ApiService {
       }
 
       const data = await response.json();
+      console.log('✅ Login successful, storing tokens...');
       
       // Store tokens if login was successful
       if (data.success && data.data) {
-        const token = data.data.token || data.data.accessToken;
+        const token = data.data.accessToken || data.data.token;
         const refreshToken = data.data.refreshToken;
         
         if (token) {
           await this.setAuthToken(token);
+          console.log('✅ Access token stored');
           if (refreshToken) {
             await this.setRefreshToken(refreshToken);
+            console.log('✅ Refresh token stored');
           }
         }
       }
@@ -482,7 +626,17 @@ class ApiService {
       return data;
       
     } catch (error) {
-      console.error("Login error:", error);
+      console.error("❌ Login error:", error);
+      
+      // Provide more specific error messages
+      if (error.message.includes('Network request failed')) {
+        throw new Error("Koneksi ke server gagal. Periksa koneksi internet Anda dan pastikan server berjalan.");
+      } else if (error.message.includes('timeout')) {
+        throw new Error("Koneksi timeout. Server mungkin sedang sibuk, silakan coba lagi.");
+      } else if (error.message.includes('fetch')) {
+        throw new Error("Tidak dapat terhubung ke server. Periksa konfigurasi jaringan.");
+      }
+      
       throw error;
     }
   }
@@ -537,13 +691,15 @@ class ApiService {
       
       // Store tokens if registration was successful
       if (data.success && data.data) {
-        const token = data.data.token || data.data.accessToken;
+        const token = data.data.accessToken || data.data.token;
         const refreshToken = data.data.refreshToken;
         
         if (token) {
           await this.setAuthToken(token);
+          console.log('✅ Access token stored after registration');
           if (refreshToken) {
             await this.setRefreshToken(refreshToken);
+            console.log('✅ Refresh token stored after registration');
           }
         }
       }
@@ -667,7 +823,7 @@ class ApiService {
     return await this.request(`/tracking/water/today?${queryString}`);
   }
 
-  async getWeeklyWaterIntake(params = {}) {
+  async getWeeklyWaterIntakae(params = {}) {
     const queryString = await this.createQueryStringWithUserId(params);
     return await this.request(`/tracking/water/weekly?${queryString}`);
   }
@@ -926,8 +1082,12 @@ class ApiService {
 
   async getMissions() {
     try {
-      return await this.request("/missions");
+      console.log('🔍 API: Getting missions...');
+      const response = await this.request("/missions");
+      console.log('📊 API: Missions response:', response.success ? 'SUCCESS' : 'FAILED', response.missions?.length || 0, 'missions');
+      return response;
     } catch (error) {
+      console.log('❌ API: Missions request failed, using mock data');
       return await mockApiService.getMissions();
     }
   }
@@ -936,30 +1096,71 @@ class ApiService {
     return await this.request(`/missions/category/${category}`);
   }
 
-  async getMyMissions() {
-    try {
-      return await this.request("/my-missions");
-    } catch (error) {
-      return await mockApiService.getMyMissions();
-    }
-  }
-
-  async acceptMission(missionId) {
+  async getMissionsByDate(targetDate = null) {
     try {
       const userId = await this.getUserId();
       if (!userId) {
         throw new Error("User not authenticated");
       }
 
+      const dateParam = targetDate || new Date().toISOString().split('T')[0];
+      const response = await this.request(`/missions/by-date?date=${dateParam}`);
+      
+      console.log('📊 API: Missions by date response:', response.success ? 'SUCCESS' : 'FAILED', response.data?.available_missions?.length || 0, 'available missions');
+      return response;
+    } catch (error) {
+      console.log('❌ API: Missions by date request failed, using mock data');
+      return await mockApiService.getMissionsByDate(targetDate);
+    }
+  }
+
+  async getMyMissions(targetDate = null, showAllDates = false) {
+    try {
+      const userId = await this.getUserId();
+      console.log('🔍 API: Getting my missions for user ID:', userId, 'date:', targetDate, 'all dates:', showAllDates);
+      
+      // Build query parameters
+      const params = new URLSearchParams();
+      if (targetDate) {
+        params.append('date', targetDate);
+      }
+      if (showAllDates) {
+        params.append('all_dates', 'true');
+      }
+      
+      // Use the authenticated my-missions endpoint
+      console.log('🔍 API: Using authenticated endpoint: /my-missions');
+      const response = await this.request(`/my-missions?${params.toString()}`);
+      console.log('📊 API: My missions response:', response.success ? 'SUCCESS' : 'FAILED', response.data?.length || 0, 'user missions');
+      return response;
+      
+    } catch (error) {
+      console.log('❌ API: My missions request failed, using mock data');
+      return await mockApiService.getMyMissions(targetDate, showAllDates);
+    }
+  }
+
+  async acceptMission(missionId, missionDate = null) {
+    try {
+      const userId = await this.getUserId();
+      if (!userId) {
+        throw new Error("User not authenticated");
+      }
+
+      const requestBody = { user_id: userId };
+      if (missionDate) {
+        requestBody.mission_date = missionDate;
+      }
+
       const response = await this.request(`/missions/accept/${missionId}`, {
         method: "POST",
-        body: JSON.stringify({ user_id: userId }),
+        body: JSON.stringify(requestBody),
       });
 
       return response;
     } catch (error) {
       if (error.message.includes("Network") || error.message.includes("connection")) {
-        return await mockApiService.acceptMission(missionId);
+        return await mockApiService.acceptMission(missionId, missionDate);
       }
       throw error;
     }
@@ -986,11 +1187,11 @@ class ApiService {
     }
   }
 
-  async abandonMission(userMissionId) {
+  async abandonMission(userMissionId, reason = null) {
     try {
-      const response = await this.request("/abandon-mission", {
-        method: "POST",
-        body: JSON.stringify({ userMissionId }),
+      const response = await this.request(`/missions/abandon/${userMissionId}`, {
+        method: "PUT",
+        body: JSON.stringify({ reason }),
       });
 
       return response;
@@ -1009,9 +1210,9 @@ class ApiService {
         throw new Error("User not authenticated");
       }
 
-      const response = await this.request("/reactivate-mission", {
-        method: "POST",
-        body: JSON.stringify({ userMissionId }),
+      const response = await this.request(`/missions/reactivate/${userMissionId}`, {
+        method: "PUT",
+        body: JSON.stringify({}),
       });
 
       return response;
@@ -1023,9 +1224,10 @@ class ApiService {
     }
   }
 
-  async getMissionStats() {
+  async getMissionStats(params = {}) {
     try {
-      return await this.request("/mission-stats");
+      const queryString = new URLSearchParams(params).toString();
+      return await this.request(`/mission-stats${queryString ? `?${queryString}` : ""}`);
     } catch (error) {
       return await mockApiService.getMissionStats();
     }

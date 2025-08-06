@@ -8,6 +8,7 @@ import ProgressRing from './ProgressRing';
 import ActivityDetectionService from '../services/ActivityDetectionService';
 import api from '../services/api';
 import { handleAuthError } from '../utils/errorHandler';
+import eventEmitter from '../utils/eventEmitter';
 
 const { width } = Dimensions.get('window');
 
@@ -43,6 +44,50 @@ const TodaySummaryCard: React.FC<TodaySummaryCardProps> = ({ onMoreDetailsPress,
   useEffect(() => {
     loadTodayData();
     
+    // Listen for meal logged events to refresh data immediately
+    const handleMealLogged = () => {
+      console.log('TodaySummaryCard - Meal logged event received, refreshing data...');
+      loadTodayData();
+    };
+    
+    // Listen for water logged events
+    const handleWaterLogged = () => {
+      console.log('TodaySummaryCard - Water logged event received, refreshing data...');
+      loadTodayData();
+    };
+    
+    // Listen for fitness logged events
+    const handleFitnessLogged = () => {
+      console.log('TodaySummaryCard - Fitness logged event received, refreshing data...');
+      loadTodayData();
+    };
+    
+    // Listen for sleep logged events
+    const handleSleepLogged = () => {
+      console.log('TodaySummaryCard - Sleep logged event received, refreshing data...');
+      loadTodayData();
+    };
+    
+    // Listen for mood logged events
+    const handleMoodLogged = () => {
+      console.log('TodaySummaryCard - Mood logged event received, refreshing data...');
+      loadTodayData();
+    };
+    
+    // Listen for general data refresh events
+    const handleDataRefresh = () => {
+      console.log('TodaySummaryCard - Data refresh event received, refreshing data...');
+      loadTodayData();
+    };
+    
+    // Add event listeners
+    eventEmitter.on('mealLogged', handleMealLogged);
+    eventEmitter.on('waterLogged', handleWaterLogged);
+    eventEmitter.on('fitnessLogged', handleFitnessLogged);
+    eventEmitter.on('sleepLogged', handleSleepLogged);
+    eventEmitter.on('moodLogged', handleMoodLogged);
+    eventEmitter.on('dataRefresh', handleDataRefresh);
+    
     if (!isWellnessApp) {
       // Hanya untuk MainScreen: auto-refresh dan date change detection
       const interval = setInterval(loadTodayData, 30000);
@@ -57,6 +102,23 @@ const TodaySummaryCard: React.FC<TodaySummaryCardProps> = ({ onMoreDetailsPress,
       return () => {
         clearInterval(interval);
         clearInterval(dateCheckInterval);
+        // Remove event listeners
+        eventEmitter.off('mealLogged', handleMealLogged);
+        eventEmitter.off('waterLogged', handleWaterLogged);
+        eventEmitter.off('fitnessLogged', handleFitnessLogged);
+        eventEmitter.off('sleepLogged', handleSleepLogged);
+        eventEmitter.off('moodLogged', handleMoodLogged);
+        eventEmitter.off('dataRefresh', handleDataRefresh);
+      };
+    } else {
+      return () => {
+        // Remove event listeners for WellnessApp
+        eventEmitter.off('mealLogged', handleMealLogged);
+        eventEmitter.off('waterLogged', handleWaterLogged);
+        eventEmitter.off('fitnessLogged', handleFitnessLogged);
+        eventEmitter.off('sleepLogged', handleSleepLogged);
+        eventEmitter.off('moodLogged', handleMoodLogged);
+        eventEmitter.off('dataRefresh', handleDataRefresh);
       };
     }
   }, [date, isWellnessApp]);

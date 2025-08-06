@@ -10,6 +10,53 @@ class MockApiService {
       totalPoints: 0,
       activeMissions: 0
     };
+    
+    // Mock missions data
+    this.mockMissions = [
+      {
+        id: 1,
+        title: "Daily Water Intake",
+        description: "Drink 8 glasses of water daily",
+        category: "nutrition",
+        points: 15,
+        target_value: 8,
+        unit: "glasses",
+        is_active: true,
+        type: "daily",
+        difficulty: "easy",
+        icon: "cup-water",
+        color: "#10B981"
+      },
+      {
+        id: 2,
+        title: "30 Minute Exercise",
+        description: "Exercise for 30 minutes daily",
+        category: "fitness",
+        points: 25,
+        target_value: 30,
+        unit: "minutes",
+        is_active: true,
+        type: "daily",
+        difficulty: "medium",
+        icon: "dumbbell",
+        color: "#F59E0B"
+      },
+      {
+        id: 3,
+        title: "Daily Mood Check",
+        description: "Record your mood daily",
+        category: "mental_health",
+        points: 10,
+        target_value: 1,
+        unit: "times",
+        is_active: true,
+        type: "daily",
+        difficulty: "easy",
+        icon: "emoticon",
+        color: "#8B5CF6"
+      }
+    ];
+    
     this.mockUsers = [
       {
         id: 1,
@@ -231,7 +278,7 @@ class MockApiService {
     try {
       return {
         success: true,
-        data: this.mockMissions
+        missions: this.mockMissions
       };
     } catch (error) {
       return {
@@ -242,7 +289,7 @@ class MockApiService {
     }
   }
 
-  async getMyMissions() {
+  async getMissionsByDate(targetDate = null) {
     try {
       const userData = await AsyncStorage.getItem('userData');
       if (!userData) {
@@ -253,7 +300,102 @@ class MockApiService {
       }
       
       const user = JSON.parse(userData);
-      const userMissions = this.mockUserMissions.filter(um => um.user_id === user.id);
+      const dateParam = targetDate || new Date().toISOString().split('T')[0];
+      
+      // Get available missions
+      const availableMissions = this.mockMissions.map(mission => {
+        const existingUserMission = this.mockUserMissions.find(
+          um => um.user_id === user.id && 
+                um.mission_id === mission.id && 
+                (um.mission_date === dateParam || um.start_date?.split('T')[0] === dateParam)
+        );
+        
+        return {
+          ...mission,
+          user_status: existingUserMission ? 'accepted' : 'available',
+          user_mission_id: existingUserMission?.id || null,
+          user_mission_status: existingUserMission?.status || null,
+          progress: existingUserMission?.progress || 0,
+          mission_date: dateParam
+        };
+      });
+      
+      // Get user's accepted missions for the date
+      const userMissions = this.mockUserMissions
+        .filter(um => um.user_id === user.id && 
+                      (um.mission_date === dateParam || um.start_date?.split('T')[0] === dateParam))
+        .map(userMission => {
+          const mission = this.mockMissions.find(m => m.id === userMission.mission_id);
+          return {
+            ...userMission,
+            mission: mission || null
+          };
+        });
+      
+      // Group missions by category
+      const missionsByCategory = availableMissions.reduce((acc, mission) => {
+        const category = mission.category;
+        if (!acc[category]) {
+          acc[category] = [];
+        }
+        acc[category].push(mission);
+        return acc;
+      }, {});
+      
+      // Calculate summary
+      const summary = {
+        total_available: availableMissions.filter(m => m.user_status === 'available').length,
+        total_accepted: availableMissions.filter(m => m.user_status === 'accepted').length,
+        total_completed: userMissions.filter(m => m.status === 'completed').length,
+        total_active: userMissions.filter(m => m.status === 'active').length,
+        total_points_earned: userMissions
+          .filter(m => m.status === 'completed')
+          .reduce((sum, m) => sum + (m.points_earned || 0), 0),
+        completion_rate: userMissions.length > 0 
+          ? (userMissions.filter(m => m.status === 'completed').length / userMissions.length) * 100 
+          : 0
+      };
+      
+      return {
+        success: true,
+        data: {
+          available_missions: availableMissions,
+          user_missions: userMissions,
+          missions_by_category: missionsByCategory,
+          summary,
+          target_date: dateParam
+        }
+      };
+    } catch (error) {
+      return {
+        success: false,
+        message: "Failed to get missions by date",
+        error: error.message
+      };
+    }
+  }
+
+  async getMyMissions(targetDate = null, showAllDates = false) {
+    try {
+      const userData = await AsyncStorage.getItem('userData');
+      if (!userData) {
+        return {
+          success: false,
+          message: "User not authenticated"
+        };
+      }
+      
+      const user = JSON.parse(userData);
+      let userMissions = this.mockUserMissions.filter(um => um.user_id === user.id);
+      
+      // Filter by date if specified
+      if (targetDate && !showAllDates) {
+        const targetDateStr = targetDate;
+        userMissions = userMissions.filter(um => {
+          const missionDate = um.mission_date || um.start_date?.split('T')[0];
+          return missionDate === targetDateStr;
+        });
+      }
       
       // Enrich user missions with mission details
       const enrichedUserMissions = userMissions.map(userMission => {
@@ -266,7 +408,9 @@ class MockApiService {
       
       return {
         success: true,
-        data: enrichedUserMissions
+        data: enrichedUserMissions,
+        target_date: targetDate,
+        show_all_dates: showAllDates
       };
     } catch (error) {
       return {
@@ -277,7 +421,7 @@ class MockApiService {
     }
   }
 
-  async acceptMission(missionId) {
+  async acceptMission(missionId, missionDate = null) {
     try {
       const userData = await AsyncStorage.getItem('userData');
       if (!userData) {
@@ -297,15 +441,19 @@ class MockApiService {
         };
       }
       
-      // Check if user already has this mission
+      // Use provided date or default to today
+      const targetDate = missionDate || new Date().toISOString().split('T')[0];
+      
+      // Check if user already has this mission for the specific date
       const existingUserMission = this.mockUserMissions.find(
-        um => um.user_id === user.id && um.mission_id === missionId
+        um => um.user_id === user.id && um.mission_id === missionId && 
+              (um.mission_date === targetDate || um.start_date?.split('T')[0] === targetDate)
       );
       
       if (existingUserMission) {
         return {
           success: false,
-          message: "Mission already accepted"
+          message: "Mission already accepted for this date"
         };
       }
       
@@ -314,6 +462,7 @@ class MockApiService {
         id: this.mockUserMissions.length + 1,
         user_id: user.id,
         mission_id: missionId,
+        mission_date: targetDate,
         status: "active",
         progress: 0,
         current_value: 0,
@@ -330,7 +479,8 @@ class MockApiService {
         success: true,
         data: {
           ...newUserMission,
-          mission: mission
+          mission: mission,
+          mission_date: targetDate
         },
         message: "Mission accepted successfully"
       };

@@ -224,7 +224,7 @@ const WellnessDetailsScreen = ({ navigation }: any) => {
       const [statsResponse, moodResponse, missionStatsResponse, userMissionsResponse] = await Promise.all([
         api.getWellnessStats({ period: "week" }),
         api.getMoodTracker({ period: "week" }),
-        api.getMissionStats(),
+        api.getMissionStats({ date: new Date().toISOString().split('T')[0] }),
         api.getMyMissions(),
       ]);
 

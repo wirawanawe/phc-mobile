@@ -16,6 +16,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { CustomTheme } from "../theme/theme";
 import { useAuth } from "../contexts/AuthContext";
 import apiService from "../services/api";
+import eventEmitter from "../utils/eventEmitter";
 
 const { width } = Dimensions.get("window");
 
@@ -125,6 +126,9 @@ const MoodTrackingScreen = ({ navigation }: any) => {
             },
           ]
         );
+        
+        // Emit event to notify other components that mood data has been updated
+        eventEmitter.emitMoodLogged();
       } else {
         Alert.alert("Error", response.message || "Failed to save mood data");
       }

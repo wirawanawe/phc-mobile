@@ -60,13 +60,20 @@ const LoginScreen = ({ navigation }: any) => {
     setIsLoading(true);
 
     try {
-      const success = await login(email, password);
+      console.log("🔍 Login: Attempting login for email:", email);
+      
+      const result = await login(email, password);
 
-      if (success) {
+      if (result.success) {
+        console.log("✅ Login: Login successful, navigating to Main screen");
         // Login successful - navigate to Main screen
         navigation.replace("Main");
+      } else {
+        console.log("❌ Login: Login failed:", result.message);
+        setError(result.message || "Login gagal. Silakan coba lagi.");
       }
     } catch (error: any) {
+      console.error("❌ Login: Login error:", error);
       
       // Enhanced error handling for invalid credentials
       let errorMessage = "Login gagal. Silakan coba lagi.";
@@ -91,15 +98,18 @@ const LoginScreen = ({ navigation }: any) => {
         } else if (message.includes("network") || 
                    message.includes("koneksi")) {
           errorMessage = "Koneksi gagal. Periksa internet Anda dan coba lagi.";
+        } else if (message.includes("authentication failed")) {
+          errorMessage = "Sesi Anda telah berakhir. Silakan login kembali.";
+        } else if (message.includes("server error")) {
+          errorMessage = "Terjadi kesalahan pada server. Silakan coba lagi nanti.";
+        } else if (message.includes("timeout")) {
+          errorMessage = "Koneksi timeout. Silakan coba lagi.";
         } else {
           errorMessage = error.message;
         }
       }
       
       setError(errorMessage);
-      
-      // Clear password field for security
-      setPassword("");
     } finally {
       setIsLoading(false);
     }
@@ -121,6 +131,8 @@ const LoginScreen = ({ navigation }: any) => {
   const handleRegister = () => {
     navigation.navigate("Register");
   };
+
+
 
   // Social login handlers
   const handleSocialLoginSuccess = (data: any) => {
@@ -299,6 +311,8 @@ const LoginScreen = ({ navigation }: any) => {
               >
                 {isLoading ? "Signing In..." : "Sign In"}
               </Button>
+
+
 
               {/* Divider */}
               <View style={styles.dividerContainer}>

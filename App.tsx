@@ -55,6 +55,7 @@ import WellnessApp, { TestWellnessApp } from "./src/screens/WellnessApp";
 import ClinicsApp from "./src/screens/ClinicsApp";
 import ActivityScreen from "./src/screens/ActivityScreen";
 import WellnessActivityDetailScreen from "./src/screens/WellnessActivityDetailScreen";
+import ConnectionDebugScreen from "./src/screens/ConnectionDebugScreen";
 
 // Import theme and context
 import { theme } from "./src/theme/theme";
@@ -70,6 +71,7 @@ function AppContent() {
   const [hasAcceptedTerms, setHasAcceptedTerms] = React.useState<
     boolean | null
   >(null);
+  const [isAppReady, setIsAppReady] = React.useState(false);
 
   React.useEffect(() => {
     checkAppState();
@@ -77,28 +79,37 @@ function AppContent() {
 
   // Debug effect to monitor state changes
   React.useEffect(() => {
-    console.log("State changed:", { isFirstLaunch, hasAcceptedTerms, isLoading });
-  }, [isFirstLaunch, hasAcceptedTerms, isLoading]);
+    console.log("App: State changed:", { 
+      isFirstLaunch, 
+      hasAcceptedTerms, 
+      isLoading, 
+      isAuthenticated,
+      isAppReady 
+    });
+  }, [isFirstLaunch, hasAcceptedTerms, isLoading, isAuthenticated, isAppReady]);
 
   const checkAppState = async () => {
     try {
+      console.log("App: Checking app state...");
       const firstLaunch = await AsyncStorage.getItem("isFirstLaunch");
       const termsAccepted = await AsyncStorage.getItem("hasAcceptedTerms");
 
-      console.log("Checking app state:", { firstLaunch, termsAccepted });
+      console.log("App: App state check results:", { firstLaunch, termsAccepted });
       
       setIsFirstLaunch(firstLaunch === null);
       setHasAcceptedTerms(termsAccepted === "true");
+      setIsAppReady(true);
     } catch (error) {
-      console.error("Error checking app state:", error);
+      console.error("App: Error checking app state:", error);
       setIsFirstLaunch(true);
       setHasAcceptedTerms(false);
+      setIsAppReady(true);
     }
   };
 
   const handleTermsAccepted = async () => {
     try {
-      console.log("Terms accepted, updating app state...");
+      console.log("App: Terms accepted, updating app state...");
       await AsyncStorage.setItem("isFirstLaunch", "false");
       await AsyncStorage.setItem("hasAcceptedTerms", "true");
       
@@ -106,26 +117,34 @@ function AppContent() {
       setIsFirstLaunch(false);
       setHasAcceptedTerms(true);
       
-      console.log("App state updated successfully");
+      console.log("App: App state updated successfully");
       
       // Add a small delay to ensure state is properly updated
       await new Promise(resolve => setTimeout(resolve, 100));
       
     } catch (error) {
-      console.error("Error updating app state:", error);
+      console.error("App: Error updating app state:", error);
     }
   };
 
   // Debug logging
-  console.log("App state:", { isLoading, isFirstLaunch, hasAcceptedTerms, isAuthenticated });
+  console.log("App: Current state:", { 
+    isLoading, 
+    isFirstLaunch, 
+    hasAcceptedTerms, 
+    isAuthenticated,
+    isAppReady 
+  });
 
-  // For testing: always show Main screen if not loading
-  if (isLoading) {
+  // Show loading screen while app is initializing
+  if (isLoading || !isAppReady) {
+    console.log("App: Showing loading screen");
     return null; // Loading state
   }
 
   // If first launch, show welcome
   if (isFirstLaunch) {
+    console.log("App: Showing first launch flow");
     return (
       <PaperProvider theme={theme}>
         <NavigationContainer key="first-launch">
@@ -143,6 +162,11 @@ function AppContent() {
               )}
               options={{ headerShown: false }}
             />
+            <Stack.Screen
+              name="Main"
+              component={MainScreen}
+              options={{ headerShown: false }}
+            />
           </Stack.Navigator>
         </NavigationContainer>
       </PaperProvider>
@@ -150,7 +174,7 @@ function AppContent() {
   }
 
   // Show main app with proper navigation
-  console.log("Showing main app with proper navigation");
+  console.log("App: Showing main app with proper navigation");
 
   return (
     <PaperProvider theme={theme}>
@@ -191,6 +215,11 @@ function AppContent() {
             name="Register"
             component={RegisterScreen}
             options={{ headerShown: false }}
+          />
+          <Stack.Screen
+            name="ConnectionDebug"
+            component={ConnectionDebugScreen}
+            options={{ title: "Connection Debug" }}
           />
           <Stack.Screen
             name="Assessment"

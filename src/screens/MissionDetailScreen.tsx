@@ -10,7 +10,7 @@ import {
 import { Text, Button, TextInput, useTheme } from "react-native-paper";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Icon from "react-native-vector-icons/MaterialCommunityIcons";
-import { LinearGradient } from "expo-linear-gradient";
+
 import { CustomTheme } from "../theme/theme";
 import { useAuth } from "../contexts/AuthContext";
 import apiService from "../services/api";
@@ -96,98 +96,46 @@ const MissionDetailScreen = ({ navigation, route }: any) => {
   const calculateTimeRemaining = (cancelledAt: string) => {
     const cancelledTime = new Date(cancelledAt).getTime();
     const currentTime = new Date().getTime();
-    const twentyFourHours = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
-    const timeElapsed = currentTime - cancelledTime;
-    const timeRemaining = twentyFourHours - timeElapsed;
+    const timeDiff = currentTime - cancelledTime;
+    const hoursRemaining = Math.max(0, 24 - Math.floor(timeDiff / (1000 * 60 * 60)));
     
-    if (timeRemaining <= 0) {
-      return { canReactivate: true, timeRemaining: 0 };
-    }
-    
-    const hours = Math.floor(timeRemaining / (60 * 60 * 1000));
-    const minutes = Math.floor((timeRemaining % (60 * 60 * 1000)) / (60 * 1000));
-    
-    return { canReactivate: false, timeRemaining, hours, minutes };
+    return {
+      hoursRemaining,
+      canReactivate: hoursRemaining === 0
+    };
   };
 
-  // Function to reactivate cancelled mission
   const handleReactivateMission = async () => {
     try {
       setReactivateLoading(true);
-      
       const response = await apiService.reactivateMission(userMission.id);
       
       if (response.success) {
-        
-        // Update local state with the reactivated mission data
-        const reactivatedUserMission = {
+        // Update local state
+        setUserMission({
           ...userMission,
           status: "active",
-          current_value: 0,
-          progress: 0,
-          notes: "",
-          updated_at: new Date().toISOString(),
           cancelled_at: null
-        };
-        
-        setUserMission(reactivatedUserMission);
-        setCurrentValue(0);
-        setNotes("");
+        });
         
         Alert.alert(
-          "✅ Mission Reactivated!", 
-          "Mission berhasil diaktifkan kembali! Sekarang Anda dapat melanjutkan progress misi ini.",
-          [
-            { 
-              text: "Lanjutkan Progress", 
-              onPress: async () => {
-                // Refresh mission data in background
-                if (onMissionUpdate) {
-                  await onMissionUpdate();
-                }
-                // Refresh user mission data to get the latest from server
-                await refreshUserMissionData();
-              }
-            }
-          ]
+          "✅ Mission Reactivated!",
+          "Mission berhasil diaktifkan kembali. Anda dapat melanjutkan progress misi ini.",
+          [{ text: "OK" }]
         );
       } else {
         Alert.alert(
-          "⚠️ Unable to Reactivate Mission",
+          "⚠️ Unable to Reactivate",
           response.message || "Please try again later.",
-          [{ text: "OK", style: "default" }]
+          [{ text: "OK" }]
         );
       }
     } catch (error) {
-      if (error instanceof Error) {
-        const errorMessage = error.message.toLowerCase();
-        
-        if (errorMessage.includes("belum 24 jam") || errorMessage.includes("masih dalam cooldown")) {
-          Alert.alert(
-            "⏰ Cooldown Period",
-            "Mission masih dalam masa cooldown. Silakan tunggu hingga 24 jam setelah pembatalan.",
-            [{ text: "OK", style: "default" }]
-          );
-        } else if (errorMessage.includes("tidak ditemukan") || errorMessage.includes("not found")) {
-          Alert.alert(
-            "❌ Mission Not Found",
-            "Mission tidak ditemukan atau sudah tidak tersedia.",
-            [{ text: "OK", style: "default" }]
-          );
-        } else {
-          Alert.alert(
-            "❌ Error",
-            "Terjadi kesalahan saat mengaktifkan kembali mission. Silakan coba lagi.",
-            [{ text: "OK", style: "default" }]
-          );
-        }
-      } else {
-        Alert.alert(
-          "❌ Error",
-          "Terjadi kesalahan saat mengaktifkan kembali mission. Silakan coba lagi.",
-          [{ text: "OK", style: "default" }]
-        );
-      }
+      Alert.alert(
+        "❌ Error",
+        "Failed to reactivate mission. Please try again.",
+        [{ text: "OK" }]
+      );
     } finally {
       setReactivateLoading(false);
     }
@@ -197,10 +145,9 @@ const MissionDetailScreen = ({ navigation, route }: any) => {
   const validateUserMissionId = (userMissionData: any) => {
     if (!userMissionData) return null;
     
-    // Try multiple possible ID fields
+    // Check for possible ID fields
     const possibleIds = [
       userMissionData.id,
-      userMissionData.user_mission_id,
       userMissionData.user_mission_id,
       userMissionData.mission_id
     ];
@@ -241,7 +188,8 @@ const MissionDetailScreen = ({ navigation, route }: any) => {
         }
       }
     } catch (error) {
-      // Handle error silently
+      console.error("Error refreshing user mission data:", error);
+      setUserMission(null);
     } finally {
       setDataLoading(false);
     }
@@ -363,55 +311,17 @@ const MissionDetailScreen = ({ navigation, route }: any) => {
               }
             ]
           );
-        } else if (errorMessage.includes("server error") || errorMessage.includes("500")) {
-          Alert.alert(
-            "🌐 Server Temporarily Unavailable",
-            "Our servers are experiencing high traffic. Please try again in a few minutes.",
-            [
-              { text: "Try Again", onPress: () => handleAcceptMission() },
-              { text: "Cancel", style: "cancel" }
-            ]
-          );
-        } else if (errorMessage.includes("network") || errorMessage.includes("connection")) {
-          Alert.alert(
-            "📡 Connection Issue",
-            "Please check your internet connection and try again.",
-            [
-              { text: "Retry", onPress: () => handleAcceptMission() },
-              { text: "Cancel", style: "cancel" }
-            ]
-          );
-        } else if (errorMessage.includes("authentication") || errorMessage.includes("login")) {
-          Alert.alert(
-            "🔐 Authentication Required",
-            "Please login again to access this feature.",
-            [
-              { text: "Login", onPress: () => navigation.navigate("Login") },
-              { text: "Cancel", style: "cancel" }
-            ]
-          );
-        } else if (errorMessage.includes("invalid") || errorMessage.includes("not found")) {
-          Alert.alert(
-            "❌ Mission Not Found",
-            "This mission may have been removed or is no longer available.",
-            [{ text: "OK", style: "default" }]
-          );
         } else {
-          // Generic error handling
           Alert.alert(
-            "❌ Unable to Accept Mission",
-            "An unexpected error occurred. Please try again later.",
-            [
-              { text: "Try Again", onPress: () => handleAcceptMission() },
-              { text: "Cancel", style: "cancel" }
-            ]
+            "❌ Error",
+            error.message || "Failed to accept mission. Please try again.",
+            [{ text: "OK", style: "default" }]
           );
         }
       } else {
-        // Fallback for non-Error objects
         Alert.alert(
           "❌ Error",
-          "An unexpected error occurred. Please try again later.",
+          "Failed to accept mission. Please try again.",
           [{ text: "OK", style: "default" }]
         );
       }
@@ -727,46 +637,70 @@ const MissionDetailScreen = ({ navigation, route }: any) => {
           <View style={styles.headerRight} />
         </View>
 
-        {/* Modern Mission Card */}
-        <View style={styles.missionCardModern}>
-          <LinearGradient
-            colors={[(mission.color || "#64748B") + "20", (mission.color || "#64748B") + "10"]}
-            style={styles.missionGradientModern}
-          >
-            <View style={styles.missionHeaderModern}>
-              <LinearGradient
-                colors={[(mission.color || "#64748B") + "30", (mission.color || "#64748B") + "20"]}
-                style={styles.missionIconModern}
-              >
-                <Icon name={mission.icon || "help-circle"} size={32} color={mission.color || "#64748B"} />
-              </LinearGradient>
-              <View style={styles.missionInfoModern}>
-                <Text style={styles.missionTitleModern}>{mission.title || "Untitled Mission"}</Text>
-                <Text style={styles.missionDescriptionModern}>
-                  {mission.description || "No description available"}
-                </Text>
-                <View style={styles.missionMetaModern}>
+        {/* Mission Card - Available Style */}
+        <View style={styles.missionCardContainer}>
+          <View style={styles.missionCard}>
+            <View style={styles.missionCardContent}>
+              <View style={styles.leftContent}>
+                <View
+                  style={[
+                    styles.iconContainer,
+                    { 
+                      backgroundColor: (mission.color || "#64748B") + "20",
+                    },
+                  ]}
+                >
+                  <Icon 
+                    name={mission.icon || "help-circle"} 
+                    size={32} 
+                    color={mission.color || "#64748B"} 
+                  />
+                  {userMission && (
+                    <View style={[styles.statusBadgeIcon, { 
+                      backgroundColor: userMission.status === "completed" ? "#10B981" : 
+                                     userMission.status === "active" ? "#3B82F6" : 
+                                     userMission.status === "cancelled" ? "#EF4444" : "#F59E0B"
+                    }]}>
+                      <Text style={styles.statusBadgeIconText}>
+                        {userMission.status === "completed" ? "✓" : 
+                         userMission.status === "active" ? "▶" : 
+                         userMission.status === "cancelled" ? "✕" : "●"}
+                      </Text>
+                    </View>
+                  )}
+                </View>
+                <View style={styles.textContainer}>
+                  <Text style={styles.missionTitle}>
+                    {mission.title || "Untitled Mission"}
+                  </Text>
+                  <Text style={styles.missionSubtitle}>
+                    {mission.description || "No description available"}
+                  </Text>
+                </View>
+              </View>
+              <View style={styles.rightContent}>
+                <View style={styles.missionMeta}>
                   <View
                     style={[
-                      styles.difficultyBadgeModern,
+                      styles.difficultyBadge,
                       {
                         backgroundColor: getDifficultyColor(mission.difficulty || "medium"),
                       },
                     ]}
                   >
-                                                <Text style={styles.difficultyTextModern}>
-                              {mission.difficulty ? mission.difficulty.charAt(0).toUpperCase() +
-                                mission.difficulty.slice(1) : "Unknown"}
-                            </Text>
+                    <Text style={styles.difficultyText}>
+                      {mission.difficulty ? mission.difficulty.charAt(0).toUpperCase() +
+                        mission.difficulty.slice(1) : "Unknown"}
+                    </Text>
                   </View>
-                  <View style={styles.pointsContainerModern}>
-                    <Icon name="star" size={18} color="#F59E0B" />
-                    <Text style={styles.pointsTextModern}>{mission.points || 0} pts</Text>
+                  <View style={styles.pointsContainer}>
+                    <Icon name="star" size={16} color="#F59E0B" />
+                    <Text style={styles.pointsText}>{mission.points || 0}</Text>
                   </View>
                 </View>
               </View>
             </View>
-          </LinearGradient>
+          </View>
         </View>
 
         {/* Mission Details */}
@@ -957,7 +891,7 @@ const MissionDetailScreen = ({ navigation, route }: any) => {
                         <View style={styles.reactivationCooldown}>
                           <Icon name="clock-outline" size={20} color="#F59E0B" />
                           <Text style={styles.reactivationCooldownText}>
-                            Tunggu {timeInfo.hours} jam {timeInfo.minutes} menit lagi untuk mengaktifkan kembali
+                            Tunggu {timeInfo.hoursRemaining} jam lagi untuk mengaktifkan kembali
                           </Text>
                           <View style={styles.cooldownProgressContainer}>
                             <View style={styles.cooldownProgressBar}>
@@ -965,13 +899,13 @@ const MissionDetailScreen = ({ navigation, route }: any) => {
                                 style={[
                                   styles.cooldownProgressFill,
                                   { 
-                                    width: `${Math.max(0, Math.min(100, ((24 * 60 * 60 * 1000) - timeInfo.timeRemaining) / (24 * 60 * 60 * 1000) * 100))}%` 
+                                    width: `${Math.max(0, Math.min(100, ((24 * 60 * 60 * 1000) - (new Date().getTime() - new Date(userMission.cancelled_at).getTime())) / (24 * 60 * 60 * 1000) * 100))}%` 
                                   }
                                 ]} 
                               />
                             </View>
                             <Text style={styles.cooldownProgressText}>
-                              {Math.round(((24 * 60 * 60 * 1000) - timeInfo.timeRemaining) / (24 * 60 * 60 * 1000) * 100)}% selesai
+                              {Math.round(((24 * 60 * 60 * 1000) - (new Date().getTime() - new Date(userMission.cancelled_at).getTime())) / (24 * 60 * 60 * 1000) * 100)}% selesai
                             </Text>
                           </View>
                         </View>
@@ -994,16 +928,18 @@ const MissionDetailScreen = ({ navigation, route }: any) => {
         {/* Action Buttons */}
         <View style={styles.actionContainer}>
           {!userMission ? (
-            <Button
-              mode="contained"
-              onPress={handleAcceptMission}
-              loading={loading}
-              disabled={loading}
-              style={[styles.button, { backgroundColor: mission.color || "#64748B" }]}
-              contentStyle={styles.buttonContent}
-            >
-              Accept Mission
-            </Button>
+            <>
+              <Button
+                mode="contained"
+                onPress={handleAcceptMission}
+                loading={loading}
+                disabled={loading}
+                style={[styles.button, { backgroundColor: mission.color || "#64748B" }]}
+                contentStyle={styles.buttonContent}
+              >
+                Accept Mission
+              </Button>
+            </>
           ) : userMission.status === "active" ? (
             <View style={styles.buttonRow}>
               <Button
@@ -1077,129 +1013,84 @@ const styles = StyleSheet.create({
   headerRight: {
     width: 34,
   },
+  missionCardContainer: {
+    marginHorizontal: 20,
+    marginBottom: 25,
+  },
   missionCard: {
-    margin: 20,
-    borderRadius: 16,
-    overflow: "hidden",
+    borderRadius: 20,
+    padding: 24,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 8,
     elevation: 4,
   },
-  missionCardModern: {
-    margin: 20,
-    borderRadius: 24,
-    overflow: "hidden",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.15,
-    shadowRadius: 16,
-    elevation: 8,
-  },
-  missionGradientModern: {
-    padding: 28,
-  },
-  missionHeaderModern: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-  },
-  missionIconModern: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    justifyContent: "center",
-    alignItems: "center",
-    marginRight: 20,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 6,
-    elevation: 4,
-  },
-  missionInfoModern: {
-    flex: 1,
-  },
-  missionTitleModern: {
-    fontSize: 24,
-    fontWeight: "900",
-    color: "#1F2937",
-    marginBottom: 10,
-    lineHeight: 28,
-    letterSpacing: -0.5,
-  },
-  missionDescriptionModern: {
-    fontSize: 16,
-    color: "#64748B",
-    lineHeight: 22,
-    marginBottom: 16,
-    fontWeight: "500",
-  },
-  missionMetaModern: {
+  missionCardContent: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
   },
-  difficultyBadgeModern: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 12,
-  },
-  difficultyTextModern: {
-    fontSize: 13,
-    fontWeight: "700",
-    color: "#FFFFFF",
-  },
-  pointsContainerModern: {
+  leftContent: {
     flexDirection: "row",
     alignItems: "center",
+    flex: 1,
   },
-  pointsTextModern: {
-    fontSize: 16,
-    fontWeight: "700",
-    color: "#F59E0B",
-    marginLeft: 6,
+  rightContent: {
+    marginLeft: 16,
   },
-  missionGradient: {
-    padding: 24,
-  },
-  missionHeader: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-  },
-  missionIcon: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
+  iconContainer: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
     justifyContent: "center",
     alignItems: "center",
     marginRight: 16,
+    position: "relative",
   },
-  missionInfo: {
+  statusBadgeIcon: {
+    position: "absolute",
+    top: -4,
+    right: -4,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  statusBadgeIconText: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: "#FFFFFF",
+  },
+  textContainer: {
     flex: 1,
   },
   missionTitle: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: "700",
-    color: "#1F2937",
-    marginBottom: 8,
+    marginBottom: 6,
+    letterSpacing: -0.3,
     lineHeight: 24,
+    color: "#1F2937",
   },
-  missionDescription: {
+  missionSubtitle: {
     fontSize: 14,
-    color: "#64748B",
     lineHeight: 20,
-    marginBottom: 12,
+    fontWeight: "500",
+    color: "#64748B",
   },
   missionMeta: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
+    alignItems: "flex-end",
   },
   difficultyBadge: {
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 8,
+    marginBottom: 8,
   },
   difficultyText: {
     fontSize: 12,
@@ -1216,6 +1107,7 @@ const styles = StyleSheet.create({
     color: "#F59E0B",
     marginLeft: 4,
   },
+
   detailsContainer: {
     paddingHorizontal: 20,
     paddingVertical: 20,

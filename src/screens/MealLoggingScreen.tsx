@@ -17,6 +17,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { CustomTheme } from "../theme/theme";
 import apiService from "../services/api";
 import { useAuth } from "../contexts/AuthContext";
+import eventEmitter from "../utils/eventEmitter";
 
 const { width } = Dimensions.get("window");
 
@@ -454,6 +455,9 @@ const MealLoggingScreen = ({ navigation }: any) => {
         await loadNutritionData();
         await loadRecentMeals();
         console.log('Data refresh completed');
+        
+        // Emit event to notify other components that meal data has been updated
+        eventEmitter.emitMealLogged();
       } else {
         console.error('Meal save failed:', response);
         Alert.alert("Error", response.message || "Failed to save meal");
