@@ -149,10 +149,12 @@ export const parseError = (error: any): ErrorInfo => {
       };
     }
 
-    // Rate limit errors
+    // Rate limit errors - enhanced detection
     if (message.includes('too many requests') || 
+        message.includes('rate limit') ||
+        message.includes('terlalu banyak permintaan') ||
         message.includes('429') ||
-        message.includes('rate limit')) {
+        message.includes('rate_limit_exceeded')) {
       return {
         type: ErrorType.RATE_LIMIT,
         ...ERROR_MESSAGES[ErrorType.RATE_LIMIT]
@@ -161,104 +163,59 @@ export const parseError = (error: any): ErrorInfo => {
 
     // Server errors
     if (message.includes('server error') || 
-        message.includes('internal server error') ||
-        message.includes('500')) {
+        message.includes('500') ||
+        message.includes('internal server error')) {
       return {
         type: ErrorType.SERVER,
         ...ERROR_MESSAGES[ErrorType.SERVER]
       };
     }
 
-    // Not found errors
-    if (message.includes('not found') || 
-        message.includes('404')) {
-      return {
-        type: ErrorType.NOT_FOUND,
-        ...ERROR_MESSAGES[ErrorType.NOT_FOUND]
-      };
-    }
-
-    // Permission errors
-    if (message.includes('permission') || 
-        message.includes('forbidden') ||
-        message.includes('403')) {
-      return {
-        type: ErrorType.PERMISSION,
-        ...ERROR_MESSAGES[ErrorType.PERMISSION]
-      };
-    }
-
     // Conflict errors
-    if (message.includes('mission sudah diterima') || 
-        message.includes('sudah dalam progress') ||
-        message.includes('sudah diselesaikan') ||
-        message.includes('sudah dibatalkan') ||
-        message.includes('tidak dapat ditinggalkan') ||
-        message.includes('konflik data') ||
-        message.includes('409') ||
-        message.includes('conflict') ||
+    if (message.includes('conflict') || 
         message.includes('already exists') ||
-        message.includes('has been processed')) {
+        message.includes('sudah ada')) {
       return {
         type: ErrorType.CONFLICT,
-        message: error.message,
-        userMessage: error.message,
-        shouldRetry: false,
-        shouldLogout: false,
-        shouldShowAlert: true
+        ...ERROR_MESSAGES[ErrorType.CONFLICT]
       };
     }
-  }
 
-  // Handle HTTP status codes
-  if (error.status) {
-    switch (error.status) {
-      case 401:
-        return {
-          type: ErrorType.AUTHENTICATION,
-          ...ERROR_MESSAGES[ErrorType.AUTHENTICATION]
-        };
-      case 403:
-        return {
-          type: ErrorType.PERMISSION,
-          ...ERROR_MESSAGES[ErrorType.PERMISSION]
-        };
-      case 404:
-        return {
-          type: ErrorType.NOT_FOUND,
-          ...ERROR_MESSAGES[ErrorType.NOT_FOUND]
-        };
-      case 422:
-        return {
-          type: ErrorType.VALIDATION,
-          message: error.message || 'Data tidak valid',
-          userMessage: error.message || 'Mohon periksa kembali data yang Anda masukkan.',
-          shouldRetry: false,
-          shouldLogout: false,
-          shouldShowAlert: true
-        };
-      case 409:
-        return {
-          type: ErrorType.CONFLICT,
-          ...ERROR_MESSAGES[ErrorType.CONFLICT]
-        };
-      case 500:
-        return {
-          type: ErrorType.SERVER,
-          ...ERROR_MESSAGES[ErrorType.SERVER]
-        };
-    }
-  }
-
-      // Default to unknown error
+    // Default to unknown error
     return {
       type: ErrorType.UNKNOWN,
-      message: error.message || 'Unknown error',
-      userMessage: ERROR_MESSAGES[ErrorType.UNKNOWN].userMessage,
+      ...ERROR_MESSAGES[ErrorType.UNKNOWN]
+    };
+  }
+
+  // Handle string errors
+  if (typeof error === 'string') {
+    const message = error.toLowerCase();
+    
+    if (message.includes('too many requests') || 
+        message.includes('rate limit') ||
+        message.includes('terlalu banyak permintaan')) {
+      return {
+        type: ErrorType.RATE_LIMIT,
+        ...ERROR_MESSAGES[ErrorType.RATE_LIMIT]
+      };
+    }
+    
+    return {
+      type: ErrorType.UNKNOWN,
+      message: error,
+      userMessage: error,
       shouldRetry: true,
       shouldLogout: false,
       shouldShowAlert: true
     };
+  }
+
+  // Handle other error types
+  return {
+    type: ErrorType.UNKNOWN,
+    ...ERROR_MESSAGES[ErrorType.UNKNOWN]
+  };
 };
 
 // Show error alert with better user experience
@@ -398,47 +355,47 @@ export const handleMissionError = (error: unknown) => {
   });
 };
 
-// Enhanced retry mechanism with better error handling
+// Enhanced retry function with better rate limit handling
 export const withRetry = async <T>(
   fn: () => Promise<T>,
   maxRetries: number = 3,
-  delay: number = 1000,
-  onRetry?: (attempt: number, error: any) => void
+  baseDelay: number = 1000
 ): Promise<T> => {
   let lastError: any;
-
+  
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
-      console.log(`🔄 Attempt ${attempt}/${maxRetries}`);
       return await fn();
     } catch (error) {
       lastError = error;
       const errorInfo = parseError(error);
-
-      console.log(`❌ Attempt ${attempt} failed:`, error.message);
-
-      if (onRetry) {
-        onRetry(attempt, error);
-      }
-
-      if (!errorInfo.shouldRetry || attempt === maxRetries) {
-        console.log(`❌ All ${maxRetries} attempts failed`);
+      
+      // Don't retry for certain error types
+      if (errorInfo.type === ErrorType.AUTHENTICATION || 
+          errorInfo.type === ErrorType.VALIDATION ||
+          errorInfo.type === ErrorType.CONFLICT) {
         throw error;
       }
-
+      
       // Special handling for rate limiting
       if (errorInfo.type === ErrorType.RATE_LIMIT) {
-        const rateLimitDelay = Math.min(delay * Math.pow(2, attempt - 1), 30000); // Max 30 seconds
-        console.log(`⏳ Rate limited, waiting ${rateLimitDelay}ms before retry...`);
+        const rateLimitDelay = Math.min(baseDelay * Math.pow(2, attempt - 1), 30000); // Max 30 seconds
+        console.log(`⏳ Rate limited. Waiting ${rateLimitDelay}ms before retry ${attempt}/${maxRetries}`);
         await new Promise(resolve => setTimeout(resolve, rateLimitDelay));
       } else {
-        const currentDelay = delay * Math.pow(2, attempt - 1);
-        console.log(`⏳ Waiting ${currentDelay}ms before retry...`);
-        await new Promise(resolve => setTimeout(resolve, currentDelay));
+        // Standard exponential backoff for other errors
+        const delay = Math.min(baseDelay * Math.pow(2, attempt - 1), 10000); // Max 10 seconds
+        console.log(`🔄 Retry attempt ${attempt}/${maxRetries} after ${delay}ms`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+      
+      // If this is the last attempt, throw the error
+      if (attempt === maxRetries) {
+        throw error;
       }
     }
   }
-
+  
   throw lastError;
 };
 

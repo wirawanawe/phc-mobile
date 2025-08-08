@@ -442,24 +442,19 @@ const MealLoggingScreen = ({ navigation }: any) => {
         recorded_at: new Date().toISOString()
       };
 
-      console.log('Saving meal data:', mealData);
       const response = await apiService.createMealEntry(mealData);
-      console.log('Meal save response:', response);
       
       if (response.success) {
         Alert.alert("Success", `Meal logged successfully!\nTotal calories: ${totalCalories} kcal`);
         setSelectedFoods([]);
         setSearchQuery("");
         // Refresh nutrition data and recent meals immediately
-        console.log('Refreshing data after successful save...');
         await loadNutritionData();
         await loadRecentMeals();
-        console.log('Data refresh completed');
         
         // Emit event to notify other components that meal data has been updated
         eventEmitter.emitMealLogged();
       } else {
-        console.error('Meal save failed:', response);
         Alert.alert("Error", response.message || "Failed to save meal");
       }
     } catch (error) {
@@ -508,7 +503,7 @@ const MealLoggingScreen = ({ navigation }: any) => {
         await apiService.cleanupOldMealData();
       }
     } catch (error) {
-      console.error('Error cleaning up old meal data:', error);
+      // Silent error for cleanup
     }
   };
 
@@ -522,6 +517,11 @@ const MealLoggingScreen = ({ navigation }: any) => {
         if (response.success && response.data) {
           const formattedQuickFoods = response.data.map((food: any) => ({
             ...food,
+            // Map nutrition data from per_100g format to display format
+            calories: food.calories_per_100g || 0,
+            protein: food.protein_per_100g || 0,
+            carbs: food.carbs_per_100g || 0,
+            fat: food.fat_per_100g || 0,
             icon: getFoodIcon(food.category),
             color: getFoodColor(food.category),
           }));
@@ -723,21 +723,15 @@ const MealLoggingScreen = ({ navigation }: any) => {
   const loadRecentMeals = async () => {
     try {
       if (isAuthenticated) {
-        console.log('Loading recent meals...');
         const userId = await apiService.getUserId();
-        console.log('Current user ID:', userId);
         const response = await apiService.getMealHistory({ 
           limit: 50, // Get more meals to filter by time
-          // hours_ago: 24 // Temporarily disabled for debugging
         });
-        
-        console.log('Meal history response:', response);
         
         if (response.success && response.data) {
           const allMeals = [];
           
           response.data.forEach((meal: any) => {
-            console.log('Processing meal:', meal);
             if (meal.foods && meal.foods.length > 0) {
               // Format time from recorded_at
               const mealTime = meal.recorded_at ? 
@@ -767,21 +761,16 @@ const MealLoggingScreen = ({ navigation }: any) => {
             }
           });
           
-          console.log('All meals processed:', allMeals.length);
-          
           // Sort by recorded time (most recent first) and limit to 10 items
           const sortedMeals = allMeals
             .sort((a, b) => new Date(b.recordedAt).getTime() - new Date(a.recordedAt).getTime())
             .slice(0, 10);
           
-          console.log('Sorted meals:', sortedMeals.length);
           setRecentMeals(sortedMeals);
         } else {
-          console.log('No meal data or response not successful');
           setRecentMeals([]);
         }
       } else {
-        console.log('User not authenticated');
         // If not authenticated, show empty list
         setRecentMeals([]);
       }
@@ -845,7 +834,7 @@ const MealLoggingScreen = ({ navigation }: any) => {
       {/* Delete button */}
       <TouchableOpacity 
         style={styles.quickFoodDeleteButton}
-        onPress={() => removeFromQuickFoods(item.id)}
+        onPress={() => removeFromQuickFoods(item.food_id || item.id)}
       >
         <Icon name="close" size={16} color="#EF4444" />
       </TouchableOpacity>
@@ -1192,7 +1181,7 @@ const MealLoggingScreen = ({ navigation }: any) => {
             <View style={styles.recentMealsHeader}>
               <Text style={styles.sectionTitle}>Recent Meals</Text>
               <View style={styles.recentMealsInfo}>
-                <Icon name="clock-outline" size={16} color="#6B7280" />
+                <Icon name="clock-outline" size={16} color="#ffffff" />
                 <Text style={styles.recentMealsInfoText}>Last 24 hours only</Text>
               </View>
             </View>
@@ -1563,7 +1552,7 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: "#6B7280",
+    backgroundColor: "#FFFFFF",
     justifyContent: "center",
     alignItems: "center",
     shadowColor: "#000",
@@ -1745,7 +1734,7 @@ const styles = StyleSheet.create({
   },
   recentMealsInfoText: {
     fontSize: 12,
-    color: "#6B7280",
+    color: "#ffffff",
     marginLeft: 4,
     fontWeight: "500",
   },

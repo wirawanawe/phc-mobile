@@ -17,6 +17,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { CustomTheme } from "../theme/theme";
 import apiService from "../services/api";
 import eventEmitter from "../utils/eventEmitter";
+import dateChangeDetector from "../utils/dateChangeDetector";
 
 const { width, height } = Dimensions.get("window");
 
@@ -24,14 +25,15 @@ interface WaterSettings {
   daily_goal_ml: number;
   custom_goal_ml?: number;
   doctor_recommended_ml?: number;
-  is_reminder_enabled: boolean;
+  reminder_enabled: boolean;
   reminder_interval_minutes: number;
-  start_time: string;
-  end_time: string;
+  reminder_start_time: string;
+  reminder_end_time: string;
   weight_kg?: number;
   activity_level: "low" | "moderate" | "high";
   climate_factor: "normal" | "hot" | "very_hot";
   doctor_id?: number | null;
+  is_doctor_set?: boolean;
   notes?: string;
 }
 
@@ -111,9 +113,36 @@ const WaterTrackingScreen = ({ navigation }: any) => {
 
   // Load water settings and today's intake
   useEffect(() => {
+    // Initialize date change detector
+    dateChangeDetector.initialize();
+    
     loadWaterSettings();
     loadTodayWaterIntake();
     loadWeeklyWaterIntake();
+    
+    // Listen for daily reset events
+    const handleDailyReset = () => {
+      console.log('WaterTrackingScreen - Daily reset detected, refreshing water data...');
+      setCurrentIntake(0);
+      loadTodayWaterIntake();
+      loadWeeklyWaterIntake();
+    };
+    
+    // Listen for water logged events
+    const handleWaterLogged = () => {
+      loadTodayWaterIntake();
+      loadWeeklyWaterIntake();
+    };
+    
+    // Add event listeners
+    eventEmitter.on('dailyReset', handleDailyReset);
+    eventEmitter.on('waterLogged', handleWaterLogged);
+    
+    return () => {
+      // Remove event listeners
+      eventEmitter.off('dailyReset', handleDailyReset);
+      eventEmitter.off('waterLogged', handleWaterLogged);
+    };
   }, []);
 
   // Refresh data when screen comes into focus
@@ -136,10 +165,10 @@ const WaterTrackingScreen = ({ navigation }: any) => {
         // Use default settings if user is not logged in
         const defaultSettings = {
           daily_goal_ml: 2500,
-          is_reminder_enabled: true,
+          reminder_enabled: true,
           reminder_interval_minutes: 60,
-          start_time: "08:00:00",
-          end_time: "22:00:00",
+          reminder_start_time: "08:00:00",
+          reminder_end_time: "22:00:00",
           activity_level: "moderate" as const,
           climate_factor: "normal" as const,
           doctor_id: null,
@@ -150,19 +179,19 @@ const WaterTrackingScreen = ({ navigation }: any) => {
 
       const queryString = await apiService.createQueryStringWithUserId();
       const response = await apiService.request(`/water-settings?${queryString}`);
-      if (response.success) {
+      if (response.success && response.data) {
         setWaterSettings(response.data);
-        setDailyGoal(response.data.daily_goal_ml);
+        setDailyGoal(response.data.daily_goal_ml || 2500);
       }
     } catch (error) {
       console.error("Load water settings error:", error);
       // Use default settings if API fails
       const defaultSettings = {
         daily_goal_ml: 2500,
-        is_reminder_enabled: true,
+        reminder_enabled: true,
         reminder_interval_minutes: 60,
-        start_time: "08:00:00",
-        end_time: "22:00:00",
+        reminder_start_time: "08:00:00",
+        reminder_end_time: "22:00:00",
         activity_level: "moderate" as const,
         climate_factor: "normal" as const,
         doctor_id: null,
@@ -253,26 +282,52 @@ const WaterTrackingScreen = ({ navigation }: any) => {
         return;
       }
 
-      const settingsWithUserId = { ...settings, user_id: userId };
+      // Ensure required fields are present
+      const validatedSettings = {
+        daily_goal_ml: settings.daily_goal_ml || 2500,
+        reminder_enabled: settings.reminder_enabled ?? true,
+        reminder_interval_minutes: settings.reminder_interval_minutes || 60,
+        reminder_start_time: settings.reminder_start_time || "08:00:00",
+        reminder_end_time: settings.reminder_end_time || "22:00:00",
+        activity_level: settings.activity_level || "moderate",
+        climate_factor: settings.climate_factor || "normal",
+        ...settings, // This will override with any provided values
+      };
+
+      const settingsWithUserId = { ...validatedSettings, user_id: userId };
       
       const response = await apiService.request("/water-settings", {
         method: "PUT",
         body: JSON.stringify(settingsWithUserId),
       });
       
-      if (response.success) {
+      if (response.success && response.data) {
         setWaterSettings(response.data);
-        setDailyGoal(response.data.daily_goal_ml);
+        setDailyGoal(response.data.daily_goal_ml || 2500);
         setShowSettingsModal(false);
-        Alert.alert("Success", "Water settings updated successfully!");
-        // Refresh all data to ensure consistency
-        await loadWaterSettings();
-        await loadTodayWaterIntake();
-        await loadWeeklyWaterIntake();
+        
+        // Show success alert
+        Alert.alert(
+          "Success", 
+          "Water settings berhasil disimpan!", 
+          [
+            {
+              text: "OK",
+              onPress: async () => {
+                // Refresh all data to ensure consistency
+                await loadWaterSettings();
+                await loadTodayWaterIntake();
+                await loadWeeklyWaterIntake();
+              }
+            }
+          ]
+        );
+      } else {
+        Alert.alert("Error", "Failed to save water settings. Please try again.");
       }
     } catch (error) {
       console.error("Save water settings error:", error);
-      Alert.alert("Error", "Failed to save water settings");
+      Alert.alert("Error", "Failed to save water settings. Please check your connection.");
     }
   };
 
@@ -288,8 +343,8 @@ const WaterTrackingScreen = ({ navigation }: any) => {
         }),
       });
       
-      if (response.success) {
-        return response.data.recommended_water_ml;
+      if (response.success && response.data) {
+        return response.data.recommended_water_ml || 2500;
       }
     } catch (error) {
       console.error("Calculate water intake error:", error);
@@ -309,14 +364,15 @@ const WaterTrackingScreen = ({ navigation }: any) => {
   const handleWeightChange = async (weightText: string) => {
     const weight = parseFloat(weightText);
     if (tempSettings) {
-      setTempSettings(prev => prev ? { ...prev, weight_kg: weight || undefined } : null);
+      const updatedSettings = { ...tempSettings, weight_kg: weight || undefined };
+      setTempSettings(updatedSettings);
       
       // Auto-calculate daily goal if all parameters are available
-      if (weight && weight > 0 && tempSettings.activity_level && tempSettings.climate_factor) {
+      if (weight && weight > 0 && updatedSettings.activity_level && updatedSettings.climate_factor) {
         const recommended = await calculateRecommendedIntake(
           weight,
-          tempSettings.activity_level,
-          tempSettings.climate_factor
+          updatedSettings.activity_level,
+          updatedSettings.climate_factor
         );
         setTempSettings(prev => prev ? { ...prev, daily_goal_ml: recommended } : null);
       }
@@ -326,14 +382,15 @@ const WaterTrackingScreen = ({ navigation }: any) => {
   // Auto-calculate when activity level or climate changes
   const handleActivityLevelChange = async (activityLevel: "low" | "moderate" | "high") => {
     if (tempSettings) {
-      setTempSettings(prev => prev ? { ...prev, activity_level: activityLevel } : null);
+      const updatedSettings = { ...tempSettings, activity_level: activityLevel };
+      setTempSettings(updatedSettings);
       
       // Auto-calculate daily goal if all parameters are available
-      if (tempSettings.weight_kg && tempSettings.weight_kg > 0 && tempSettings.climate_factor) {
+      if (updatedSettings.weight_kg && updatedSettings.weight_kg > 0 && updatedSettings.climate_factor) {
         const recommended = await calculateRecommendedIntake(
-          tempSettings.weight_kg,
+          updatedSettings.weight_kg,
           activityLevel,
-          tempSettings.climate_factor
+          updatedSettings.climate_factor
         );
         setTempSettings(prev => prev ? { ...prev, daily_goal_ml: recommended } : null);
       }
@@ -342,13 +399,14 @@ const WaterTrackingScreen = ({ navigation }: any) => {
 
   const handleClimateFactorChange = async (climateFactor: "normal" | "hot" | "very_hot") => {
     if (tempSettings) {
-      setTempSettings(prev => prev ? { ...prev, climate_factor: climateFactor } : null);
+      const updatedSettings = { ...tempSettings, climate_factor: climateFactor };
+      setTempSettings(updatedSettings);
       
       // Auto-calculate daily goal if all parameters are available
-      if (tempSettings.weight_kg && tempSettings.weight_kg > 0 && tempSettings.activity_level) {
+      if (updatedSettings.weight_kg && updatedSettings.weight_kg > 0 && updatedSettings.activity_level) {
         const recommended = await calculateRecommendedIntake(
-          tempSettings.weight_kg,
-          tempSettings.activity_level,
+          updatedSettings.weight_kg,
+          updatedSettings.activity_level,
           climateFactor
         );
         setTempSettings(prev => prev ? { ...prev, daily_goal_ml: recommended } : null);
@@ -417,7 +475,18 @@ const WaterTrackingScreen = ({ navigation }: any) => {
   };
 
   const openSettingsModal = () => {
-    setTempSettings(waterSettings);
+    // Use waterSettings if available, otherwise use default settings
+    const defaultSettings = {
+      daily_goal_ml: 2500,
+      reminder_enabled: true,
+      reminder_interval_minutes: 60,
+      reminder_start_time: "08:00:00",
+      reminder_end_time: "22:00:00",
+      activity_level: "moderate" as const,
+      climate_factor: "normal" as const,
+      doctor_id: null,
+    };
+    setTempSettings(waterSettings || defaultSettings);
     setShowSettingsModal(true);
   };
 
@@ -427,8 +496,10 @@ const WaterTrackingScreen = ({ navigation }: any) => {
   };
 
   const handleSaveSettings = () => {
-    if (tempSettings) {
+    if (tempSettings && tempSettings.daily_goal_ml) {
       saveWaterSettings(tempSettings);
+    } else {
+      Alert.alert("Error", "Please ensure all required settings are filled in.");
     }
   };
 
@@ -698,7 +769,9 @@ const WaterTrackingScreen = ({ navigation }: any) => {
                   value={tempSettings?.daily_goal_ml?.toString() || "2500"}
                   onChangeText={(text) => {
                     const value = parseInt(text) || 2500;
-                    setTempSettings(prev => prev ? { ...prev, daily_goal_ml: value } : null);
+                    if (value > 0) {
+                      setTempSettings(prev => prev ? { ...prev, daily_goal_ml: value } : null);
+                    }
                   }}
                   keyboardType="numeric"
                   placeholder="2500"
@@ -734,23 +807,23 @@ const WaterTrackingScreen = ({ navigation }: any) => {
               {/* Reminder Settings */}
               <View style={styles.settingSection}>
                 <Text style={styles.settingLabel}>Reminder Settings</Text>
-                <View style={styles.reminderRow}>
-                  <Text style={styles.reminderLabel}>Enable Reminders</Text>
-                  <TouchableOpacity
-                    style={[
-                      styles.toggleButton,
-                      tempSettings?.is_reminder_enabled && styles.toggleButtonActive,
-                    ]}
-                    onPress={() => setTempSettings(prev => prev ? { ...prev, is_reminder_enabled: !prev.is_reminder_enabled } : null)}
-                  >
-                    <View style={[
-                      styles.toggleCircle,
-                      tempSettings?.is_reminder_enabled && styles.toggleCircleActive,
-                    ]} />
-                  </TouchableOpacity>
-                </View>
-                
-                {tempSettings?.is_reminder_enabled && (
+                                  <View style={styles.reminderRow}>
+                    <Text style={styles.reminderLabel}>Enable Reminders</Text>
+                    <TouchableOpacity
+                      style={[
+                        styles.toggleButton,
+                        tempSettings?.reminder_enabled && styles.toggleButtonActive,
+                      ]}
+                      onPress={() => setTempSettings(prev => prev ? { ...prev, reminder_enabled: !prev.reminder_enabled } : null)}
+                    >
+                      <View style={[
+                        styles.toggleCircle,
+                        tempSettings?.reminder_enabled && styles.toggleCircleActive,
+                      ]} />
+                    </TouchableOpacity>
+                  </View>
+                  
+                  {tempSettings?.reminder_enabled && (
                   <>
                     <Text style={styles.settingSubLabel}>Reminder Interval (minutes)</Text>
                     <TextInput

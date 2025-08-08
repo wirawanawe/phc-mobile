@@ -24,6 +24,7 @@ import GradientButton from "../components/GradientButton";
 import ModernIconButton from "../components/ModernIconButton";
 import ActivityDetectionService from "../services/ActivityDetectionService";
 import { useAuth } from "../contexts/AuthContext";
+import { useLanguage } from "../contexts/LanguageContext";
 import { useFocusEffect } from "@react-navigation/native";
 import api from "../services/api";
 import { withRetry } from "../utils/errorHandler";
@@ -34,6 +35,7 @@ import ActivityScreen from "./ActivityScreen";
 import FeaturedArticleCard from "../components/FeaturedArticleCard";
 import eventEmitter from "../utils/eventEmitter";
 import { getTimeBasedGreeting } from "../utils/greetingUtils";
+import dateChangeDetector from "../utils/dateChangeDetector";
 
 const { width } = Dimensions.get("window");
 const Tab = createBottomTabNavigator();
@@ -79,6 +81,7 @@ interface UserMission {
 const HomeTab = ({ navigation }: any) => {
   const theme = useTheme<CustomTheme>();
   const { user, isAuthenticated } = useAuth();
+  const { t } = useLanguage();
   const [missionStats, setMissionStats] = useState<MissionStats>({
     totalMissions: 0,
     completedMissions: 0,
@@ -101,6 +104,9 @@ const HomeTab = ({ navigation }: any) => {
   const [currentGreeting, setCurrentGreeting] = useState(getTimeBasedGreeting());
 
   useEffect(() => {
+    // Initialize date change detector
+    dateChangeDetector.initialize();
+    
     if (isAuthenticated) {
       loadMissionData();
       checkWellnessProgramStatus();
@@ -180,6 +186,23 @@ const HomeTab = ({ navigation }: any) => {
       }
     };
     
+    // Listen for daily reset events
+    const handleDailyReset = () => {
+      console.log('MainScreen - Daily reset detected, refreshing all data...');
+      setTodaySummary({
+        calories: 0,
+        servings: 0,
+        steps: 0,
+        exerciseMinutes: 0,
+        distance: 0,
+      });
+      setActivityData({ steps: 0, distance: 0 });
+      if (isAuthenticated) {
+        loadMissionData();
+        checkWellnessProgramStatus();
+      }
+    };
+    
     // Add event listeners
     eventEmitter.on('dataRefresh', handleDataRefresh);
     eventEmitter.on('mealLogged', handleMealLogged);
@@ -187,6 +210,7 @@ const HomeTab = ({ navigation }: any) => {
     eventEmitter.on('fitnessLogged', handleFitnessLogged);
     eventEmitter.on('sleepLogged', handleSleepLogged);
     eventEmitter.on('moodLogged', handleMoodLogged);
+    eventEmitter.on('dailyReset', handleDailyReset);
     
     return () => {
       clearInterval(activityInterval);
@@ -198,6 +222,7 @@ const HomeTab = ({ navigation }: any) => {
       eventEmitter.off('fitnessLogged', handleFitnessLogged);
       eventEmitter.off('sleepLogged', handleSleepLogged);
       eventEmitter.off('moodLogged', handleMoodLogged);
+      eventEmitter.off('dailyReset', handleDailyReset);
     };
   }, [isAuthenticated]);
 
@@ -240,18 +265,18 @@ const HomeTab = ({ navigation }: any) => {
         const summaryData = todaySummaryResponse.data;
         console.log('MainScreen - Today summary data received:', summaryData);
         setTodaySummary({
-          calories: summaryData.meal?.calories || summaryData.calories || 0,
-          servings: summaryData.meal?.meal_count || summaryData.servings || 0,
-          steps: summaryData.fitness?.steps || summaryData.steps || 0,
-          exerciseMinutes: summaryData.fitness?.exercise_minutes || summaryData.exercise_minutes || 0,
-          distance: summaryData.fitness?.distance_km || 0,
+          calories: parseFloat(summaryData.meal?.calories) || parseFloat(summaryData.calories) || 0,
+          servings: parseInt(summaryData.meal?.meal_count) || parseInt(summaryData.servings) || 0,
+          steps: parseInt(summaryData.fitness?.steps) || parseInt(summaryData.steps) || 0,
+          exerciseMinutes: parseInt(summaryData.fitness?.exercise_minutes) || parseInt(summaryData.exercise_minutes) || 0,
+          distance: parseFloat(summaryData.fitness?.distance_km) || 0,
         });
         console.log('MainScreen - Mapped today summary:', {
-          calories: summaryData.meal?.calories || summaryData.calories || 0,
-          servings: summaryData.meal?.meal_count || summaryData.servings || 0,
-          steps: summaryData.fitness?.steps || summaryData.steps || 0,
-          exerciseMinutes: summaryData.fitness?.exercise_minutes || summaryData.exercise_minutes || 0,
-          distance: summaryData.fitness?.distance_km || 0,
+          calories: parseFloat(summaryData.meal?.calories) || parseFloat(summaryData.calories) || 0,
+          servings: parseInt(summaryData.meal?.meal_count) || parseInt(summaryData.servings) || 0,
+          steps: parseInt(summaryData.fitness?.steps) || parseInt(summaryData.steps) || 0,
+          exerciseMinutes: parseInt(summaryData.fitness?.exercise_minutes) || parseInt(summaryData.exercise_minutes) || 0,
+          distance: parseFloat(summaryData.fitness?.distance_km) || 0,
         });
       } else {
         console.warn('MainScreen - Failed to load today summary:', todaySummaryResponse);
@@ -712,9 +737,14 @@ const HomeTab = ({ navigation }: any) => {
                     <Icon name="account-plus" size={28} color="#FFFFFF" />
                   </View>
                   <View style={styles.welcomeTextContainer}>
-                    <Text style={styles.welcomeCardTitle}>Mulai Perjalanan Kesehatan Anda</Text>
+                    <Text style={styles.welcomeCardTitle}>
+                      {t("language.language") === "en" ? "Start Your Health Journey" : "Mulai Perjalanan Kesehatan Anda"}
+                    </Text>
                     <Text style={styles.welcomeCardSubtitle}>
-                      Login atau daftar untuk akses fitur lengkap wellness program
+                      {t("language.language") === "en" 
+                        ? "Login or register to access complete wellness program features"
+                        : "Login atau daftar untuk akses fitur lengkap wellness program"
+                      }
                     </Text>
                   </View>
                 </View>
@@ -787,9 +817,14 @@ const HomeTab = ({ navigation }: any) => {
                     <Icon name="hospital-building" size={28} color="#FFFFFF" />
                   </View>
                   <View style={styles.clinicsTextContainer}>
-                    <Text style={styles.clinicsCardTitle}>Clinics Booking</Text>
+                    <Text style={styles.clinicsCardTitle}>
+                      {t("language.language") === "en" ? "Clinics Booking" : "Booking Klinik"}
+                    </Text>
                     <Text style={styles.clinicsCardSubtitle}>
-                      Booking konsultasi dengan dokter dan layanan kesehatan
+                      {t("language.language") === "en"
+                        ? "Book consultations with doctors and health services"
+                        : "Booking konsultasi dengan dokter dan layanan kesehatan"
+                      }
                     </Text>
                   </View>
                 </View>
@@ -1248,6 +1283,7 @@ const ConsultationTab = ({ navigation }: any) => {
 // Main Screen with Tabs
 const MainScreen = ({ navigation }: any) => {
   const theme = useTheme<CustomTheme>();
+  const { t } = useLanguage();
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -1297,12 +1333,12 @@ const MainScreen = ({ navigation }: any) => {
         <Tab.Screen
           name="HOME"
           component={HomeTab}
-          options={{ tabBarLabel: "HOME" }}
+          options={{ tabBarLabel: t("nav.home") }}
         />
         <Tab.Screen
           name="ACTIVITY"
           component={ActivityTab}
-          options={{ tabBarLabel: "ACTIVITY" }}
+          options={{ tabBarLabel: t("nav.wellness") }}
         />
         <Tab.Screen
           name="DAILY_MISSION"
@@ -1338,12 +1374,12 @@ const MainScreen = ({ navigation }: any) => {
         <Tab.Screen
           name="HEALTH"
           component={DoctorTab}
-          options={{ tabBarLabel: "DOCTOR" }}
+          options={{ tabBarLabel: t("nav.clinics") }}
         />
         <Tab.Screen
           name="CONSULTATION"
           component={ConsultationTab}
-          options={{ tabBarLabel: "KONSULTASI" }}
+          options={{ tabBarLabel: t("nav.news") }}
         />
       </Tab.Navigator>
     </SafeAreaView>

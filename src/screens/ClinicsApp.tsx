@@ -18,6 +18,7 @@ import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import Icon from "react-native-vector-icons/MaterialCommunityIcons";
 import { LinearGradient } from "expo-linear-gradient";
 import { CustomTheme } from "../theme/theme";
+import { useLanguage } from "../contexts/LanguageContext";
 import apiService from "../services/api";
 import { handleError } from "../utils/errorHandler";
 
@@ -27,6 +28,7 @@ const Tab = createBottomTabNavigator();
 // Home Tab Component
 const HomeTab = ({ navigation }: any) => {
   const theme = useTheme<CustomTheme>();
+  const { t } = useLanguage();
   const [clinics, setClinics] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -91,13 +93,15 @@ const HomeTab = ({ navigation }: any) => {
               textStyle={{ color: "#FFFFFF", fontSize: 12 }}
               style={{ backgroundColor: "#10B981" }}
             >
-              Buka
+              {t("language.language") === "en" ? "Open" : "Buka"}
             </Chip>
           </View>
         </View>
         
         <View style={styles.clinicServices}>
-          <Text style={styles.servicesTitle}>Layanan Tersedia:</Text>
+          <Text style={styles.servicesTitle}>
+            {t("language.language") === "en" ? "Available Services:" : "Layanan Tersedia:"}
+          </Text>
           <View style={styles.serviceChips}>
             {item.services?.slice(0, 3).map((service: any, index: number) => (
               <Chip
@@ -524,6 +528,7 @@ const HistoryTab = ({ navigation, route }: any) => {
 // Main Clinics App Component
 const ClinicsApp = ({ navigation, route }: any) => {
   const theme = useTheme<CustomTheme>();
+  const { t } = useLanguage();
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -560,12 +565,12 @@ const ClinicsApp = ({ navigation, route }: any) => {
         <Tab.Screen
           name="HOME"
           component={HomeTab}
-          options={{ tabBarLabel: "Beranda" }}
+          options={{ tabBarLabel: t("nav.home") }}
         />
         <Tab.Screen
           name="HISTORY"
           component={HistoryTab}
-          options={{ tabBarLabel: "Riwayat" }}
+          options={{ tabBarLabel: t("nav.history") }}
           initialParams={route.params}
         />
       </Tab.Navigator>

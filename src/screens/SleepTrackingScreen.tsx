@@ -17,6 +17,8 @@ import { CustomTheme } from "../theme/theme";
 import { useAuth } from "../contexts/AuthContext";
 import apiService from "../services/api";
 import eventEmitter from "../utils/eventEmitter";
+import dateChangeDetector from "../utils/dateChangeDetector";
+import { safeGoBack } from "../utils/safeNavigation";
 
 const { width } = Dimensions.get("window");
 
@@ -90,7 +92,28 @@ const SleepTrackingScreen = ({ navigation }: any) => {
   ];
 
   useEffect(() => {
+    // Initialize date change detector
+    dateChangeDetector.initialize();
+    
     fetchSleepData();
+    
+    // Listen for daily reset events
+    const handleDailyReset = () => {
+      console.log('SleepTrackingScreen - Daily reset detected, refreshing sleep data...');
+      setSelectedSleepTime("22:30");
+      setSelectedWakeTime("07:00");
+      setSelectedSleepQuality("good");
+      setTotalSleepHours("0");
+      fetchSleepData();
+    };
+    
+    // Add event listeners
+    eventEmitter.on('dailyReset', handleDailyReset);
+    
+    return () => {
+      // Remove event listeners
+      eventEmitter.off('dailyReset', handleDailyReset);
+    };
   }, []);
 
   const fetchSleepData = async () => {
@@ -359,7 +382,7 @@ const SleepTrackingScreen = ({ navigation }: any) => {
             {
               text: "OK",
               onPress: () => {
-                navigation.goBack();
+                safeGoBack(navigation);
               },
             },
           ]

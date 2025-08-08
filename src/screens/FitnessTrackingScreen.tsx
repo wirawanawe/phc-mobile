@@ -18,6 +18,8 @@ import { useAuth } from "../contexts/AuthContext";
 import api from "../services/api";
 import { handleError, handleAuthError } from "../utils/errorHandler";
 import eventEmitter from "../utils/eventEmitter";
+import dateChangeDetector from "../utils/dateChangeDetector";
+import { safeGoBack } from "../utils/safeNavigation";
 
 const FitnessTrackingScreen = ({ navigation }: any) => {
   const theme = useTheme<CustomTheme>();
@@ -32,9 +34,35 @@ const FitnessTrackingScreen = ({ navigation }: any) => {
   const [todayData, setTodayData] = useState(null);
 
   useEffect(() => {
+    // Initialize date change detector
+    dateChangeDetector.initialize();
+    
     if (isAuthenticated) {
       loadTodayData();
     }
+    
+    // Listen for daily reset events
+    const handleDailyReset = () => {
+      console.log('FitnessTrackingScreen - Daily reset detected, refreshing fitness data...');
+      setSteps("");
+      setExerciseMinutes("");
+      setCaloriesBurned("");
+      setDistance("");
+      setWorkoutType("");
+      setNotes("");
+      setTodayData(null);
+      if (isAuthenticated) {
+        loadTodayData();
+      }
+    };
+    
+    // Add event listeners
+    eventEmitter.on('dailyReset', handleDailyReset);
+    
+    return () => {
+      // Remove event listeners
+      eventEmitter.off('dailyReset', handleDailyReset);
+    };
   }, [isAuthenticated]);
 
   const loadTodayData = async () => {
@@ -92,7 +120,7 @@ const FitnessTrackingScreen = ({ navigation }: any) => {
             {
               text: "OK",
               onPress: () => {
-                navigation.goBack();
+                safeGoBack(navigation);
               },
             },
           ]
@@ -306,6 +334,19 @@ const FitnessTrackingScreen = ({ navigation }: any) => {
                 Start Real-time Tracking
               </Button>
 
+              {/* View History Button */}
+              <Button
+                mode="outlined"
+                onPress={() => navigation.navigate('ExerciseHistory')}
+                style={styles.historyButton}
+                labelStyle={styles.historyButtonText}
+                buttonColor="#3B82F6"
+                textColor="#ffffff"
+                icon="history"
+              >
+                View Exercise History
+              </Button>
+
               {/* Save Button */}
               <Button
                 mode="contained"
@@ -432,6 +473,18 @@ const styles = StyleSheet.create({
     borderWidth: 2,
   },
   realtimeButtonText: {
+    fontSize: 16,
+    fontWeight: "600",
+    paddingVertical: 8,
+  },
+  historyButton: {
+    borderRadius: 12,
+    paddingVertical: 4,
+    marginBottom: 12,
+    borderColor: "#3B82F6",
+    borderWidth: 2,
+  },
+  historyButtonText: {
     fontSize: 16,
     fontWeight: "600",
     paddingVertical: 8,

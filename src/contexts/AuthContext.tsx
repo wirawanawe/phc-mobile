@@ -80,6 +80,9 @@ const clearAuthData = async (): Promise<void> => {
 
 const validateToken = async (token: string): Promise<boolean> => {
   try {
+    console.log('🔍 Auth: Validating token...');
+    console.log('🔗 Auth: API URL:', apiService.baseURL);
+    
     // Test token validity by making a simple API call
     const response = await fetch(`${apiService.baseURL}/auth/me`, {
       method: 'GET',
@@ -89,9 +92,17 @@ const validateToken = async (token: string): Promise<boolean> => {
       },
     });
     
+    console.log('📡 Auth: Response status:', response.status);
+    console.log('📡 Auth: Response ok:', response.ok);
+    
     return response.ok;
   } catch (error) {
     console.error('❌ Auth: Token validation failed:', error);
+    console.error('❌ Auth: Error details:', {
+      message: error.message,
+      name: error.name,
+      stack: error.stack
+    });
     return false;
   }
 };

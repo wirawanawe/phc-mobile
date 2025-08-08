@@ -239,12 +239,21 @@ const WeeklySummaryCard: React.FC<WeeklySummaryCardProps> = ({ onMoreDetailsPres
             <View style={styles.wellnessHoverWrapper}>
               <ProgressRing
                 progress={wellnessScore}
-                size={80}
-                strokeWidth={8}
+                size={90}
+                strokeWidth={10}
                 strokeColor="#FCD34D"
-                backgroundColor="rgba(255, 255, 255, 0.3)"
+                backgroundColor="rgba(255, 255, 255, 0.2)"
                 animated={true}
+                duration={2000}
                 glowEffect={true}
+                pulseEffect={wellnessScore > 80}
+                showBackground={true}
+                showInnerGlow={true}
+                modernStyle={true}
+                gradient={{
+                  colors: ['#FCD34D', '#F59E0B', '#D97706'],
+                  id: 'weeklyWellnessGradient'
+                }}
               >
                 <Text style={styles.wellnessValue}>{wellnessScore}</Text>
                 <Text style={styles.wellnessLabel}>Skor{'\n'}Mingguan</Text>
@@ -259,10 +268,12 @@ const WeeklySummaryCard: React.FC<WeeklySummaryCardProps> = ({ onMoreDetailsPres
                   onMoreDetailsPress();
                 }
               }}
-              activeOpacity={0.8}
+              activeOpacity={0.7}
             >
-              <Text style={styles.moreDetailsText}>Lihat Detail</Text>
-              <Icon name="arrow-right" size={16} color="rgba(255, 255, 255, 0.8)" />
+              <View style={styles.moreDetailsButtonContent}>
+                <Text style={styles.moreDetailsText}>Lihat Detail</Text>
+                <Icon name="arrow-right" size={14} color="rgba(255, 255, 255, 0.9)" />
+              </View>
             </TouchableOpacity>
           </View>
         </View>
@@ -359,44 +370,67 @@ const styles = StyleSheet.create({
   wellnessContainer: {
     alignItems: 'center',
     justifyContent: 'center',
-    marginLeft: 8,
+    marginLeft: 12,
+    paddingVertical: 4,
   },
   wellnessHoverWrapper: {
-    backgroundColor: 'rgba(255, 255, 255, 0.15)',
-    borderRadius: 50,
-    padding: 6,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    borderRadius: 55,
+    padding: 8,
     shadowColor: '#FCD34D',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.4,
-    shadowRadius: 12,
-    elevation: 12,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.5,
+    shadowRadius: 16,
+    elevation: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
   },
   wellnessValue: {
-    fontSize: 24,
+    fontSize: 26,
     fontWeight: '900',
     color: '#FFFFFF',
     textAlign: 'center',
-    letterSpacing: -0.5,
+    letterSpacing: -0.8,
+    textShadowColor: 'rgba(0, 0, 0, 0.3)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
   },
   wellnessLabel: {
-    fontSize: 8,
-    fontWeight: '500',
-    color: 'rgba(255, 255, 255, 0.8)',
+    fontSize: 9,
+    fontWeight: '600',
+    color: 'rgba(255, 255, 255, 0.9)',
     textAlign: 'center',
-    marginTop: 2,
-    lineHeight: 10,
+    marginTop: 3,
+    lineHeight: 11,
+    textShadowColor: 'rgba(0, 0, 0, 0.2)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 1,
   },
   moreDetailsButton: {
+    marginTop: 14,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
+    shadowColor: 'rgba(0, 0, 0, 0.2)',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  moreDetailsButtonContent: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 12,
   },
   moreDetailsText: {
     fontSize: 12,
-    fontWeight: '600',
-    color: 'rgba(255, 255, 255, 0.8)',
-    marginRight: 4,
+    fontWeight: '700',
+    color: 'rgba(255, 255, 255, 0.95)',
+    marginRight: 6,
+    letterSpacing: 0.3,
   },
 });
 

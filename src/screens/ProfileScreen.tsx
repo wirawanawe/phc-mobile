@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -11,9 +11,20 @@ import {
 import { LinearGradient } from "expo-linear-gradient";
 import Icon from "react-native-vector-icons/MaterialCommunityIcons";
 import { useAuth } from "../contexts/AuthContext";
+import { useLanguage } from "../contexts/LanguageContext";
+import apiService from "../services/api";
+import LanguageSelector from "../components/LanguageSelector";
 
 const ProfileScreen = ({ navigation }: any) => {
   const { logout, user, isAuthenticated } = useAuth();
+  const { t } = useLanguage();
+  const [userStats, setUserStats] = useState({
+    daysActive: 0,
+    achievements: 0,
+    healthScore: 0,
+  });
+  const [loading, setLoading] = useState(true);
+  const [showLanguageSelector, setShowLanguageSelector] = useState(false);
 
   // Function to get initials from full name
   const getInitials = (name: string) => {
@@ -27,6 +38,66 @@ const ProfileScreen = ({ navigation }: any) => {
       ).toUpperCase();
     }
   };
+
+  // Fetch user statistics from database
+  useEffect(() => {
+    const fetchUserStats = async () => {
+      if (isAuthenticated && user) {
+        try {
+          setLoading(true);
+          
+          // Fetch wellness progress which includes user statistics
+          const wellnessResponse = await apiService.getWellnessProgress();
+          
+          if (wellnessResponse.success && wellnessResponse.progress) {
+            const progress = wellnessResponse.progress;
+            
+            // Calculate days active (days since user joined wellness program)
+            const joinDate = wellnessResponse.user?.wellness_join_date;
+            let daysActive = 0;
+            if (joinDate) {
+              const join = new Date(joinDate);
+              const today = new Date();
+              const diffTime = Math.abs(today.getTime() - join.getTime());
+              daysActive = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+            }
+            
+            // Calculate achievements (completed missions)
+            const achievements = progress.completedMissions || 0;
+            
+            // Calculate health score based on various factors
+            let healthScore = 0;
+            if (progress.completionRate > 0) {
+              healthScore = Math.min(100, Math.round(progress.completionRate));
+            } else {
+              // Fallback calculation based on wellness score
+              healthScore = Math.min(100, Math.round(progress.wellnessScore || 0));
+            }
+            
+            setUserStats({
+              daysActive: Math.max(daysActive, 1), // Minimum 1 day
+              achievements,
+              healthScore,
+            });
+          }
+        } catch (error) {
+          console.error("Error fetching user stats:", error);
+          // Use default values if API fails
+          setUserStats({
+            daysActive: 1,
+            achievements: 0,
+            healthScore: 0,
+          });
+        } finally {
+          setLoading(false);
+        }
+      } else {
+        setLoading(false);
+      }
+    };
+
+    fetchUserStats();
+  }, [isAuthenticated, user]);
 
   // Use data from AuthContext if authenticated, otherwise use default
   const userProfile =
@@ -51,72 +122,72 @@ const ProfileScreen = ({ navigation }: any) => {
   const profileMenuItems = [
     {
       id: "1",
-      title: "Personal Information",
-      subtitle: "Manage your personal details",
+      title: t("profile.personalInformation"),
+      subtitle: t("profile.personalInformationSubtitle"),
       icon: "account-edit",
       color: "#3B82F6",
       screenName: "PersonalInformation",
     },
     ...(user?.role === "admin" ? [{
       id: "admin",
-      title: "Admin Dashboard",
-      subtitle: "Manage system and users",
+      title: t("profile.adminDashboard"),
+      subtitle: t("profile.adminDashboardSubtitle"),
       icon: "view-dashboard",
       color: "#DC2626",
       screenName: "AdminDashboard",
     }] : []),
     {
       id: "2",
-      title: "Health Goals",
-      subtitle: "Set and track your health objectives",
+      title: t("profile.healthGoals"),
+      subtitle: t("profile.healthGoalsSubtitle"),
       icon: "target",
       color: "#10B981",
-      screenName: null,
+      screenName: "HealthGoals",
     },
     {
       id: "3",
-      title: "Medical History",
-      subtitle: "View your health records",
+      title: t("profile.medicalHistory"),
+      subtitle: t("profile.medicalHistorySubtitle"),
       icon: "medical-bag",
       color: "#F59E0B",
-      screenName: null,
+      screenName: "MedicalHistory",
     },
     {
       id: "4",
-      title: "Notifications",
-      subtitle: "Configure your notification preferences",
-      icon: "bell-outline",
-      color: "#8B5CF6",
-      screenName: null,
+      title: t("profile.privacySettings"),
+      subtitle: t("profile.privacySettingsSubtitle"),
+      icon: "shield-account",
+      color: "#EF4444",
+      screenName: "PrivacySettings",
     },
     {
       id: "5",
-      title: "Privacy Settings",
-      subtitle: "Manage your privacy and security",
-      icon: "shield-account",
-      color: "#EF4444",
-      screenName: null,
+      title: t("profile.helpSupport"),
+      subtitle: t("profile.helpSupportSubtitle"),
+      icon: "help-circle-outline",
+      color: "#06B6D4",
+      screenName: "HelpSupport",
     },
     {
       id: "6",
-      title: "Help & Support",
-      subtitle: "Get help and contact support",
-      icon: "help-circle-outline",
-      color: "#06B6D4",
-      screenName: null,
+      title: t("profile.aboutApp"),
+      subtitle: t("profile.aboutAppSubtitle"),
+      icon: "information-outline",
+      color: "#6366F1",
+      screenName: "AboutApp",
     },
     {
       id: "7",
-      title: "About App",
-      subtitle: "Learn more about Wellness WeCare",
-      icon: "information-outline",
-      color: "#6366F1",
-      screenName: null,
+      title: t("language.select"),
+      subtitle: "Change app language",
+      icon: "translate",
+      color: "#8B5CF6",
+      action: "language",
     },
     {
       id: "8",
-      title: "Logout",
-      subtitle: "Sign out of your account",
+      title: t("profile.logout"),
+      subtitle: t("profile.logoutSubtitle"),
       icon: "logout",
       color: "#6B7280",
       screenName: "Welcome",
@@ -124,14 +195,14 @@ const ProfileScreen = ({ navigation }: any) => {
   ];
 
   const handleMenuPress = (item: any) => {
-    if (item.title === "Logout") {
-      Alert.alert("Logout", "Are you sure you want to logout?", [
+    if (item.title === t("profile.logout")) {
+      Alert.alert(t("alert.logoutTitle"), t("alert.logoutMessage"), [
         {
-          text: "Cancel",
+          text: t("common.cancel"),
           style: "cancel",
         },
         {
-          text: "Logout",
+          text: t("profile.logout"),
           style: "destructive",
           onPress: async () => {
             try {
@@ -140,21 +211,23 @@ const ProfileScreen = ({ navigation }: any) => {
               navigation.goBack();
               // Show success message
               Alert.alert(
-                "Logout Successful",
-                "You have been logged out successfully."
+                t("alert.logoutSuccess"),
+                t("alert.logoutSuccessMessage")
               );
             } catch (error) {
               console.error("Logout error:", error);
-              Alert.alert("Error", "Failed to logout. Please try again.");
+              Alert.alert(t("common.error"), t("alert.logoutErrorMessage"));
             }
           },
         },
       ]);
+    } else if (item.action === "language") {
+      setShowLanguageSelector(true);
     } else if (item.screenName) {
       navigation.navigate(item.screenName);
     } else {
       Alert.alert("Coming Soon", `${item.title} feature is coming soon!`, [
-        { text: "OK" },
+        { text: t("common.ok") },
       ]);
     }
   };
@@ -191,14 +264,14 @@ const ProfileScreen = ({ navigation }: any) => {
                 <Text style={styles.userName}>{userProfile.name}</Text>
                 <Text style={styles.userEmail}>{userProfile.email}</Text>
                 <Text style={styles.memberSince}>
-                  Member since {userProfile.memberSince}
+                  {t("profile.memberSince")} {userProfile.memberSince}
                 </Text>
               </View>
             </View>
 
             <View style={styles.pointsContainer}>
               <Icon name="star" size={18} color="#F59E0B" />
-              <Text style={styles.pointsText}>{userProfile.points} points</Text>
+              <Text style={styles.pointsText}>{userProfile.points} {t("profile.points")}</Text>
             </View>
           </LinearGradient>
         </View>
@@ -209,28 +282,34 @@ const ProfileScreen = ({ navigation }: any) => {
             <View style={[styles.statIcon, { backgroundColor: "#10B98120" }]}>
               <Icon name="calendar-check" size={20} color="#10B981" />
             </View>
-            <Text style={styles.statValue}>45</Text>
-            <Text style={styles.statLabel}>Days Active</Text>
+            <Text style={styles.statValue}>
+              {loading ? "..." : userStats.daysActive}
+            </Text>
+            <Text style={styles.statLabel}>{t("profile.daysActive")}</Text>
           </View>
           <View style={styles.statCard}>
             <View style={[styles.statIcon, { backgroundColor: "#F59E0B20" }]}>
               <Icon name="trophy" size={20} color="#F59E0B" />
             </View>
-            <Text style={styles.statValue}>12</Text>
-            <Text style={styles.statLabel}>Achievements</Text>
+            <Text style={styles.statValue}>
+              {loading ? "..." : userStats.achievements}
+            </Text>
+            <Text style={styles.statLabel}>{t("profile.achievements")}</Text>
           </View>
           <View style={styles.statCard}>
             <View style={[styles.statIcon, { backgroundColor: "#EF444420" }]}>
               <Icon name="heart-pulse" size={20} color="#EF4444" />
             </View>
-            <Text style={styles.statValue}>85%</Text>
-            <Text style={styles.statLabel}>Health Score</Text>
+            <Text style={styles.statValue}>
+              {loading ? "..." : `${userStats.healthScore}%`}
+            </Text>
+            <Text style={styles.statLabel}>{t("profile.healthScore")}</Text>
           </View>
         </View>
 
         {/* Menu Items */}
         <View style={styles.menuContainer}>
-          <Text style={styles.sectionTitle}>Settings</Text>
+          <Text style={styles.sectionTitle}>{t("profile.settings")}</Text>
           {profileMenuItems
             .filter((item) => {
               // Only show logout if user is authenticated
@@ -277,9 +356,9 @@ const ProfileScreen = ({ navigation }: any) => {
               </View>
               <View style={styles.menuContent}>
                 <View style={styles.menuTextContainer}>
-                  <Text style={styles.menuTitle}>Login</Text>
+                  <Text style={styles.menuTitle}>{t("profile.login")}</Text>
                   <Text style={styles.menuSubtitle}>
-                    Sign in to your account
+                    {t("profile.loginSubtitle")}
                   </Text>
                 </View>
                 <Icon name="chevron-right" size={20} color="#9CA3AF" />
@@ -290,9 +369,15 @@ const ProfileScreen = ({ navigation }: any) => {
 
         {/* App Version */}
         <View style={styles.versionContainer}>
-          <Text style={styles.versionText}>Version 1.0.0</Text>
+          <Text style={styles.versionText}>{t("profile.version")}</Text>
         </View>
       </ScrollView>
+
+      {/* Language Selector Modal */}
+      <LanguageSelector
+        visible={showLanguageSelector}
+        onClose={() => setShowLanguageSelector(false)}
+      />
     </SafeAreaView>
   );
 };

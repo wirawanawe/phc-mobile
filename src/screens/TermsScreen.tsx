@@ -12,11 +12,13 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { LinearGradient } from "expo-linear-gradient";
 import LogoPutih from "../components/LogoPutih";
+import { useLanguage } from "../contexts/LanguageContext";
 
 const { width } = Dimensions.get("window");
 
 const TermsScreen = ({ navigation, onTermsAccepted }: any) => {
   const theme = useTheme();
+  const { t } = useLanguage();
   const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [acceptedPrivacy, setAcceptedPrivacy] = useState(false);
   const [acceptedDataConsent, setAcceptedDataConsent] = useState(false);
@@ -38,7 +40,7 @@ const TermsScreen = ({ navigation, onTermsAccepted }: any) => {
           navigation.replace("Main");
         }
       } catch (error) {
-        Alert.alert("Error", "Failed to accept terms. Please try again.");
+        Alert.alert(t("error"), t("terms.acceptError"));
       } finally {
         setIsProcessing(false);
       }
@@ -62,9 +64,9 @@ const TermsScreen = ({ navigation, onTermsAccepted }: any) => {
               <LogoPutih size="medium" showText={true} />
             </View>
             <View style={styles.headerText}>
-              <Text style={styles.title}>Terms & Conditions</Text>
+              <Text style={styles.title}>{t("terms.title")}</Text>
               <Text style={styles.subtitle}>
-                Baca dan setujui ketentuan kami sebelum menggunakan aplikasi
+                {t("terms.subtitle")}
               </Text>
             </View>
           </View>
@@ -83,12 +85,10 @@ const TermsScreen = ({ navigation, onTermsAccepted }: any) => {
                     <View style={styles.cardIcon}>
                       <Text style={styles.iconText}>📋</Text>
                     </View>
-                    <Text style={styles.cardTitle}>Selamat Datang di PHC</Text>
+                    <Text style={styles.cardTitle}>{t("terms.welcome.title")}</Text>
                   </View>
                   <Text style={styles.cardDescription}>
-                    Platform kesehatan dan kebugaran terdepan untuk karyawan
-                    Indonesia. Dengan menggunakan aplikasi ini, Anda menyetujui
-                    ketentuan dan kondisi berikut.
+                    {t("terms.welcome.description")}
                   </Text>
                 </Card.Content>
               </Card>
@@ -99,15 +99,10 @@ const TermsScreen = ({ navigation, onTermsAccepted }: any) => {
                     <View style={styles.cardIcon}>
                       <Text style={styles.iconText}>🔒</Text>
                     </View>
-                    <Text style={styles.cardTitle}>
-                      Privasi & Keamanan Data
-                    </Text>
+                    <Text style={styles.cardTitle}>{t("terms.privacy.title")}</Text>
                   </View>
                   <Text style={styles.cardDescription}>
-                    Kami berkomitmen melindungi privasi dan keamanan informasi
-                    pribadi dan kesehatan Anda. Semua data dienkripsi dan
-                    disimpan dengan aman sesuai regulasi perlindungan data
-                    kesehatan.
+                    {t("terms.privacy.description")}
                   </Text>
                 </Card.Content>
               </Card>
@@ -118,141 +113,70 @@ const TermsScreen = ({ navigation, onTermsAccepted }: any) => {
                     <View style={styles.cardIcon}>
                       <Text style={styles.iconText}>📊</Text>
                     </View>
-                    <Text style={styles.cardTitle}>
-                      Konsentrasi Data Kesehatan
-                    </Text>
+                    <Text style={styles.cardTitle}>{t("terms.data.title")}</Text>
                   </View>
                   <Text style={styles.cardDescription}>
-                    Dengan menggunakan aplikasi ini, Anda menyetujui untuk
-                    berbagi data asesmen kesehatan, aktivitas kebugaran, dan
-                    informasi wellness dengan platform kami untuk rekomendasi
-                    kesehatan yang dipersonalisasi.
-                  </Text>
-                </Card.Content>
-              </Card>
-
-              <Card style={styles.termsCard}>
-                <Card.Content style={styles.cardContent}>
-                  <View style={styles.cardHeader}>
-                    <View style={styles.cardIcon}>
-                      <Text style={styles.iconText}>🎯</Text>
-                    </View>
-                    <Text style={styles.cardTitle}>Penggunaan Data</Text>
-                  </View>
-                  <Text style={styles.cardDescription}>
-                    Data kesehatan Anda akan digunakan untuk:
-                    {"\n"}• Asesmen kesehatan dan rekomendasi yang
-                    dipersonalisasi
-                    {"\n"}• Pelacakan kemajuan dan analitik
-                    {"\n"}• Penyampaian konten edukasi
-                    {"\n"}• Koordinasi program wellness
-                    {"\n"}• Penelitian dan peningkatan layanan kesehatan
-                  </Text>
-                </Card.Content>
-              </Card>
-
-              <Card style={styles.termsCard}>
-                <Card.Content style={styles.cardContent}>
-                  <View style={styles.cardHeader}>
-                    <View style={styles.cardIcon}>
-                      <Text style={styles.iconText}>⚖️</Text>
-                    </View>
-                    <Text style={styles.cardTitle}>Hak Anda</Text>
-                  </View>
-                  <Text style={styles.cardDescription}>
-                    Anda memiliki hak untuk:
-                    {"\n"}• Mengakses data kesehatan pribadi Anda
-                    {"\n"}• Meminta koreksi atau penghapusan data
-                    {"\n"}• Menolak berbagi data
-                    {"\n"}• Mencabut konsentrasi kapan saja
-                  </Text>
-                </Card.Content>
-              </Card>
-
-              <Card style={styles.termsCard}>
-                <Card.Content style={styles.cardContent}>
-                  <View style={styles.cardHeader}>
-                    <View style={styles.cardIcon}>
-                      <Text style={styles.iconText}>⚠️</Text>
-                    </View>
-                    <Text style={styles.cardTitle}>Pernyataan Medis</Text>
-                  </View>
-                  <Text style={styles.cardDescription}>
-                    Aplikasi ini bukan pengganti saran medis profesional,
-                    diagnosis, atau perawatan. Selalu konsultasikan dengan
-                    tenaga kesehatan yang berkualifikasi untuk masalah medis.
+                    {t("terms.data.description")}
                   </Text>
                 </Card.Content>
               </Card>
             </View>
 
-            {/* Consent Section */}
-            <View style={styles.consentContainer}>
-              <Text style={styles.consentTitle}>Persetujuan Anda</Text>
+            {/* Checkboxes */}
+            <View style={styles.checkboxContainer}>
+              <View style={styles.checkboxItem}>
+                <Checkbox
+                  status={acceptedTerms ? "checked" : "unchecked"}
+                  onPress={() => setAcceptedTerms(!acceptedTerms)}
+                  color="#D32F2F"
+                />
+                <Text style={styles.checkboxText}>
+                  {t("terms.acceptTerms")}
+                </Text>
+              </View>
 
-              <View style={styles.checkboxContainer}>
-                <View style={styles.checkboxRow}>
-                  <Checkbox
-                    status={acceptedTerms ? "checked" : "unchecked"}
-                    onPress={() => setAcceptedTerms(!acceptedTerms)}
-                    color="#FFFFFF"
-                  />
-                  <Text style={styles.checkboxLabel}>
-                    Saya menyetujui Terms and Conditions
-                  </Text>
-                </View>
+              <View style={styles.checkboxItem}>
+                <Checkbox
+                  status={acceptedPrivacy ? "checked" : "unchecked"}
+                  onPress={() => setAcceptedPrivacy(!acceptedPrivacy)}
+                  color="#D32F2F"
+                />
+                <Text style={styles.checkboxText}>
+                  {t("terms.acceptPrivacy")}
+                </Text>
+              </View>
 
-                <View style={styles.checkboxRow}>
-                  <Checkbox
-                    status={acceptedPrivacy ? "checked" : "unchecked"}
-                    onPress={() => setAcceptedPrivacy(!acceptedPrivacy)}
-                    color="#FFFFFF"
-                  />
-                  <Text style={styles.checkboxLabel}>
-                    Saya setuju dengan Kebijakan Privasi
-                  </Text>
-                </View>
-
-                <View style={styles.checkboxRow}>
-                  <Checkbox
-                    status={acceptedDataConsent ? "checked" : "unchecked"}
-                    onPress={() => setAcceptedDataConsent(!acceptedDataConsent)}
-                    color="#FFFFFF"
-                  />
-                  <Text style={styles.checkboxLabel}>
-                    Saya setuju berbagi data kesehatan untuk layanan yang
-                    dipersonalisasi
-                  </Text>
-                </View>
+              <View style={styles.checkboxItem}>
+                <Checkbox
+                  status={acceptedDataConsent ? "checked" : "unchecked"}
+                  onPress={() => setAcceptedDataConsent(!acceptedDataConsent)}
+                  color="#D32F2F"
+                />
+                <Text style={styles.checkboxText}>
+                  {t("terms.acceptDataConsent")}
+                </Text>
               </View>
             </View>
-          </ScrollView>
 
-          {/* Action Button */}
-          <View style={styles.buttonContainer}>
-            <Button
-              mode="contained"
-              onPress={handleAccept}
-              disabled={!allAccepted || isProcessing}
-              loading={isProcessing}
-              style={[
-                styles.acceptButton,
-                {
-                  backgroundColor: allAccepted && !isProcessing
-                    ? "#FFFFFF"
-                    : "rgba(255,255,255,0.3)",
-                },
-              ]}
-              labelStyle={[
-                styles.buttonLabel,
-                {
-                  color: allAccepted && !isProcessing ? "#D32F2F" : "#FFFFFF",
-                },
-              ]}
-            >
-              {isProcessing ? "Memproses..." : "Terima & Lanjutkan"}
-            </Button>
-          </View>
+            {/* Accept Button */}
+            <View style={styles.buttonContainer}>
+              <Button
+                mode="contained"
+                onPress={handleAccept}
+                disabled={!allAccepted || isProcessing}
+                loading={isProcessing}
+                style={[
+                  styles.acceptButton,
+                  {
+                    backgroundColor: allAccepted ? "#D32F2F" : "#9E9E9E",
+                  },
+                ]}
+                labelStyle={styles.acceptButtonLabel}
+              >
+                {isProcessing ? t("terms.processing") : t("terms.accept")}
+              </Button>
+            </View>
+          </ScrollView>
         </SafeAreaView>
       </LinearGradient>
     </View>
@@ -384,6 +308,23 @@ const styles = StyleSheet.create({
   buttonLabel: {
     fontSize: 18,
     fontWeight: "bold",
+  },
+  checkboxItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 16,
+  },
+  checkboxText: {
+    fontSize: 16,
+    color: "#FFFFFF",
+    marginLeft: 12,
+    flex: 1,
+    lineHeight: 22,
+  },
+  acceptButtonLabel: {
+    fontSize: 18,
+    fontWeight: "bold",
+    color: "#FFFFFF",
   },
 });
 

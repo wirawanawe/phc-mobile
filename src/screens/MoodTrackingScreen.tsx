@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   StyleSheet,
@@ -17,6 +17,8 @@ import { CustomTheme } from "../theme/theme";
 import { useAuth } from "../contexts/AuthContext";
 import apiService from "../services/api";
 import eventEmitter from "../utils/eventEmitter";
+import dateChangeDetector from "../utils/dateChangeDetector";
+import { safeGoBack } from "../utils/safeNavigation";
 
 const { width } = Dimensions.get("window");
 
@@ -28,6 +30,9 @@ const MoodTrackingScreen = ({ navigation }: any) => {
     null
   );
   const [isLoading, setIsLoading] = useState(false);
+  const [isLoadingData, setIsLoadingData] = useState(true);
+  const [existingMood, setExistingMood] = useState<any>(null);
+  const [isEditMode, setIsEditMode] = useState(false);
 
   const moods = [
     { id: "very_happy", emoji: "😊", label: "Very Happy", color: "#10B981" },
@@ -80,6 +85,58 @@ const MoodTrackingScreen = ({ navigation }: any) => {
     },
   ];
 
+  useEffect(() => {
+    // Initialize date change detector
+    dateChangeDetector.initialize();
+    
+    if (isAuthenticated) {
+      loadTodayMood();
+    }
+    
+    // Listen for daily reset events
+    const handleDailyReset = () => {
+      console.log('MoodTrackingScreen - Daily reset detected, refreshing mood data...');
+      setSelectedMood(null);
+      setSelectedStressLevel(null);
+      setExistingMood(null);
+      setIsEditMode(false);
+      if (isAuthenticated) {
+        loadTodayMood();
+      }
+    };
+    
+    // Add event listeners
+    eventEmitter.on('dailyReset', handleDailyReset);
+    
+    return () => {
+      // Remove event listeners
+      eventEmitter.off('dailyReset', handleDailyReset);
+    };
+  }, [isAuthenticated]);
+
+  const loadTodayMood = async () => {
+    try {
+      setIsLoadingData(true);
+      const response = await apiService.getTodayMood();
+      
+      if (response.success && response.data) {
+        setExistingMood(response.data);
+        setSelectedMood(response.data.mood_level);
+        setSelectedStressLevel(response.data.energy_level ? 
+          (response.data.energy_level === 'high' ? 1 : 
+           response.data.energy_level === 'moderate' ? 3 : 5) : null);
+        setIsEditMode(true);
+      } else {
+        setIsEditMode(false);
+      }
+    } catch (error) {
+      console.error("Error loading today's mood:", error);
+      setIsEditMode(false);
+    } finally {
+      setIsLoadingData(false);
+    }
+  };
+
   const handleMoodSelect = (moodId: string) => {
     setSelectedMood(moodId);
   };
@@ -111,17 +168,22 @@ const MoodTrackingScreen = ({ navigation }: any) => {
         notes: `Mood: ${moods.find(m => m.id === selectedMood)?.label}, Stress Level: ${selectedStressLevel || 'Not specified'}`
       };
 
-      const response = await apiService.createMoodEntry(moodData);
+      let response;
+      if (isEditMode && existingMood) {
+        response = await apiService.updateMoodEntry(existingMood.id, moodData);
+      } else {
+        response = await apiService.createMoodEntry(moodData);
+      }
 
       if (response.success) {
         Alert.alert(
           "Success",
-          "Mood data saved successfully!",
+          isEditMode ? "Mood updated successfully!" : "Mood data saved successfully!",
           [
             {
               text: "OK",
               onPress: () => {
-                navigation.goBack();
+                safeGoBack(navigation);
               },
             },
           ]
@@ -140,6 +202,20 @@ const MoodTrackingScreen = ({ navigation }: any) => {
     }
   };
 
+  if (isLoadingData) {
+    return (
+      <LinearGradient colors={["#F8FAFF", "#E8EAFF"]} style={styles.container}>
+        <StatusBar barStyle="dark-content" backgroundColor="#F8FAFF" />
+        <SafeAreaView style={styles.safeArea}>
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color="#E22345" />
+            <Text style={styles.loadingText}>Loading mood data...</Text>
+          </View>
+        </SafeAreaView>
+      </LinearGradient>
+    );
+  }
+
   return (
     <LinearGradient colors={["#F8FAFF", "#E8EAFF"]} style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#F8FAFF" />
@@ -149,7 +225,7 @@ const MoodTrackingScreen = ({ navigation }: any) => {
           <View style={styles.header}>
             <TouchableOpacity
               style={styles.backButton}
-              onPress={() => navigation.goBack()}
+              onPress={() => safeGoBack(navigation)}
             >
               <Icon name="arrow-left" size={24} color="#1F2937" />
             </TouchableOpacity>
@@ -157,9 +233,23 @@ const MoodTrackingScreen = ({ navigation }: any) => {
             <View style={styles.headerRight} />
           </View>
 
+          {/* Today's Mood Status */}
+          {existingMood && (
+            <View style={styles.statusContainer}>
+              <View style={styles.statusCard}>
+                <Icon name="calendar-check" size={20} color="#10B981" />
+                <Text style={styles.statusText}>
+                  {isEditMode ? "Today's mood recorded" : "Mood already logged today"}
+                </Text>
+              </View>
+            </View>
+          )}
+
           {/* How are you feeling today? */}
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>How are you feeling today?</Text>
+            <Text style={styles.sectionTitle}>
+              {isEditMode ? "Update your mood" : "How are you feeling today?"}
+            </Text>
             <View style={styles.moodGrid}>
               {moods.map((mood) => (
                 <TouchableOpacity
@@ -257,7 +347,9 @@ const MoodTrackingScreen = ({ navigation }: any) => {
                     <Text style={styles.saveButtonText}>Saving...</Text>
                   </View>
                 ) : (
-                  <Text style={styles.saveButtonText}>Save Mood</Text>
+                  <Text style={styles.saveButtonText}>
+                    {isEditMode ? "Update Mood" : "Save Mood"}
+                  </Text>
                 )}
               </LinearGradient>
             </TouchableOpacity>
@@ -442,9 +534,32 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
   },
   loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  loadingText: {
+    marginTop: 10,
+    color: "#1F2937",
+    fontSize: 16,
+  },
+  statusContainer: {
+    paddingHorizontal: 20,
+    marginBottom: 20,
+  },
+  statusCard: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
+    backgroundColor: "#D1FAE5",
+    borderRadius: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+  },
+  statusText: {
+    marginLeft: 8,
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#065F46",
   },
 });
 

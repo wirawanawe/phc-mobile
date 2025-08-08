@@ -228,7 +228,7 @@ const WellnessDetailsScreen = ({ navigation }: any) => {
         api.getMyMissions(),
       ]);
 
-      console.log("=== WellnessDetailsScreen Debug ===");
+  
       console.log("Wellness Stats Response:", statsResponse);
       console.log("Mood Response:", moodResponse);
       console.log("Mission Stats Response:", missionStatsResponse);
@@ -434,7 +434,7 @@ const WellnessDetailsScreen = ({ navigation }: any) => {
     const missionStreak = calculateMissionStreak();
     const totalStreak = Math.max(wellnessStreak, missionStreak);
 
-    console.log("=== Wellness Metrics Debug ===");
+
     console.log("Wellness Stats:", wellnessStats);
     console.log("Mission Stats:", missionStats);
     console.log("User Missions:", userMissions);

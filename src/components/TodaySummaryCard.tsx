@@ -9,6 +9,7 @@ import ActivityDetectionService from '../services/ActivityDetectionService';
 import api from '../services/api';
 import { handleAuthError } from '../utils/errorHandler';
 import eventEmitter from '../utils/eventEmitter';
+import dateChangeDetector from '../utils/dateChangeDetector';
 
 const { width } = Dimensions.get('window');
 
@@ -42,41 +43,52 @@ const TodaySummaryCard: React.FC<TodaySummaryCardProps> = ({ onMoreDetailsPress,
   const isWellnessApp = !!date;
 
   useEffect(() => {
+    // Initialize date change detector
+    dateChangeDetector.initialize();
+    
     loadTodayData();
     
     // Listen for meal logged events to refresh data immediately
     const handleMealLogged = () => {
-      console.log('TodaySummaryCard - Meal logged event received, refreshing data...');
       loadTodayData();
     };
     
     // Listen for water logged events
     const handleWaterLogged = () => {
-      console.log('TodaySummaryCard - Water logged event received, refreshing data...');
       loadTodayData();
     };
     
     // Listen for fitness logged events
     const handleFitnessLogged = () => {
-      console.log('TodaySummaryCard - Fitness logged event received, refreshing data...');
       loadTodayData();
     };
     
     // Listen for sleep logged events
     const handleSleepLogged = () => {
-      console.log('TodaySummaryCard - Sleep logged event received, refreshing data...');
       loadTodayData();
     };
     
     // Listen for mood logged events
     const handleMoodLogged = () => {
-      console.log('TodaySummaryCard - Mood logged event received, refreshing data...');
       loadTodayData();
     };
     
     // Listen for general data refresh events
     const handleDataRefresh = () => {
-      console.log('TodaySummaryCard - Data refresh event received, refreshing data...');
+      loadTodayData();
+    };
+    
+    // Listen for daily reset events
+    const handleDailyReset = () => {
+      console.log('TodaySummaryCard - Daily reset detected, refreshing data...');
+      setMetrics({
+        calories: 0,
+        waterIntake: 0,
+        steps: 0,
+        exerciseMinutes: 0,
+        distance: 0,
+      });
+      setWellnessScore(54);
       loadTodayData();
     };
     
@@ -87,6 +99,7 @@ const TodaySummaryCard: React.FC<TodaySummaryCardProps> = ({ onMoreDetailsPress,
     eventEmitter.on('sleepLogged', handleSleepLogged);
     eventEmitter.on('moodLogged', handleMoodLogged);
     eventEmitter.on('dataRefresh', handleDataRefresh);
+    eventEmitter.on('dailyReset', handleDailyReset);
     
     if (!isWellnessApp) {
       // Hanya untuk MainScreen: auto-refresh dan date change detection
@@ -109,6 +122,7 @@ const TodaySummaryCard: React.FC<TodaySummaryCardProps> = ({ onMoreDetailsPress,
         eventEmitter.off('sleepLogged', handleSleepLogged);
         eventEmitter.off('moodLogged', handleMoodLogged);
         eventEmitter.off('dataRefresh', handleDataRefresh);
+        eventEmitter.off('dailyReset', handleDailyReset);
       };
     } else {
       return () => {
@@ -119,6 +133,7 @@ const TodaySummaryCard: React.FC<TodaySummaryCardProps> = ({ onMoreDetailsPress,
         eventEmitter.off('sleepLogged', handleSleepLogged);
         eventEmitter.off('moodLogged', handleMoodLogged);
         eventEmitter.off('dataRefresh', handleDataRefresh);
+        eventEmitter.off('dailyReset', handleDailyReset);
       };
     }
   }, [date, isWellnessApp]);
@@ -127,15 +142,11 @@ const TodaySummaryCard: React.FC<TodaySummaryCardProps> = ({ onMoreDetailsPress,
     try {
       setLoading(true);
       
-      console.log('TodaySummaryCard - Starting loadTodayData...');
-      
       // Ambil summary sesuai tanggal
       let todaySummaryResponse;
       if (date) {
-        console.log('TodaySummaryCard - Loading data for date:', date);
         todaySummaryResponse = await api.getSummaryByDate(date);
       } else {
-        console.log('TodaySummaryCard - Loading data for today');
         todaySummaryResponse = await api.getTodaySummary();
       }
       
@@ -156,7 +167,7 @@ const TodaySummaryCard: React.FC<TodaySummaryCardProps> = ({ onMoreDetailsPress,
         console.log('TodaySummaryCard - Meal data from summary:', mealData);
         
         if (mealData && (mealData.calories || mealData.total_calories)) {
-          calories = mealData.calories || mealData.total_calories || 0;
+          calories = parseFloat(mealData.calories) || parseFloat(mealData.total_calories) || 0;
           console.log('TodaySummaryCard - Calories from summary:', calories);
         } else {
           console.log('TodaySummaryCard - No meal data in summary, trying individual API');
@@ -239,7 +250,7 @@ const TodaySummaryCard: React.FC<TodaySummaryCardProps> = ({ onMoreDetailsPress,
         // Check multiple possible structures for water data
         const waterData = todaySummaryResponse.data.water || todaySummaryResponse.data.hydration || todaySummaryResponse.data;
         if (waterData && (waterData.total_ml || waterData.total_water_ml || waterData.total_intake)) {
-          waterIntake = waterData.total_ml || waterData.total_water_ml || waterData.total_intake || 0;
+          waterIntake = parseFloat(waterData.total_ml) || parseFloat(waterData.total_water_ml) || parseFloat(waterData.total_intake) || 0;
           console.log('TodaySummaryCard - Water intake from summary:', waterIntake);
         } else {
           console.log('TodaySummaryCard - No water data in summary, trying individual API');
@@ -311,8 +322,8 @@ const TodaySummaryCard: React.FC<TodaySummaryCardProps> = ({ onMoreDetailsPress,
         console.log('TodaySummaryCard - Fitness data from summary:', fitnessData);
         
         if (fitnessData && (fitnessData.exercise_minutes || fitnessData.duration_minutes || fitnessData.distance_km)) {
-          exerciseMinutes = fitnessData.exercise_minutes || fitnessData.duration_minutes || 0;
-          distance = fitnessData.distance_km || 0;
+          exerciseMinutes = parseInt(fitnessData.exercise_minutes) || parseInt(fitnessData.duration_minutes) || 0;
+          distance = parseFloat(fitnessData.distance_km) || 0;
           console.log('TodaySummaryCard - Fitness from summary:', { exerciseMinutes, distance });
         } else {
           console.log('TodaySummaryCard - No fitness data in summary, trying individual API');
@@ -397,7 +408,7 @@ const TodaySummaryCard: React.FC<TodaySummaryCardProps> = ({ onMoreDetailsPress,
         // Check multiple possible structures for steps data
         const fitnessData = todaySummaryResponse.data.fitness || todaySummaryResponse.data.exercise || todaySummaryResponse.data;
         if (fitnessData && fitnessData.steps) {
-          steps = fitnessData.steps || 0;
+          steps = parseInt(fitnessData.steps) || 0;
           console.log('TodaySummaryCard - Steps from backend:', steps);
         } else {
           // Fallback to local activity data (only for today)
@@ -583,7 +594,7 @@ const TodaySummaryCard: React.FC<TodaySummaryCardProps> = ({ onMoreDetailsPress,
     return (
       <View style={styles.container}>
         <LinearGradient
-          colors={['#9575CD', '#7E57C2', '#673AB7']}
+          colors={['#E53E3E', '#C53030', '#B91C1C']}
           style={styles.card}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
@@ -613,7 +624,7 @@ const TodaySummaryCard: React.FC<TodaySummaryCardProps> = ({ onMoreDetailsPress,
             <View style={styles.metricsContainer}>
               {metricsData.map((metric) => (
                 <View key={metric.id} style={styles.metricItem}>
-                  <View style={[styles.iconContainer, { backgroundColor: 'rgba(255, 255, 255, 0.2)' }]}>
+                  <View style={[styles.iconContainer, { backgroundColor: 'transparent' }]}>
                     <Icon name={metric.icon} size={16} color="#FFFFFF" />
                   </View>
                   <View style={styles.metricContent}>
@@ -638,7 +649,7 @@ const TodaySummaryCard: React.FC<TodaySummaryCardProps> = ({ onMoreDetailsPress,
   return (
     <View style={styles.container}>
       <LinearGradient
-        colors={['#9575CD', '#7E57C2', '#673AB7']}
+        colors={['#E53E3E', '#C53030', '#B91C1C']}
         style={styles.card}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
@@ -654,9 +665,9 @@ const TodaySummaryCard: React.FC<TodaySummaryCardProps> = ({ onMoreDetailsPress,
           <View style={styles.metricsContainer}>
             {metricsData.map((metric) => (
               <View key={metric.id} style={styles.metricItem}>
-                <View style={[styles.iconContainer, { backgroundColor: 'rgba(255, 255, 255, 0.2)' }]}>
-                  <Icon name={metric.icon} size={16} color="#FFFFFF" />
-                </View>
+                                  <View style={[styles.iconContainer, { backgroundColor: 'transparent' }]}>
+                    <Icon name={metric.icon} size={16} color="#FFFFFF" />
+                  </View>
                 <View style={styles.metricContent}>
                   <View style={styles.metricRow}>
                     <Text style={styles.metricValue}>
@@ -675,12 +686,18 @@ const TodaySummaryCard: React.FC<TodaySummaryCardProps> = ({ onMoreDetailsPress,
             <View style={styles.wellnessHoverWrapper}>
               <ProgressRing
                 progress={wellnessScore}
-                size={80}
-                strokeWidth={8}
-                strokeColor="#FFB347"
-                backgroundColor="rgba(255, 255, 255, 0.3)"
+                size={120}
+                strokeWidth={10}
+                backgroundColor="transparent"
                 animated={true}
-                glowEffect={true}
+                duration={2000}
+                showInnerGlow={true}
+                modernStyle={true}
+                gradient={{
+                  colors: ['#FF6B8A', '#FFB347', '#4ECDC4'],
+                  id: 'wellnessGradient'
+                }}
+                strokeColor="#FFB347"
               >
                 <Text style={styles.wellnessValue}>{wellnessScore}</Text>
                 <Text style={styles.wellnessLabel}>Skor{'\n'}Wellness</Text>
@@ -695,10 +712,12 @@ const TodaySummaryCard: React.FC<TodaySummaryCardProps> = ({ onMoreDetailsPress,
                   onMoreDetailsPress();
                 }
               }}
-              activeOpacity={0.8}
+              activeOpacity={0.7}
             >
-              <Text style={styles.moreDetailsText}>Lihat Detail</Text>
-              <Icon name="arrow-right" size={16} color="rgba(255, 255, 255, 0.8)" />
+              <View style={styles.moreDetailsButtonContent}>
+                <Text style={styles.moreDetailsText}>Lihat Detail</Text>
+                <Icon name="arrow-right" size={14} color="rgba(255, 255, 255, 0.9)" />
+              </View>
             </TouchableOpacity>
           </View>
         </View>
@@ -801,44 +820,65 @@ const styles = StyleSheet.create({
   wellnessContainer: {
     alignItems: 'center',
     justifyContent: 'center',
-    marginLeft: 8,
+    marginLeft: 12,
+    paddingVertical: 4,
   },
   wellnessHoverWrapper: {
-    backgroundColor: 'rgba(255, 255, 255, 0.15)',
-    borderRadius: 50,
-    padding: 6,
+    backgroundColor: 'transparent',
+    borderRadius: 55,
+    padding: 8,
     shadowColor: '#FFB347',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.4,
-    shadowRadius: 12,
-    elevation: 12,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.5,
+    shadowRadius: 16,
+    elevation: 16,
+    borderWidth: 0,
+    borderColor: 'transparent',
   },
   wellnessValue: {
-    fontSize: 24,
+    fontSize: 26,
     fontWeight: '900',
-    color: '#FFFFFF',
+    color: '#000000',
     textAlign: 'center',
-    letterSpacing: -0.5,
+    letterSpacing: -0.8,
+    textShadowColor: 'rgba(0, 0, 0, 0.3)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
   },
   wellnessLabel: {
-    fontSize: 8,
-    fontWeight: '500',
-    color: 'rgba(255, 255, 255, 0.8)',
+    fontSize: 9,
+    fontWeight: '600',
+    color: '#000000',
     textAlign: 'center',
-    marginTop: 2,
-    lineHeight: 10,
+    marginTop: 3,
+    lineHeight: 11,
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 1,
   },
   moreDetailsButton: {
+    marginTop: 5,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    backgroundColor: 'transparent',
+    borderRadius: 20,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
+    shadowColor: 'rgba(0, 0, 0, 0.2)',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  moreDetailsButtonContent: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 12,
   },
   moreDetailsText: {
     fontSize: 12,
-    fontWeight: '600',
-    color: 'rgba(255, 255, 255, 0.8)',
-    marginRight: 4,
+    fontWeight: '700',
+    color: 'rgba(255, 255, 255, 0.95)',
+    marginRight: 6,
+    letterSpacing: 0.3,
   },
 });
 

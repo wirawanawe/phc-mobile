@@ -6,7 +6,7 @@ import NetworkHelper from "../utils/networkHelper";
 import NetworkDiagnostic from "../utils/networkDiagnostic";
 import NetworkTest from "../utils/networkTest";
 import ConnectionTest from "../utils/connectionTest";
-import ConnectionDebugger from "../utils/connectionDebugger";
+
 
 // Configuration for different environments
 const getApiBaseUrl = () => {
@@ -14,7 +14,7 @@ const getApiBaseUrl = () => {
   if (__DEV__) {
     // Check if running on Android emulator
     if (Platform.OS === "android") {
-      return "http://10.242.90.103:3000/api/mobile";
+      return "http://10.0.2.2:3000/api/mobile";
     }
 
     // Check if running on iOS simulator
@@ -33,12 +33,17 @@ const getApiBaseUrl = () => {
 // Network connectivity test function
 const testNetworkConnectivity = async (baseURL) => {
   try {
+    console.log('🌐 Network: Testing connectivity to:', baseURL);
     const startTime = Date.now();
     
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
     
-    const response = await fetch(`${baseURL}/auth/me`, {
+    // Use the health endpoint instead of auth/me for connectivity testing
+    const healthURL = baseURL.replace('/api/mobile', '') + '/api/health';
+    console.log('🏥 Network: Testing health endpoint:', healthURL);
+    
+    const response = await fetch(healthURL, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
@@ -50,8 +55,18 @@ const testNetworkConnectivity = async (baseURL) => {
     const endTime = Date.now();
     const responseTime = endTime - startTime;
     
+    console.log('✅ Network: Health check successful');
+    console.log('📊 Network: Response time:', responseTime + 'ms');
+    console.log('📊 Network: Status code:', response.status);
+    
     return { success: true, responseTime, status: response.status };
   } catch (error) {
+    console.error('❌ Network: Connectivity test failed');
+    console.error('❌ Network: Error details:', {
+      message: error.message,
+      name: error.name,
+      type: error.constructor.name
+    });
     return { success: false, error: error.message };
   }
 };
@@ -60,45 +75,10 @@ const testNetworkConnectivity = async (baseURL) => {
 const getBestApiUrl = async () => {
   if (__DEV__) {
     try {
-      console.log('🔍 Finding best API endpoint...');
-      
-      // First try the new ConnectionDebugger with optimized testing
-      console.log('🔍 Using ConnectionDebugger...');
-      const bestEndpoint = await ConnectionDebugger.findWorkingEndpoint();
-      
-      if (bestEndpoint) {
-        console.log('✅ Found working endpoint:', bestEndpoint);
-        return `${bestEndpoint}/api/mobile`;
-      }
-      
-      // Fallback to ConnectionTest
-      console.log('🔄 Trying ConnectionTest fallback...');
-      const platformInfo = ConnectionTest.getPlatformInfo();
-      console.log('📱 Platform info:', platformInfo);
-      
-      const connectionTestEndpoint = await ConnectionTest.findBestEndpoint();
-      
-      if (connectionTestEndpoint) {
-        console.log('✅ Found working endpoint:', connectionTestEndpoint);
-        return connectionTestEndpoint;
-      }
-      
-      // Final fallback to NetworkHelper
-      console.log('🔄 Trying NetworkHelper fallback...');
-      const serverUrl = await NetworkHelper.findBestServer();
-      return serverUrl;
+      // Use the simple getApiBaseUrl function for now
+      const baseUrl = getApiBaseUrl();
+      return baseUrl;
     } catch (error) {
-      console.log('❌ All connection methods failed, using default URL');
-      console.log('❌ Error:', error.message);
-      
-      // Only run diagnosis if we have time and it's not too expensive
-      try {
-        const diagnosis = await ConnectionDebugger.diagnoseFullConnection();
-        console.log('🔍 Full diagnosis results:', diagnosis);
-      } catch (diagnosisError) {
-        console.log('❌ Diagnosis failed:', diagnosisError.message);
-      }
-      
       return getApiBaseUrl();
     }
   }
@@ -116,78 +96,51 @@ class ApiService {
 
   // Initialize the API service with the best available URL
   async initialize() {
-    console.log('🚀 Initializing API Service...');
-    console.log('🔍 Current baseURL:', this.baseURL);
-    console.log('🔍 Is initialized:', this.isInitialized);
-    
-    // Force re-initialization if needed
-    if (this.isInitialized && this.baseURL && this.baseURL.includes('10.0.2.2')) {
-      console.log('🔄 Forcing re-initialization due to old IP address');
-      this.isInitialized = false;
-      this.baseURL = null;
-    }
-
     if (this.isInitialized && this.baseURL) {
-      console.log('✅ API Service already initialized with URL:', this.baseURL);
       return;
     }
 
     try {
-      console.log('🔍 Getting best API URL...');
+      console.log('🔧 API: Initializing API service...');
       this.baseURL = await getBestApiUrl();
-      console.log('🚀 API Service initialized with URL:', this.baseURL);
+      console.log('🔗 API: Base URL set to:', this.baseURL);
       
-      // Test connectivity with retry mechanism
-      console.log('🔍 Testing connectivity...');
+      // Simple connectivity test
+      console.log('🌐 API: Testing connectivity...');
       const connectivityTest = await this.testConnectivityWithRetry();
-      console.log('📊 Connectivity test result:', connectivityTest);
       
       if (connectivityTest.success) {
+        console.log('✅ API: Connectivity test successful');
         this.isInitialized = true;
         this.retryCount = 0; // Reset retry count on success
-        console.log('✅ API Service initialization successful');
       } else {
-        console.log('❌ Connectivity test failed, using fallback');
-        this.baseURL = null; // Force use of mock API
+        console.log('⚠️ API: Connectivity test failed, but continuing...');
+        console.log('❌ API: Connectivity error:', connectivityTest.error);
         this.isInitialized = true;
       }
     } catch (error) {
-      console.error('❌ Error initializing API service:', error);
-      this.baseURL = null; // Force use of mock API
+      console.error('❌ API: Error initializing API service:', error);
+      console.error('❌ API: Error details:', {
+        message: error.message,
+        name: error.name,
+        stack: error.stack
+      });
       this.isInitialized = true;
     }
   }
 
   // Test connectivity with retry mechanism
   async testConnectivityWithRetry() {
-    for (let attempt = 1; attempt <= 2; attempt++) { // Reduced from 3 to 2 attempts
-      try {
-        console.log(`🔍 Connectivity test attempt ${attempt}/2`);
-        const result = await testNetworkConnectivity(this.baseURL);
-        
-        if (result.success) {
-          console.log(`✅ Connectivity test successful on attempt ${attempt}`);
-          return result;
-        }
-        
-        if (attempt < 2) {
-          console.log(`⏳ Waiting before retry...`);
-          await new Promise(resolve => setTimeout(resolve, 1000 * attempt)); // Reduced delay
-        }
-      } catch (error) {
-        console.log(`❌ Connectivity test attempt ${attempt} failed:`, error.message);
-        if (attempt < 2) {
-          await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
-        }
-      }
+    try {
+      const result = await testNetworkConnectivity(this.baseURL);
+      return result;
+    } catch (error) {
+      return { success: false, error: error.message };
     }
-    
-    return { success: false, error: 'All connectivity tests failed' };
   }
 
   // Force re-initialization of the API service
   async reinitialize() {
-    console.log('🔄 Force re-initializing API Service...');
     this.isInitialized = false;
     this.baseURL = null;
     this.retryCount = 0;
@@ -198,24 +151,19 @@ class ApiService {
   async getUserId() {
     try {
       const userData = await AsyncStorage.getItem("userData");
-      console.log('🔍 API: User data from storage:', !!userData);
       
       if (userData) {
         const user = JSON.parse(userData);
-        console.log('📊 API: Parsed user data:', user);
         
         if (user && user.id) {
-          console.log('✅ API: Using user ID from storage:', user.id);
           return user.id;
         }
       }
       
       // If no user data or invalid user data, use a valid default user ID
-      console.log('⚠️ API: No valid user data found in storage, using default user ID for testing');
       return 1; // Use Super Admin user ID which exists in database
     } catch (error) {
       console.error('❌ API: Error getting user ID:', error);
-      console.log('⚠️ API: Using default user ID for testing');
       return 1; // Use Super Admin user ID which exists in database
     }
   }
@@ -240,7 +188,6 @@ class ApiService {
   async getAuthToken() {
     try {
       const token = await AsyncStorage.getItem("authToken");
-      console.log('🔍 API: Auth token retrieved:', !!token);
       return token;
     } catch (error) {
       console.error('❌ API: Error getting auth token:', error);
@@ -252,7 +199,6 @@ class ApiService {
   async getRefreshToken() {
     try {
       const refreshToken = await AsyncStorage.getItem("refreshToken");
-      console.log('🔍 API: Refresh token retrieved:', !!refreshToken);
       return refreshToken;
     } catch (error) {
       console.error('❌ API: Error getting refresh token:', error);
@@ -264,7 +210,6 @@ class ApiService {
   async setAuthToken(token) {
     try {
       await AsyncStorage.setItem("authToken", token);
-      console.log('✅ API: Auth token stored successfully');
     } catch (error) {
       console.error('❌ API: Error setting auth token:', error);
       throw new Error('Failed to store authentication token');
@@ -275,7 +220,6 @@ class ApiService {
   async setRefreshToken(refreshToken) {
     try {
       await AsyncStorage.setItem("refreshToken", refreshToken);
-      console.log('✅ API: Refresh token stored successfully');
     } catch (error) {
       console.error('❌ API: Error setting refresh token:', error);
       throw new Error('Failed to store refresh token');
@@ -287,7 +231,6 @@ class ApiService {
     try {
       await AsyncStorage.removeItem("authToken");
       await AsyncStorage.removeItem("refreshToken");
-      console.log('✅ API: Auth tokens removed successfully');
     } catch (error) {
       console.error('❌ API: Error removing auth tokens:', error);
     }
@@ -297,7 +240,6 @@ class ApiService {
   async removeRefreshToken() {
     try {
       await AsyncStorage.removeItem("refreshToken");
-      console.log('✅ API: Refresh token removed successfully');
     } catch (error) {
       console.error('❌ API: Error removing refresh token:', error);
     }
@@ -317,7 +259,6 @@ class ApiService {
         throw new Error("No refresh token available");
       }
 
-      console.log('🔄 API: Attempting token refresh...');
       const response = await fetch(`${this.baseURL}/auth/refresh`, {
         method: "POST",
         headers: {
@@ -346,7 +287,6 @@ class ApiService {
       if (data.success && data.data) {
         await this.setAuthToken(data.data.accessToken);
         await this.setRefreshToken(data.data.refreshToken);
-        console.log('✅ API: Token refresh successful');
         return { success: true, data: data.data.accessToken };
       } else {
         throw new Error(data.message || "Token refresh failed");
@@ -368,17 +308,12 @@ class ApiService {
 
     // Force re-initialization if using old IP
     if (this.baseURL && this.baseURL.includes('10.0.2.2')) {
-      console.log('🔄 Detected old IP, forcing re-initialization...');
       await this.reinitialize();
     }
-
-    console.log('🌐 API: Making request to:', endpoint);
-    console.log('🌐 API: Base URL:', this.baseURL);
 
     const makeRequest = async (authToken) => {
       try {
         const url = `${this.baseURL}${endpoint}`;
-        console.log('🌐 API: Full URL:', url);
         
         const headers = {
           'Content-Type': 'application/json',
@@ -399,18 +334,10 @@ class ApiService {
           config.body = options.body;
         }
 
-        console.log('🌐 API: Request config:', {
-          method: config.method,
-          headers: Object.keys(config.headers),
-          hasBody: !!config.body
-        });
-
         const response = await fetch(url, config);
-        console.log('🌐 API: Response status:', response.status);
 
         if (!response.ok) {
           const errorText = await response.text();
-          console.log('❌ API: Response error text:', errorText);
           
           // Handle specific HTTP errors
           if (response.status === 401) {
@@ -430,17 +357,34 @@ class ApiService {
           } else if (response.status === 422) {
             throw new Error(`Validation error: ${errorText}`);
           } else if (response.status === 429) {
-            throw new Error('Too many requests. Please wait a moment and try again.');
+            // Enhanced rate limit handling
+            try {
+              const errorData = JSON.parse(errorText);
+              const retryAfter = response.headers.get('Retry-After');
+              const message = errorData.message || 'Too many requests. Please wait a moment and try again.';
+              
+              if (retryAfter) {
+                throw new Error(`${message} Retry after ${retryAfter} seconds.`);
+              } else {
+                throw new Error(message);
+              }
+            } catch (parseError) {
+              throw new Error('Too many requests. Please wait a moment and try again.');
+            }
           } else if (response.status >= 500) {
-            throw new Error('Server error. Please try again later.');
+            // Try to parse error details for better debugging
+            try {
+              const errorData = JSON.parse(errorText);
+              throw new Error(`Server error: ${errorData.message || errorData.error || 'Unknown server error'}`);
+            } catch (parseError) {
+              throw new Error(`Server error (${response.status}): ${errorText || response.statusText}`);
+            }
           }
           
           throw new Error(`HTTP ${response.status}: ${errorText || response.statusText}`);
         }
 
         const data = await response.json();
-        console.log('🌐 API: Response data keys:', Object.keys(data));
-        
         return data;
       } catch (error) {
         console.error('❌ API: Request failed:', error.message);
@@ -455,20 +399,11 @@ class ApiService {
         const token = await this.getAuthToken();
         return await makeRequest(token);
       } catch (error) {
-        console.error(`❌ API Request failed (attempt ${attempt}/${this.maxRetries}):`, {
-          endpoint,
-          baseURL: this.baseURL,
-          error: error.message,
-          errorType: error.name
-        });
-
         // Handle authentication errors
         if (error.message.includes('Authentication failed') || error.message.includes('401')) {
-          console.log('🔄 API: Authentication failed, attempting token refresh...');
           try {
             const refreshResult = await this.refreshAccessToken();
             if (refreshResult.success) {
-              console.log('✅ API: Token refresh successful, retrying request...');
               const newToken = await this.getAuthToken();
               return await makeRequest(newToken);
             } else {
@@ -485,19 +420,23 @@ class ApiService {
           throw new Error("Server returned invalid response format. Please check if backend is running correctly.");
         }
 
+        // Handle rate limiting specifically
+        if (error.message.includes('Too many requests') || error.message.includes('429')) {
+          if (attempt < this.maxRetries) {
+            const delay = Math.min(2000 * Math.pow(2, attempt - 1), 30000); // Max 30 seconds for rate limiting
+            console.log(`⏳ Rate limited. Waiting ${delay}ms before retry ${attempt}/${this.maxRetries}`);
+            await new Promise(resolve => setTimeout(resolve, delay));
+            continue;
+          }
+          throw error;
+        }
+
         // Handle network errors
         if (error.name === 'TypeError' && error.message.includes('fetch')) {
-          console.error('🌐 Network error detected. Running connection diagnosis...');
-          try {
-            const diagnosis = await ConnectionDebugger.diagnoseFullConnection();
-            console.log('🔍 Connection diagnosis:', diagnosis);
-          } catch (diagnosisError) {
-            console.error('❌ Diagnosis failed:', diagnosisError.message);
-          }
+          // Network error detected
           
           if (attempt < this.maxRetries) {
             const delay = Math.min(1000 * Math.pow(2, attempt - 1), 10000); // Max 10 seconds
-            console.log(`⏳ Waiting ${delay}ms before retry...`);
             await new Promise(resolve => setTimeout(resolve, delay));
             continue;
           }
@@ -520,7 +459,6 @@ class ApiService {
         // Retry for other errors
         if (attempt < this.maxRetries) {
           const delay = Math.min(1000 * Math.pow(2, attempt - 1), 10000);
-          console.log(`⏳ Waiting ${delay}ms before retry...`);
           await new Promise(resolve => setTimeout(resolve, delay));
           continue;
         }
@@ -532,7 +470,6 @@ class ApiService {
         const enhancedError = new Error(errorInfo.userMessage);
         enhancedError.originalError = error;
         enhancedError.errorInfo = errorInfo;
-        
         throw enhancedError;
       }
     }
@@ -547,10 +484,7 @@ class ApiService {
     }
 
     // Use real API instead of mock for now
-    // if (__DEV__) {
-    //   console.log("🔧 Using mock API for development");
-    //   return await mockApiService.login(email, password);
-    // }
+
 
     // For production, use real API
     const config = {
@@ -562,31 +496,25 @@ class ApiService {
     };
 
     try {
-      console.log('🔗 Attempting login to:', `${this.baseURL}/auth/login`);
-      
       // Test server connectivity first
       try {
         const healthResponse = await fetch(`${this.baseURL.replace('/api/mobile', '')}/api/health`, {
           method: 'GET',
           timeout: 5000,
         });
-        console.log('✅ Server health check passed');
       } catch (healthError) {
-        console.log('⚠️ Server health check failed, but continuing with login attempt');
+        // Health check failed, but continue with login attempt
       }
 
       // Use mobile auth endpoint for mobile users
       const response = await fetch(`${this.baseURL}/auth/login`, config);
       
-      console.log('📡 Login response status:', response.status);
-      
       if (!response.ok) {
         let errorText = "";
         try {
           errorText = await response.text();
-          console.log('📝 Error response text:', errorText);
         } catch (textError) {
-          console.log('❌ Could not read response text');
+          // Could not read response text
         }
         
         if (response.status === 401) {
@@ -606,7 +534,6 @@ class ApiService {
       }
 
       const data = await response.json();
-      console.log('✅ Login successful, storing tokens...');
       
       // Store tokens if login was successful
       if (data.success && data.data) {
@@ -615,10 +542,8 @@ class ApiService {
         
         if (token) {
           await this.setAuthToken(token);
-          console.log('✅ Access token stored');
           if (refreshToken) {
             await this.setRefreshToken(refreshToken);
-            console.log('✅ Refresh token stored');
           }
         }
       }
@@ -696,10 +621,8 @@ class ApiService {
         
         if (token) {
           await this.setAuthToken(token);
-          console.log('✅ Access token stored after registration');
           if (refreshToken) {
             await this.setRefreshToken(refreshToken);
-            console.log('✅ Refresh token stored after registration');
           }
         }
       }
@@ -797,6 +720,20 @@ class ApiService {
     });
   }
 
+  async getTodayMood() {
+    const queryString = await this.createQueryStringWithUserId();
+    return await this.request(`/mood_tracking/today?${queryString}`);
+  }
+
+  async updateMoodEntry(moodId, moodData) {
+    const userId = await this.getUserId();
+    const dataWithUserId = { ...moodData, user_id: userId };
+    return await this.request(`/mood_tracking/${moodId}`, {
+      method: "PUT",
+      body: JSON.stringify(dataWithUserId),
+    });
+  }
+
   async getMoodHistory(params = {}) {
     const queryString = await this.createQueryStringWithUserId(params);
     return await this.request(`/mood_tracking?${queryString}`);
@@ -823,9 +760,56 @@ class ApiService {
     return await this.request(`/tracking/water/today?${queryString}`);
   }
 
-  async getWeeklyWaterIntakae(params = {}) {
+  async getWeeklyWaterIntake(params = {}) {
     const queryString = await this.createQueryStringWithUserId(params);
     return await this.request(`/tracking/water/weekly?${queryString}`);
+  }
+
+  async getWellnessProgress(userId = null) {
+    try {
+      const targetUserId = userId !== null ? userId : await this.getUserId();
+      return await this.request(`/wellness-progress/${targetUserId}`);
+    } catch (error) {
+      // If wellness progress fails, return a default structure
+      if (error.message.includes('Server error') || error.message.includes('404') || error.message.includes('Database error')) {
+        console.warn('Wellness progress failed, returning default data:', error.message);
+        return {
+          success: true,
+          user: {
+            id: targetUserId,
+            name: 'User',
+            email: '',
+            wellness_program_joined: false,
+            wellness_join_date: null,
+            age: null,
+            gender: null,
+            activity_level: null,
+            fitness_goal: null
+          },
+          progress: {
+            totalActivities: 0,
+            completedMissions: 0,
+            totalMissions: 0,
+            totalPoints: 0,
+            weeklyActivities: 0,
+            completionRate: 0,
+            wellnessScore: 0,
+            activityDistribution: {},
+            recentActivities: [],
+            missions: [],
+            trackingData: {
+              avgWaterIntake: 0,
+              avgMoodScore: 0,
+              avgSleepHours: 0,
+              waterData: [],
+              moodData: [],
+              sleepData: []
+            }
+          }
+        };
+      }
+      throw error;
+    }
   }
 
   // ===== SLEEP TRACKING =====
@@ -865,21 +849,16 @@ class ApiService {
   async createMealEntry(mealData) {
     const userId = await this.getUserId();
     const dataWithUserId = { ...mealData, user_id: userId };
-    console.log('Creating meal entry with data:', dataWithUserId);
     const response = await this.request("/tracking/meal", {
       method: "POST",
       body: JSON.stringify(dataWithUserId),
     });
-    console.log('Meal entry response:', response);
     return response;
   }
 
   async getMealHistory(params = {}) {
     const queryString = await this.createQueryStringWithUserId(params);
-    console.log('Getting meal history with params:', params);
-    console.log('Query string:', queryString);
     const response = await this.request(`/tracking/meal?${queryString}`);
-    console.log('Meal history response:', response);
     return response;
   }
 
@@ -1084,10 +1063,8 @@ class ApiService {
     try {
       console.log('🔍 API: Getting missions...');
       const response = await this.request("/missions");
-      console.log('📊 API: Missions response:', response.success ? 'SUCCESS' : 'FAILED', response.missions?.length || 0, 'missions');
       return response;
     } catch (error) {
-      console.log('❌ API: Missions request failed, using mock data');
       return await mockApiService.getMissions();
     }
   }
@@ -1106,10 +1083,8 @@ class ApiService {
       const dateParam = targetDate || new Date().toISOString().split('T')[0];
       const response = await this.request(`/missions/by-date?date=${dateParam}`);
       
-      console.log('📊 API: Missions by date response:', response.success ? 'SUCCESS' : 'FAILED', response.data?.available_missions?.length || 0, 'available missions');
       return response;
     } catch (error) {
-      console.log('❌ API: Missions by date request failed, using mock data');
       return await mockApiService.getMissionsByDate(targetDate);
     }
   }
@@ -1117,8 +1092,6 @@ class ApiService {
   async getMyMissions(targetDate = null, showAllDates = false) {
     try {
       const userId = await this.getUserId();
-      console.log('🔍 API: Getting my missions for user ID:', userId, 'date:', targetDate, 'all dates:', showAllDates);
-      
       // Build query parameters
       const params = new URLSearchParams();
       if (targetDate) {
@@ -1129,13 +1102,10 @@ class ApiService {
       }
       
       // Use the authenticated my-missions endpoint
-      console.log('🔍 API: Using authenticated endpoint: /my-missions');
       const response = await this.request(`/my-missions?${params.toString()}`);
-      console.log('📊 API: My missions response:', response.success ? 'SUCCESS' : 'FAILED', response.data?.length || 0, 'user missions');
       return response;
       
     } catch (error) {
-      console.log('❌ API: My missions request failed, using mock data');
       return await mockApiService.getMyMissions(targetDate, showAllDates);
     }
   }
@@ -1275,6 +1245,12 @@ class ApiService {
   async getTodayFitness() {
     const queryString = await this.createQueryStringWithUserId();
     return await this.request(`/tracking/fitness/today?${queryString}`);
+  }
+
+  async deleteFitnessEntry(entryId) {
+    return await this.request(`/tracking/fitness/${entryId}`, {
+      method: "DELETE",
+    });
   }
 
   // ===== CHAT =====
@@ -1514,14 +1490,27 @@ class ApiService {
         method: 'DELETE',
       });
     } catch (error) {
+
+      
       // Handle the case where quick food doesn't exist (already removed)
       if (error.message && error.message.includes("Quick food not found") ||
-          error.message && error.message.includes("Data yang Anda cari tidak ditemukan")) {
+          error.message && error.message.includes("Data yang Anda cari tidak ditemukan") ||
+          error.message && error.message.includes("Quick food not found for this user")) {
         return {
           success: true,
           message: "Food was not in quick foods"
         };
       }
+      
+      // Handle the case where food doesn't exist in database
+      if (error.message && error.message.includes("Food not found in database")) {
+        console.warn("⚠️ Attempted to remove food ID", foodId, "which doesn't exist in database");
+        return {
+          success: true,
+          message: "Food was not in quick foods"
+        };
+      }
+      
       throw error;
     }
   }
@@ -1601,6 +1590,37 @@ class ApiService {
         message: "Search temporarily unavailable"
       };
     }
+  }
+
+  // Wellness setup methods
+  async getWellnessSetupStatus() {
+    return this.request('/setup-wellness');
+  }
+
+  async setupWellness(wellnessData) {
+    return this.request('/setup-wellness', {
+      method: 'POST',
+      body: JSON.stringify(wellnessData)
+    });
+  }
+
+  async updateWellnessData(wellnessData) {
+    return this.request('/setup-wellness', {
+      method: 'PUT',
+      body: JSON.stringify(wellnessData)
+    });
+  }
+
+  async getHealthData(params = {}) {
+    const queryString = new URLSearchParams(params).toString();
+    return this.request(`/health_data${queryString ? `?${queryString}` : ''}`);
+  }
+
+  async addHealthData(healthData) {
+    return this.request('/health_data', {
+      method: 'POST',
+      body: JSON.stringify(healthData)
+    });
   }
 }
 

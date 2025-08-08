@@ -40,6 +40,7 @@ import SleepTrackingScreen from "./src/screens/SleepTrackingScreen";
 import MealLoggingScreen from "./src/screens/MealLoggingScreen";
 import FitnessTrackingScreen from "./src/screens/FitnessTrackingScreen";
 import RealtimeFitnessScreen from "./src/screens/RealtimeFitnessScreen";
+import ExerciseHistoryScreen from "./src/screens/ExerciseHistoryScreen";
 import ClinicBookingScreen from "./src/screens/ClinicBookingScreen";
 import BookingConfirmationScreen from "./src/screens/BookingConfirmationScreen";
 import BookingSuccessScreen from "./src/screens/BookingSuccessScreen";
@@ -55,11 +56,19 @@ import WellnessApp, { TestWellnessApp } from "./src/screens/WellnessApp";
 import ClinicsApp from "./src/screens/ClinicsApp";
 import ActivityScreen from "./src/screens/ActivityScreen";
 import WellnessActivityDetailScreen from "./src/screens/WellnessActivityDetailScreen";
-import ConnectionDebugScreen from "./src/screens/ConnectionDebugScreen";
+
+
+// Import new profile screens
+import HealthGoalsScreen from "./src/screens/HealthGoalsScreen";
+import MedicalHistoryScreen from "./src/screens/MedicalHistoryScreen";
+import PrivacySettingsScreen from "./src/screens/PrivacySettingsScreen";
+import HelpSupportScreen from "./src/screens/HelpSupportScreen";
+import AboutAppScreen from "./src/screens/AboutAppScreen";
 
 // Import theme and context
 import { theme } from "./src/theme/theme";
 import { AuthProvider, useAuth } from "./src/contexts/AuthContext";
+import { LanguageProvider } from "./src/contexts/LanguageContext";
 
 const Stack = createStackNavigator();
 
@@ -77,24 +86,12 @@ function AppContent() {
     checkAppState();
   }, []);
 
-  // Debug effect to monitor state changes
-  React.useEffect(() => {
-    console.log("App: State changed:", { 
-      isFirstLaunch, 
-      hasAcceptedTerms, 
-      isLoading, 
-      isAuthenticated,
-      isAppReady 
-    });
-  }, [isFirstLaunch, hasAcceptedTerms, isLoading, isAuthenticated, isAppReady]);
+
 
   const checkAppState = async () => {
     try {
-      console.log("App: Checking app state...");
       const firstLaunch = await AsyncStorage.getItem("isFirstLaunch");
       const termsAccepted = await AsyncStorage.getItem("hasAcceptedTerms");
-
-      console.log("App: App state check results:", { firstLaunch, termsAccepted });
       
       setIsFirstLaunch(firstLaunch === null);
       setHasAcceptedTerms(termsAccepted === "true");
@@ -109,15 +106,12 @@ function AppContent() {
 
   const handleTermsAccepted = async () => {
     try {
-      console.log("App: Terms accepted, updating app state...");
       await AsyncStorage.setItem("isFirstLaunch", "false");
       await AsyncStorage.setItem("hasAcceptedTerms", "true");
       
       // Force immediate state update
       setIsFirstLaunch(false);
       setHasAcceptedTerms(true);
-      
-      console.log("App: App state updated successfully");
       
       // Add a small delay to ensure state is properly updated
       await new Promise(resolve => setTimeout(resolve, 100));
@@ -127,18 +121,8 @@ function AppContent() {
     }
   };
 
-  // Debug logging
-  console.log("App: Current state:", { 
-    isLoading, 
-    isFirstLaunch, 
-    hasAcceptedTerms, 
-    isAuthenticated,
-    isAppReady 
-  });
-
   // Show loading screen while app is initializing
   if (isLoading || !isAppReady) {
-    console.log("App: Showing loading screen");
     return null; // Loading state
   }
 
@@ -216,11 +200,7 @@ function AppContent() {
             component={RegisterScreen}
             options={{ headerShown: false }}
           />
-          <Stack.Screen
-            name="ConnectionDebug"
-            component={ConnectionDebugScreen}
-            options={{ title: "Connection Debug" }}
-          />
+
           <Stack.Screen
             name="Assessment"
             component={AssessmentScreen}
@@ -347,6 +327,11 @@ function AppContent() {
             component={RealtimeFitnessScreen}
             options={{ title: "Real-time Fitness" }}
           />
+          <Stack.Screen
+            name="ExerciseHistory"
+            component={ExerciseHistoryScreen}
+            options={{ title: "Exercise History" }}
+          />
           
           {/* Authentication-required screens */}
           {isAuthenticated && (
@@ -365,6 +350,31 @@ function AppContent() {
                 name="Profile"
                 component={ProfileScreen}
                 options={{ title: "Profile" }}
+              />
+              <Stack.Screen
+                name="HealthGoals"
+                component={HealthGoalsScreen}
+                options={{ title: "Health Goals" }}
+              />
+              <Stack.Screen
+                name="MedicalHistory"
+                component={MedicalHistoryScreen}
+                options={{ title: "Medical History" }}
+              />
+              <Stack.Screen
+                name="PrivacySettings"
+                component={PrivacySettingsScreen}
+                options={{ title: "Privacy Settings" }}
+              />
+              <Stack.Screen
+                name="HelpSupport"
+                component={HelpSupportScreen}
+                options={{ title: "Help & Support" }}
+              />
+              <Stack.Screen
+                name="AboutApp"
+                component={AboutAppScreen}
+                options={{ title: "About App" }}
               />
               <Stack.Screen
                 name="PersonalInformation"
@@ -457,8 +467,10 @@ function AppContent() {
 
 export default function App() {
   return (
-    <AuthProvider>
-      <AppContent />
-    </AuthProvider>
+    <LanguageProvider>
+      <AuthProvider>
+        <AppContent />
+      </AuthProvider>
+    </LanguageProvider>
   );
 }

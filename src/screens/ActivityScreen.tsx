@@ -14,6 +14,7 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useAuth } from '../contexts/AuthContext';
+import { useLanguage } from '../contexts/LanguageContext';
 import api from '../services/api';
 import { handleAuthError } from '../utils/errorHandler';
 
@@ -48,6 +49,7 @@ interface UserWellnessActivity {
 
 const ActivityScreen = ({ navigation }: any) => {
   const { isAuthenticated, user } = useAuth();
+  const { t } = useLanguage();
   const [wellnessActivities, setWellnessActivities] = useState<WellnessActivity[]>([]);
   const [userActivities, setUserActivities] = useState<UserWellnessActivity[]>([]);
   const [isLoadingWellness, setIsLoadingWellness] = useState(false);
@@ -69,9 +71,9 @@ const ActivityScreen = ({ navigation }: any) => {
   const [calculatedPoints, setCalculatedPoints] = useState(0);
 
   const activityTypes = {
-    normal: { name: 'Normal', multiplier: 1 },
-    intense: { name: 'Intense', multiplier: 1.5 },
-    relaxed: { name: 'Relaxed', multiplier: 0.8 }
+    normal: { name: t("activity.types.normal"), multiplier: 1 },
+    intense: { name: t("activity.types.intense"), multiplier: 1.5 },
+    relaxed: { name: t("activity.types.relaxed"), multiplier: 0.8 }
   };
 
   // Load wellness activities
@@ -287,7 +289,7 @@ const ActivityScreen = ({ navigation }: any) => {
               </View>
 
               <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>Duration (minutes)</Text>
+                <Text style={styles.inputLabel}>{t("activity.duration")}</Text>
                 <TextInput
                   style={styles.textInput}
                   value={completionData.duration.toString()}
@@ -301,12 +303,12 @@ const ActivityScreen = ({ navigation }: any) => {
               </View>
 
               <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>Notes (Optional)</Text>
+                <Text style={styles.inputLabel}>{t("activity.notes")}</Text>
                 <TextInput
                   style={[styles.textInput, styles.textArea]}
                   value={completionData.notes}
                   onChangeText={(text) => setCompletionData(prev => ({ ...prev, notes: text }))}
-                  placeholder="Add any notes about this activity..."
+                  placeholder={t("activity.notesPlaceholder")}
                   multiline
                   numberOfLines={3}
                 />
@@ -314,10 +316,10 @@ const ActivityScreen = ({ navigation }: any) => {
             </View>
 
             <View style={styles.formSection}>
-              <Text style={styles.sectionTitle}>Mood & Stress Tracking</Text>
+              <Text style={styles.sectionTitle}>{t("activity.moodStressTracking")}</Text>
               
               <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>Mood Before</Text>
+                <Text style={styles.inputLabel}>{t("activity.moodBefore")}</Text>
                 <View style={styles.pickerContainer}>
                   {['very_happy', 'happy', 'neutral', 'sad', 'very_sad'].map((mood) => (
                     <TouchableOpacity
@@ -340,7 +342,7 @@ const ActivityScreen = ({ navigation }: any) => {
               </View>
 
               <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>Mood After</Text>
+                <Text style={styles.inputLabel}>{t("activity.moodAfter")}</Text>
                 <View style={styles.pickerContainer}>
                   {['very_happy', 'happy', 'neutral', 'sad', 'very_sad'].map((mood) => (
                     <TouchableOpacity
@@ -369,13 +371,13 @@ const ActivityScreen = ({ navigation }: any) => {
               style={styles.cancelButton}
               onPress={() => setShowCompletionModal(false)}
             >
-              <Text style={styles.cancelButtonText}>Cancel</Text>
+              <Text style={styles.cancelButtonText}>{t("common.cancel")}</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.completeButton}
               onPress={handleCompleteActivity}
             >
-              <Text style={styles.completeButtonText}>Complete Activity</Text>
+              <Text style={styles.completeButtonText}>{t("activity.completeActivity")}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -394,9 +396,9 @@ const ActivityScreen = ({ navigation }: any) => {
             <Icon name="heart-pulse" size={28} color="#10B981" />
           </View>
           <View style={styles.headerText}>
-            <Text style={styles.greetingText}>Wellness Activity</Text>
+            <Text style={styles.greetingText}>{t("activity.title")}</Text>
             <Text style={styles.subtitleText}>
-              {isAuthenticated ? "Pilih dan selesaikan aktivitas wellness Anda" : "Login untuk memulai"}
+              {isAuthenticated ? t("activity.subtitle.authenticated") : t("activity.subtitle.unauthenticated")}
             </Text>
           </View>
         </View>
@@ -410,7 +412,7 @@ const ActivityScreen = ({ navigation }: any) => {
             onPress={() => setActiveTab('activities')}
           >
             <Text style={[styles.tabButtonText, activeTab === 'activities' && styles.activeTabButtonText]}>
-              Activities
+              {t("activity.tabs.activities")}
             </Text>
           </TouchableOpacity>
           <TouchableOpacity
@@ -418,7 +420,7 @@ const ActivityScreen = ({ navigation }: any) => {
             onPress={() => setActiveTab('history')}
           >
             <Text style={[styles.tabButtonText, activeTab === 'history' && styles.activeTabButtonText]}>
-              History
+              {t("activity.tabs.history")}
             </Text>
           </TouchableOpacity>
         </View>
@@ -432,10 +434,10 @@ const ActivityScreen = ({ navigation }: any) => {
           <>
             {/* Wellness Activities List */}
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Pilih Aktivitas Wellness</Text>
+              <Text style={styles.sectionTitle}>{t("activity.selectWellness")}</Text>
               {isLoadingWellness ? (
                 <View style={styles.loadingContainer}>
-                  <Text style={styles.loadingText}>Loading wellness activities...</Text>
+                  <Text style={styles.loadingText}>{t("activity.loadingWellness")}</Text>
                 </View>
               ) : (
                 <FlatList
@@ -458,7 +460,7 @@ const ActivityScreen = ({ navigation }: any) => {
                   colors={["#10B981", "#059669"]}
                   style={styles.loginGradient}
                 >
-                  <Text style={styles.loginButtonText}>Login untuk Memulai</Text>
+                  <Text style={styles.loginButtonText}>{t("activity.loginToStart")}</Text>
                 </LinearGradient>
               </TouchableOpacity>
             )}
@@ -466,10 +468,10 @@ const ActivityScreen = ({ navigation }: any) => {
         ) : (
           /* History Tab */
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Riwayat Aktivitas Wellness</Text>
+            <Text style={styles.sectionTitle}>{t("activity.history.title")}</Text>
             {isLoadingHistory ? (
               <View style={styles.loadingContainer}>
-                <Text style={styles.loadingText}>Loading activity history...</Text>
+                <Text style={styles.loadingText}>{t("activity.loadingHistory")}</Text>
               </View>
             ) : userActivities.length > 0 ? (
               <FlatList
@@ -482,8 +484,8 @@ const ActivityScreen = ({ navigation }: any) => {
             ) : (
               <View style={styles.emptyHistoryContainer}>
                 <Icon name="history" size={48} color="#9CA3AF" />
-                <Text style={styles.emptyHistoryText}>Belum ada aktivitas wellness yang diselesaikan</Text>
-                <Text style={styles.emptyHistorySubtext}>Mulai aktivitas wellness pertama Anda!</Text>
+                <Text style={styles.emptyHistoryText}>{t("activity.history.empty")}</Text>
+                <Text style={styles.emptyHistorySubtext}>{t("activity.history.emptySubtext")}</Text>
               </View>
             )}
           </View>

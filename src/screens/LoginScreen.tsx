@@ -19,6 +19,7 @@ import LoginErrorDisplay from "../components/LoginErrorDisplay";
 import SocialLoginButtons from "../components/SocialLoginButtons";
 import OTPVerification from "../components/OTPVerification";
 import { useAuth } from "../contexts/AuthContext";
+import { useLanguage } from "../contexts/LanguageContext";
 import { CommonActions } from "@react-navigation/native";
 import { handleError } from "../utils/errorHandler";
 
@@ -26,6 +27,7 @@ import { handleError } from "../utils/errorHandler";
 const LoginScreen = ({ navigation }: any) => {
   const theme = useTheme<CustomTheme>();
   const { login, socialLogin } = useAuth();
+  const { t } = useLanguage();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -43,33 +45,29 @@ const LoginScreen = ({ navigation }: any) => {
 
     // Client-side validation
     if (!email.trim() || !password.trim()) {
-      setError("Mohon isi semua field yang diperlukan");
+      setError(t("language.language") === "en" ? "Please fill in all required fields" : "Mohon isi semua field yang diperlukan");
       return;
     }
 
     if (!isValidEmail(email)) {
-      setError("Mohon masukkan alamat email yang valid");
+      setError(t("language.language") === "en" ? "Please enter a valid email address" : "Mohon masukkan alamat email yang valid");
       return;
     }
 
     if (password.length < 6) {
-      setError("Password minimal 6 karakter");
+      setError(t("language.language") === "en" ? "Password must be at least 6 characters" : "Password minimal 6 karakter");
       return;
     }
 
     setIsLoading(true);
 
     try {
-      console.log("🔍 Login: Attempting login for email:", email);
-      
       const result = await login(email, password);
 
       if (result.success) {
-        console.log("✅ Login: Login successful, navigating to Main screen");
         // Login successful - navigate to Main screen
         navigation.replace("Main");
       } else {
-        console.log("❌ Login: Login failed:", result.message);
         setError(result.message || "Login gagal. Silakan coba lagi.");
       }
     } catch (error: any) {
@@ -218,10 +216,15 @@ const LoginScreen = ({ navigation }: any) => {
                 <Icon name="arrow-left" size={24} color="#FFFFFF" />
               </TouchableOpacity>
               <LogoPutih size="large" />
-              <Text style={styles.welcomeText}>Welcome Back!</Text>
-              <Text style={styles.subtitleText}>
-                Sign in to continue your health journey
-              </Text>
+              <Text style={styles.welcomeText}>
+          {t("language.language") === "en" ? "Welcome Back!" : "Selamat Datang Kembali!"}
+        </Text>
+                              <Text style={styles.subtitleText}>
+                  {t("language.language") === "en" 
+                    ? "Sign in to continue your health journey"
+                    : "Masuk untuk melanjutkan perjalanan kesehatan Anda"
+                  }
+                </Text>
             </View>
 
             {/* Login Form */}
@@ -237,7 +240,7 @@ const LoginScreen = ({ navigation }: any) => {
                   />
                   <TextInput
                     style={styles.textInput}
-                    placeholder="Email Address"
+                    placeholder={t("auth.email")}
                     placeholderTextColor="#9CA3AF"
                     value={email}
                     onChangeText={setEmail}
@@ -259,7 +262,7 @@ const LoginScreen = ({ navigation }: any) => {
                   />
                   <TextInput
                     style={styles.textInput}
-                    placeholder="Password"
+                    placeholder={t("auth.password")}
                     placeholderTextColor="#9CA3AF"
                     value={password}
                     onChangeText={setPassword}
@@ -293,7 +296,9 @@ const LoginScreen = ({ navigation }: any) => {
                 onPress={handleForgotPassword}
                 style={styles.forgotPasswordContainer}
               >
-                <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
+                <Text style={styles.forgotPasswordText}>
+                  {t("auth.forgotPassword")}?
+                </Text>
               </TouchableOpacity>
 
              
@@ -309,7 +314,10 @@ const LoginScreen = ({ navigation }: any) => {
                 buttonColor="#FFFFFF"
                 textColor="#E22345"
               >
-                {isLoading ? "Signing In..." : "Sign In"}
+                {isLoading 
+                  ? (t("language.language") === "en" ? "Signing In..." : "Sedang Masuk...") 
+                  : t("auth.signIn")
+                }
               </Button>
 
 
@@ -317,7 +325,9 @@ const LoginScreen = ({ navigation }: any) => {
               {/* Divider */}
               <View style={styles.dividerContainer}>
                 <View style={styles.dividerLine} />
-                <Text style={styles.dividerText}>or</Text>
+                <Text style={styles.dividerText}>
+                  {t("language.language") === "en" ? "or" : "atau"}
+                </Text>
                 <View style={styles.dividerLine} />
               </View>
 
@@ -332,9 +342,9 @@ const LoginScreen = ({ navigation }: any) => {
                           {/* Footer */}
               <View style={styles.footer}>
                 <Text style={styles.footerText}>
-                  Don't have an account?{" "}
+                  {t("auth.dontHaveAccount")}{" "}
                   <Text style={styles.registerLink} onPress={handleRegister}>
-                    Sign Up
+                    {t("auth.register")}
                   </Text>
                 </Text>
               </View>

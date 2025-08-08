@@ -92,7 +92,7 @@ class RSSService {
               pubDate = date.toISOString();
             }
           } catch (error) {
-            // console.log('Date parsing error:', error);
+            // Date parsing error - ignore
           }
         }
         

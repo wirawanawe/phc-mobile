@@ -10,6 +10,7 @@ import {
   RefreshControl,
   Alert,
   Platform,
+  ActivityIndicator,
 } from "react-native";
 import { Text, useTheme, Button, TextInput, Card } from "react-native-paper";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -22,6 +23,7 @@ import ProgressRing from "../components/ProgressRing";
 import MissionPromptCard from "../components/MissionPromptCard";
 import ActivityDetectionService from "../services/ActivityDetectionService";
 import { useAuth } from "../contexts/AuthContext";
+import { useLanguage } from "../contexts/LanguageContext";
 import { useFocusEffect } from "@react-navigation/native";
 import apiService from "../services/api";
 import DailyMissionScreen from "./DailyMissionScreen";
@@ -130,14 +132,49 @@ const OnboardingScreen = ({ navigation, onProfileSaved }: any) => {
   const [formData, setFormData] = useState({
     weight: "",
     height: "",
-    age: "",
     gender: "",
     activity_level: "",
     fitness_goal: "weight_loss",
   });
+  const [userAge, setUserAge] = useState<number | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  // Calculate age from date of birth
+  const calculateAge = (dateOfBirth: string): number => {
+    const birthDate = new Date(dateOfBirth);
+    const today = new Date();
+    let age = today.getFullYear() - birthDate.getFullYear();
+    const monthDiff = today.getMonth() - birthDate.getMonth();
+    
+    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+      age--;
+    }
+    
+    return age;
+  };
+
+  // Fetch user profile to get date of birth and calculate age
+  useEffect(() => {
+    const fetchUserProfile = async () => {
+      try {
+        setLoading(true);
+        const response = await apiService.getUserProfile();
+        if (response.success && response.data.date_of_birth) {
+          const age = calculateAge(response.data.date_of_birth);
+          setUserAge(age);
+        }
+      } catch (error) {
+        console.error("Error fetching user profile:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchUserProfile();
+  }, []);
 
   const handleSaveProfile = async () => {
-    if (!formData.weight || !formData.height || !formData.age || !formData.gender || !formData.activity_level || !formData.fitness_goal) {
+    if (!formData.weight || !formData.height || !formData.gender || !formData.activity_level || !formData.fitness_goal) {
       Alert.alert("Error", "Mohon lengkapi semua data");
       return;
     }
@@ -153,21 +190,18 @@ const OnboardingScreen = ({ navigation, onProfileSaved }: any) => {
         'extremely_active': 'extremely_active',
       };
 
-      const profileData = {
+      const wellnessData = {
         weight: parseFloat(formData.weight),
         height: parseFloat(formData.height),
-        age: parseInt(formData.age),
         gender: formData.gender,
         activity_level: activityLevelMap[formData.activity_level as keyof typeof activityLevelMap] || 'moderately_active',
         fitness_goal: formData.fitness_goal,
-        wellness_program_joined: true, // Menandakan user sudah join program wellness
-        wellness_join_date: new Date().toISOString().slice(0, 19).replace('T', ' '), // Tanggal join program wellness
       };
 
-      const response = await apiService.updateUserProfile(profileData);
+      const response = await apiService.setupWellness(wellnessData);
       
       if (response.success) {
-        Alert.alert("Sukses", "Data berhasil disimpan!");
+        Alert.alert("Sukses", "Wellness program berhasil disetup! Usia Anda: " + response.data.age + " tahun");
         onProfileSaved();
       } else {
         Alert.alert("Error", response.message || "Gagal menyimpan data");
@@ -237,14 +271,21 @@ const OnboardingScreen = ({ navigation, onProfileSaved }: any) => {
 
             <View style={styles.inputContainer}>
               <Text style={styles.inputLabel}>Usia</Text>
-              <TextInput
-                value={formData.age}
-                onChangeText={(text) => setFormData({ ...formData, age: text })}
-                keyboardType="numeric"
-                style={styles.modernInput}
-                placeholder="25"
-                placeholderTextColor="#9CA3AF"
-              />
+              {loading ? (
+                <View style={styles.ageLoadingContainer}>
+                  <ActivityIndicator size="small" color="#667eea" />
+                  <Text style={styles.ageLoadingText}>Menghitung usia...</Text>
+                </View>
+              ) : userAge !== null ? (
+                <View style={styles.ageDisplayContainer}>
+                  <Icon name="calendar-clock" size={20} color="#667eea" style={styles.ageIcon} />
+                  <Text style={styles.ageDisplayText}>{userAge} tahun</Text>
+                </View>
+              ) : (
+                <Text style={styles.ageErrorText}>
+                  Tidak dapat menghitung usia. Pastikan tanggal lahir sudah diisi.
+                </Text>
+              )}
             </View>
 
             <View style={styles.selectionGroup}>
@@ -399,7 +440,7 @@ const DashboardTab = ({ navigation }: any) => {
   });
   const [summaryLoading, setSummaryLoading] = useState(false);
   const [activityData, setActivityData] = useState({ steps: 0, distance: 0 });
-  const [weeklyProgress, setWeeklyProgress] = useState([0, 0, 0, 0, 0, 0, 0]);
+  const [weeklyProgress, setWeeklyProgress] = useState<number[]>([0, 0, 0, 0, 0, 0, 0]);
   const [selectedDate, setSelectedDate] = useState(() => {
     const today = new Date();
     return today.toISOString().split('T')[0];
@@ -455,21 +496,21 @@ const DashboardTab = ({ navigation }: any) => {
         const summaryData = summaryResponse.data;
         console.log('Summary data received:', summaryData);
         
-        // Properly map the nested structure from API
+        // Properly map the nested structure from API with type conversion
         const todaySummaryData = {
-          calories: summaryData.meal?.calories || summaryData.calories || 0,
-          servings: summaryData.meal?.meal_count || summaryData.servings || 0,
-          steps: summaryData.fitness?.steps || summaryData.steps || 0,
-          exerciseMinutes: summaryData.fitness?.exercise_minutes || summaryData.exercise_minutes || 0,
-          waterIntake: summaryData.water?.total_ml || summaryData.water_intake || 0,
+          calories: parseFloat(summaryData.meal?.calories) || parseFloat(summaryData.calories) || 0,
+          servings: parseInt(summaryData.meal?.meal_count) || parseInt(summaryData.servings) || 0,
+          steps: parseInt(summaryData.fitness?.steps) || parseInt(summaryData.steps) || 0,
+          exerciseMinutes: parseInt(summaryData.fitness?.exercise_minutes) || parseInt(summaryData.exercise_minutes) || 0,
+          waterIntake: parseFloat(summaryData.water?.total_ml) || parseFloat(summaryData.water_intake) || 0,
         };
         console.log('Mapped today summary data:', todaySummaryData);
         setTodaySummary(todaySummaryData);
         
         // Update activity data with real fitness data
         const activityData = {
-          steps: summaryData.fitness?.steps || 0,
-          distance: summaryData.fitness?.distance_km || 0,
+          steps: parseInt(summaryData.fitness?.steps) || 0,
+          distance: parseFloat(summaryData.fitness?.distance_km) || 0,
         };
         console.log('Activity data:', activityData);
         setActivityData(activityData);
@@ -515,84 +556,128 @@ const DashboardTab = ({ navigation }: any) => {
     try {
       setSummaryLoading(true);
       
-      // Get mission stats for overall completion rate
-      const missionStatsResponse = await apiService.getMissionStats({ date: new Date().toISOString().split('T')[0] });
+      // Get wellness progress data from the API
+      const wellnessProgressResponse = await apiService.getWellnessProgress();
       
-      // Get today's summary for current day data
-      const todaySummaryResponse = await apiService.getTodaySummary();
-      
-      // Initialize weekly progress array
-      const progressData = [0, 0, 0, 0, 0, 0, 0];
-      
-      if (missionStatsResponse.success && todaySummaryResponse.success) {
-        const stats = missionStatsResponse.data;
-        const todayData = todaySummaryResponse.data;
+      if (wellnessProgressResponse.success) {
+        const progress = wellnessProgressResponse.progress;
         
-        // Calculate overall completion rate for the week
-        const completionRate = stats.completion_rate || 0;
+        // Extract weekly progress from the wellness data
+        // The API returns tracking data that we can use to calculate weekly progress
+        const trackingData = progress.trackingData || {};
         
-        // Get today's activity score based on various metrics
-        let todayScore = 0;
-        let totalMetrics = 0;
+        // Initialize weekly progress array
+        const progressData = new Array<number>(7).fill(0);
         
-        // Water intake score (target: 2000ml)
-        if (todayData.water?.total_ml) {
-          const waterScore = Math.min((todayData.water.total_ml / 2000) * 100, 100);
-          todayScore += waterScore;
-          totalMetrics++;
-        }
-        
-        // Sleep score (target: 8 hours)
-        if (todayData.sleep?.total_hours) {
-          const sleepScore = Math.min((todayData.sleep.total_hours / 8) * 100, 100);
-          todayScore += sleepScore;
-          totalMetrics++;
-        }
-        
-        // Exercise score (target: 30 minutes)
-        if (todayData.fitness?.exercise_minutes) {
-          const exerciseScore = Math.min((todayData.fitness.exercise_minutes / 30) * 100, 100);
-          todayScore += exerciseScore;
-          totalMetrics++;
-        }
-        
-        // Steps score (target: 10000 steps)
-        if (todayData.fitness?.steps) {
-          const stepsScore = Math.min((todayData.fitness.steps / 10000) * 100, 100);
-          todayScore += stepsScore;
-          totalMetrics++;
-        }
-        
-        // Calculate average daily score
-        const averageDailyScore = totalMetrics > 0 ? todayScore / totalMetrics : 0;
+        // Calculate weekly progress based on available data
+        const waterData = trackingData.waterData || [];
+        const moodData = trackingData.moodData || [];
+        const sleepData = trackingData.sleepData || [];
         
         // Get current day of week (0 = Sunday, 1 = Monday, etc.)
         const today = new Date().getDay();
         
-        // Create a more realistic weekly distribution
-        // For past days, use a variation of the completion rate
-        // For today, use the actual calculated score
+        // Calculate daily scores for the past week
         for (let i = 0; i < 7; i++) {
+          let dailyScore = 0;
+          let totalMetrics = 0;
+          
+          // Water intake score (target: 2000ml)
+          if (waterData[i]) {
+            const waterScore = Math.min((waterData[i].value / 2000) * 100, 100);
+            dailyScore += waterScore;
+            totalMetrics++;
+          }
+          
+          // Sleep score (target: 8 hours)
+          if (sleepData[i]) {
+            const sleepScore = Math.min((sleepData[i].value / 8) * 100, 100);
+            dailyScore += sleepScore;
+            totalMetrics++;
+          }
+          
+          // Mood score (target: 10 points)
+          if (moodData[i]) {
+            const moodScore = (moodData[i].value / 10) * 100;
+            dailyScore += moodScore;
+            totalMetrics++;
+          }
+          
+          // Calculate average daily score
+          const averageDailyScore = totalMetrics > 0 ? dailyScore / totalMetrics : 0;
+          
           if (i === today) {
-            // Today's score
+            // Today's score - use actual data if available
             progressData[i] = Math.round(averageDailyScore);
           } else if (i < today) {
-            // Past days - use completion rate with some variation
-            const variation = (Math.random() - 0.5) * 20; // ±10% variation
-            progressData[i] = Math.max(0, Math.min(100, Math.round(completionRate + variation)));
+            // Past days - use calculated score or fallback to wellness score
+            progressData[i] = Math.round(averageDailyScore);
           } else {
-            // Future days - show 0 or very low values
+            // Future days - show 0
             progressData[i] = 0;
           }
         }
+        
+        // Only show weekly progress if user has wellness activities or tracking data
+        const hasWellnessActivities = progress.totalActivities > 0;
+        const hasTrackingData = waterData.length > 0 || moodData.length > 0 || sleepData.length > 0;
+        const hasAnyData = hasWellnessActivities || hasTrackingData;
+        
+        // If no tracking data available and no wellness activities, don't show sample data
+        if (progressData.every(score => score === 0) && !hasAnyData) {
+          // Don't show any weekly progress for users with no activities
+          setWeeklyProgress([0, 0, 0, 0, 0, 0, 0]);
+          return;
+        }
+        
+        // If no tracking data available but user has wellness activities, try to get sample data
+        if (progressData.every(score => score === 0) && hasWellnessActivities) {
+          try {
+            const sampleProgressResponse = await apiService.getWellnessProgress(5);
+            if (sampleProgressResponse.success) {
+              const sampleProgress = sampleProgressResponse.progress;
+              const sampleTrackingData = sampleProgress.trackingData || {};
+              const sampleWaterData = sampleTrackingData.waterData || [];
+              
+              // Use sample data to create realistic weekly progress
+              for (let i = 0; i < 7; i++) {
+                if (i <= today) {
+                  if (sampleWaterData[i]) {
+                    const waterScore = Math.min((sampleWaterData[i].value / 2000) * 100, 100);
+                    progressData[i] = Math.round(waterScore);
+                  } else {
+                    // Use wellness score as fallback
+                    progressData[i] = Math.round(sampleProgress.wellnessScore || 37);
+                  }
+                }
+              }
+            } else {
+              // Use wellness score as final fallback
+              const wellnessScore = progress.wellnessScore || 37;
+              for (let i = 0; i < 7; i++) {
+                if (i <= today) {
+                  progressData[i] = Math.round(wellnessScore);
+                }
+              }
+            }
+          } catch (error) {
+            console.error("Error loading sample progress data:", error);
+            // Use wellness score as final fallback
+            const wellnessScore = progress.wellnessScore || 37;
+            for (let i = 0; i < 7; i++) {
+              if (i <= today) {
+                progressData[i] = Math.round(wellnessScore);
+              }
+            }
+          }
+        }
+        
+        setWeeklyProgress(progressData);
       } else {
-        console.warn("Failed to load data for weekly progress");
+        console.warn("Failed to load wellness progress data");
         // Set default progress if API fails
         setWeeklyProgress([0, 0, 0, 0, 0, 0, 0]);
-        return;
       }
-      
-      setWeeklyProgress(progressData);
     } catch (error) {
       console.error("Error loading weekly progress:", error);
       // Set default progress if API fails
@@ -684,6 +769,7 @@ const DashboardTab = ({ navigation }: any) => {
 
   const renderQuickAction = ({ item }: any) => (
     <TouchableOpacity
+      key={item.id}
       style={styles.quickActionCard}
       onPress={item.action}
       activeOpacity={0.8}
@@ -942,7 +1028,7 @@ const DashboardTab = ({ navigation }: any) => {
               showsHorizontalScrollIndicator={false}
               contentContainerStyle={styles.activeMissionsScrollContainer}
             >
-              {userMissions.filter((um) => um.status === "active").map((userMission) => {
+              {userMissions.filter((um) => um.status === "active").map((userMission, index) => {
                 // Calculate real-time progress
                 const progressPercentage = userMission.mission?.target_value 
                   ? Math.min((userMission.current_value / userMission.mission.target_value) * 100, 100)
@@ -950,7 +1036,7 @@ const DashboardTab = ({ navigation }: any) => {
                 
                 return (
                 <TouchableOpacity
-                  key={userMission.id}
+                  key={userMission.id || userMission.mission_id || `mission-${index}`}
                   style={styles.activeMissionCard}
                   onPress={() => {
                     // Prevent navigation for completed missions
@@ -1094,7 +1180,7 @@ const TrackingTab = ({ navigation }: any) => {
       subtitle: "Catat asupan kalori harian",
       icon: "food-apple",
       color: "#FF6B8A",
-      gradient: ["#FF6B8A", "#E91E63"],
+      backgroundColor: "#FFF0F3",
       onPress: () => navigation.navigate("MealLogging"),
     },
     {
@@ -1103,7 +1189,7 @@ const TrackingTab = ({ navigation }: any) => {
       subtitle: "Monitor konsumsi air minum",
       icon: "cup-water",
       color: "#4ECDC4",
-      gradient: ["#4ECDC4", "#44A08D"],
+      backgroundColor: "#F0FDFA",
       onPress: () => navigation.navigate("WaterTracking"),
     },
     {
@@ -1112,7 +1198,7 @@ const TrackingTab = ({ navigation }: any) => {
       subtitle: "Catat aktivitas fisik",
       icon: "dumbbell",
       color: "#45B7D1",
-      gradient: ["#45B7D1", "#3182CE"],
+      backgroundColor: "#F0F9FF",
       onPress: () => navigation.navigate("FitnessTracking"),
     },
     {
@@ -1121,7 +1207,7 @@ const TrackingTab = ({ navigation }: any) => {
       subtitle: "Deteksi aktivitas otomatis",
       icon: "heart-pulse",
       color: "#96CEB4",
-      gradient: ["#96CEB4", "#38A169"],
+      backgroundColor: "#F0FDF4",
       onPress: () => navigation.navigate("RealtimeFitness"),
     },
     {
@@ -1130,7 +1216,7 @@ const TrackingTab = ({ navigation }: any) => {
       subtitle: "Monitor suasana hati",
       icon: "emoticon",
       color: "#F59E0B",
-      gradient: ["#F59E0B", "#D97706"],
+      backgroundColor: "#FFFBEB",
       onPress: () => navigation.navigate("MoodTracking"),
     },
     {
@@ -1139,7 +1225,7 @@ const TrackingTab = ({ navigation }: any) => {
       subtitle: "Lacak pola tidur",
       icon: "sleep",
       color: "#9F7AEA",
-      gradient: ["#9F7AEA", "#805AD5"],
+      backgroundColor: "#FAF5FF",
       onPress: () => navigation.navigate("SleepTracking"),
     },
   ];
@@ -1168,73 +1254,33 @@ const TrackingTab = ({ navigation }: any) => {
         <View style={styles.trackingSection}>
           <Text style={styles.sectionTitle}>Tracking Categories</Text>
           <View style={styles.trackingWrapper}>
-            <FlatList
-              data={trackingOptions}
-              renderItem={({ item }) => (
+            <View style={styles.trackingList}>
+              {trackingOptions.map((item) => (
                 <TouchableOpacity
-                  style={styles.modernTrackingCard}
+                  key={item.id.toString()}
+                  style={[styles.modernTrackingCard, { backgroundColor: item.backgroundColor }]}
                   onPress={item.onPress}
                   activeOpacity={0.8}
                 >
-                                  <LinearGradient
-                  colors={item.gradient as [string, string]}
-                  style={styles.modernTrackingGradient}
-                >
-                  <View style={styles.modernTrackingIconContainer}>
-                    <Icon name={item.icon} size={32} color="#FFFFFF" />
+                  <View style={styles.modernTrackingCardContent}>
+                    <View style={styles.modernTrackingIconContainer}>
+                      <Icon name={item.icon} size={36} color={item.color} />
+                    </View>
+                    <View style={styles.modernTrackingContent}>
+                      <Text style={styles.modernTrackingTitle}>{item.title}</Text>
+                      <Text style={styles.modernTrackingSubtitle}>{item.subtitle}</Text>
+                    </View>
+                    <View style={styles.modernTrackingArrow}>
+                      <Icon name="chevron-right" size={20} color={item.color} />
+                    </View>
                   </View>
-                  <View style={styles.modernTrackingContent}>
-                    <Text style={styles.modernTrackingTitle}>{item.title}</Text>
-                    <Text style={styles.modernTrackingSubtitle}>{item.subtitle}</Text>
-                  </View>
-                </LinearGradient>
                 </TouchableOpacity>
-              )}
-              keyExtractor={(item) => item.id.toString()}
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.trackingList}
-              style={{ minHeight: 180 }}
-            />
+              ))}
+            </View>
           </View>
         </View>
 
-        {/* Quick Stats */}
-        <View style={styles.statsSection}>
-          <Text style={styles.sectionTitle}>Today's Overview</Text>
-          <View style={styles.statsGrid}>
-            <View style={styles.statCard}>
-              <LinearGradient
-                colors={["#FF6B8A", "#E91E63"]}
-                style={styles.statCardGradient}
-              >
-                <Icon name="fire" size={24} color="#FFFFFF" />
-                <Text style={styles.statNumber}>0</Text>
-                <Text style={styles.statLabel}>Calories</Text>
-              </LinearGradient>
-            </View>
-            <View style={styles.statCard}>
-              <LinearGradient
-                colors={["#4ECDC4", "#44A08D"]}
-                style={styles.statCardGradient}
-              >
-                <Icon name="cup-water" size={24} color="#FFFFFF" />
-                <Text style={styles.statNumber}>0</Text>
-                <Text style={styles.statLabel}>Water (L)</Text>
-              </LinearGradient>
-            </View>
-            <View style={styles.statCard}>
-              <LinearGradient
-                colors={["#45B7D1", "#3182CE"]}
-                style={styles.statCardGradient}
-              >
-                <Icon name="walk" size={24} color="#FFFFFF" />
-                <Text style={styles.statNumber}>0</Text>
-                <Text style={styles.statLabel}>Steps</Text>
-              </LinearGradient>
-            </View>
-          </View>
-        </View>
+        
       </ScrollView>
     </SafeAreaView>
   );
@@ -1244,6 +1290,7 @@ const TrackingTab = ({ navigation }: any) => {
 const WellnessApp = ({ navigation }: any) => {
   const theme = useTheme<CustomTheme>();
   const { user, isAuthenticated, isLoading: authLoading } = useAuth();
+  const { t } = useLanguage();
   const [hasProfile, setHasProfile] = useState<boolean | null>(null);
   const [showOnboarding, setShowOnboarding] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
@@ -1331,7 +1378,7 @@ const WellnessApp = ({ navigation }: any) => {
     return (
       <SafeAreaView style={styles.safeArea}>
         <View style={styles.loadingContainer}>
-          <Text>Loading Wellness App...</Text>
+          <Text>{t("common.loading")} Wellness App...</Text>
         </View>
       </SafeAreaView>
     );
@@ -2053,10 +2100,10 @@ const styles = StyleSheet.create({
   },
   statCard: {
     alignItems: "center",
-    backgroundColor: "#FFFFFF",
-    borderRadius: 12,
-    padding: 16,
-    minWidth: 80,
+    borderRadius: 16,
+    padding: 20,
+    flex: 1,
+    marginHorizontal: 4,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
@@ -2085,7 +2132,7 @@ const styles = StyleSheet.create({
   statNumber: {
     fontSize: 24,
     fontWeight: "bold",
-    color: "#E22345",
+    marginTop: 8,
   },
   statNumberModern: {
     fontSize: 28,
@@ -2520,15 +2567,20 @@ const styles = StyleSheet.create({
     paddingBottom: 20,
   },
   modernTrackingCard: {
-    width: 200,
-    marginRight: 16,
+    width: "100%",
+    marginBottom: 16,
     borderRadius: 20,
-    overflow: "hidden",
+    padding: 20,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.15,
     shadowRadius: 12,
     elevation: 8,
+    position: "relative",
+  },
+  modernTrackingCardContent: {
+    flexDirection: "row",
+    alignItems: "center",
   },
   modernTrackingGradient: {
     padding: 20,
@@ -2538,35 +2590,27 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   modernTrackingIconContainer: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: "rgba(255, 255, 255, 0.2)",
     justifyContent: "center",
     alignItems: "center",
-    marginBottom: 16,
+    marginRight: 16,
   },
   modernTrackingContent: {
-    alignItems: "center",
+    flex: 1,
   },
   modernTrackingTitle: {
     fontSize: 16,
     fontWeight: "700",
-    color: "#FFFFFF",
+    color: "#1F2937",
     marginBottom: 8,
-    textAlign: "center",
+    textAlign: "left",
   },
   modernTrackingSubtitle: {
     fontSize: 12,
-    color: "#FFFFFF",
-    opacity: 0.9,
+    color: "#64748B",
     lineHeight: 16,
-    textAlign: "center",
+    textAlign: "left",
   },
-  modernTrackingArrow: {
-    justifyContent: "center",
-    alignItems: "center",
-  },
+
   statsSection: {
     marginBottom: 32,
     paddingHorizontal: 20,
@@ -2849,6 +2893,53 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
     fontSize: 16,
     fontWeight: "600",
+  },
+  // Age display styles
+  ageLoadingContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 8,
+  },
+  ageLoadingText: {
+    color: "#667eea",
+    fontSize: 14,
+    marginLeft: 8,
+    fontStyle: "italic",
+  },
+  ageDisplayContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#F3F4F6",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    marginTop: 8,
+  },
+  ageIcon: {
+    marginRight: 8,
+  },
+  ageDisplayText: {
+    color: "#1F2937",
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  ageErrorText: {
+    color: "#EF4444",
+    fontSize: 12,
+    marginTop: 4,
+    fontStyle: "italic",
+  },
+  statIconBackground: {
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 10,
+  },
+
+  modernTrackingArrow: {
+    position: "absolute",
+    right: 16,
+    top: "50%",
+    marginTop: -10,
   },
 });
 
