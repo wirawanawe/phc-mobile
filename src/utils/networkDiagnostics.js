@@ -51,7 +51,7 @@ export class NetworkDiagnostics {
 
   static async runFullDiagnostics() {
     const possibleURLs = [
-      "http://10.242.90.103:3000/api/mobile"
+      "https://dash.doctorphc.id/api/mobile"
     ];
 
     const results = [];
@@ -119,7 +119,7 @@ export class NetworkDiagnostics {
 
   static async checkServerHealth() {
     try {
-      const response = await fetch('http://10.242.90.103:3000/api/mobile/auth/me', {
+      const response = await fetch('https://dash.doctorphc.id/api/mobile/auth/me', {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',

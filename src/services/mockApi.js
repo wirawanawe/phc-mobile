@@ -2,7 +2,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 
 class MockApiService {
   constructor() {
-    this.baseURL = "http://10.242.90.103:3000/api";
+    this.baseURL = "https://dash.doctorphc.id/api";
     this.mockUserMissions = []; // Track user missions - will be populated from database
     this.mockMissionStats = {
       totalMissions: 0,

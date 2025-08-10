@@ -10,24 +10,13 @@ import ConnectionTest from "../utils/connectionTest";
 
 // Configuration for different environments
 const getApiBaseUrl = () => {
-  // For development - you can change this based on your setup
+  // Use localhost for development, production server for production
   if (__DEV__) {
-    // Check if running on Android emulator
-    if (Platform.OS === "android") {
-      return "http://10.0.2.2:3000/api/mobile";
-    }
-
-    // Check if running on iOS simulator
-    if (Platform.OS === "ios") {
-      return "http://localhost:3000/api/mobile";
-    }
-
-    // For physical device testing - use the working server IP
-    return "http://10.242.90.103:3000/api/mobile";
+    console.log('🔧 Development mode: Using localhost API');
+    return "http://localhost:3000/api/mobile";
   }
-
-  // For production - use your actual API URL
-  return "https://your-api-domain.com/api/mobile";
+  // Always use production server for now
+  return "https://dash.doctorphc.id/api/mobile";
 };
 
 // Network connectivity test function
@@ -39,8 +28,8 @@ const testNetworkConnectivity = async (baseURL) => {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
     
-    // Use the health endpoint instead of auth/me for connectivity testing
-    const healthURL = baseURL.replace('/api/mobile', '') + '/api/health';
+    // Use the health endpoint for connectivity testing
+    const healthURL = `${baseURL}/api/health`;
     console.log('🏥 Network: Testing health endpoint:', healthURL);
     
     const response = await fetch(healthURL, {
@@ -75,11 +64,20 @@ const testNetworkConnectivity = async (baseURL) => {
 const getBestApiUrl = async () => {
   if (__DEV__) {
     try {
-      // Use the simple getApiBaseUrl function for now
-      const baseUrl = getApiBaseUrl();
-      return baseUrl;
+      // Test localhost connectivity first
+      console.log('🔧 Development mode: Testing localhost connectivity...');
+      const localhostTest = await testNetworkConnectivity('http://localhost:3000');
+      
+      if (localhostTest.success) {
+        console.log('✅ Localhost API available, using localhost');
+        return "http://localhost:3000/api/mobile";
+      } else {
+        console.log('⚠️ Localhost not available, falling back to production');
+        return "https://dash.doctorphc.id/api/mobile";
+      }
     } catch (error) {
-      return getApiBaseUrl();
+      console.log('⚠️ Error testing localhost, using production');
+      return "https://dash.doctorphc.id/api/mobile";
     }
   }
   
@@ -306,10 +304,7 @@ class ApiService {
       await this.initialize();
     }
 
-    // Force re-initialization if using old IP
-    if (this.baseURL && this.baseURL.includes('10.0.2.2')) {
-      await this.reinitialize();
-    }
+    // No need to reinitialize since we're always using production server
 
     const makeRequest = async (authToken) => {
       try {
@@ -1018,6 +1013,9 @@ class ApiService {
     try {
       return await this.request("/wellness/status");
     } catch (error) {
+      // Log the error but don't re-throw it
+      console.log("ℹ️ Wellness status endpoint not available, using default values");
+      
       // Return a default response if the endpoint fails
       return {
         success: true,

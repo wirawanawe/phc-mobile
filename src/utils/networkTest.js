@@ -1,7 +1,7 @@
 import { Platform } from 'react-native';
 
 const ENDPOINTS = [
-  'http://10.242.90.103:3000', // Server IP from server.js
+  'https://dash.doctorphc.id', // Production server
   'http://192.168.18.30:3000', // Local network IP
   'http://192.168.193.150:3000', // Local network IP
   'http://192.168.1.100:3000',

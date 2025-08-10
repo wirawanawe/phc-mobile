@@ -1,32 +1,32 @@
-const api = require('../src/services/api');
+const fetch = require('node-fetch');
 
 async function testMobileAPI() {
-  try {
-    console.log('Testing mobile API calls...');
-    
-    // Test fitness API
-    console.log('\n1. Testing fitness API...');
-    const fitnessResponse = await api.getTodayFitness();
-    console.log('Fitness response:', JSON.stringify(fitnessResponse, null, 2));
-    
-    // Test nutrition API
-    console.log('\n2. Testing nutrition API...');
-    const nutritionResponse = await api.getTodayNutrition();
-    console.log('Nutrition response:', JSON.stringify(nutritionResponse, null, 2));
-    
-    // Test water API
-    console.log('\n3. Testing water API...');
-    const waterResponse = await api.getTodayWaterIntake();
-    console.log('Water response:', JSON.stringify(waterResponse, null, 2));
-    
-    // Test today summary API
-    console.log('\n4. Testing today summary API...');
-    const summaryResponse = await api.getTodaySummary();
-    console.log('Summary response:', JSON.stringify(summaryResponse, null, 2));
-    
-  } catch (error) {
-    console.error('Error testing mobile API:', error);
+  const urls = [
+    'http://localhost:3000/api/mobile/help/contact',
+    'http://10.242.90.103:3000/api/mobile/help/contact'
+  ];
+
+  for (const url of urls) {
+    try {
+      console.log(`🧪 Testing URL: ${url}`);
+      
+      const response = await fetch(url);
+      const data = await response.json();
+      
+      console.log(`📊 Status: ${response.status}`);
+      
+      if (data.success) {
+        console.log('✅ Success!');
+        console.log('📞 Contact Methods:', data.data.contactMethods.length);
+        console.log('📞 First Contact:', data.data.contactMethods[0]);
+      } else {
+        console.log('❌ Failed:', data.message);
+      }
+    } catch (error) {
+      console.log(`❌ Error: ${error.message}`);
+    }
+    console.log('---');
   }
 }
 
-testMobileAPI(); 
+testMobileAPI();

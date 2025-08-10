@@ -230,7 +230,7 @@ class SocialAuthService {
     try {
       // Here you would typically verify OTP with your backend
       // For now, we'll simulate verification
-      const response = await fetch('http://10.242.90.103:3000/api/auth/verify-otp', {
+      const response = await fetch('https://dash.doctorphc.id/api/auth/verify-otp', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

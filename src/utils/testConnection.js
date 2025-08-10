@@ -7,7 +7,7 @@ import { Platform } from 'react-native';
 
 export const testMobileConnection = async () => {
   const endpoints = [
-    'http://10.242.90.103:3000/api/health',
+    'https://dash.doctorphc.id/api/health',
     'http://localhost:3000/api/health',
     'http://127.0.0.1:3000/api/health'
   ];

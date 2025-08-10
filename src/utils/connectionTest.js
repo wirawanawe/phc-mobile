@@ -43,11 +43,11 @@ export class ConnectionTest {
 
   static async testAllEndpoints() {
     const endpoints = [
-      'http://localhost:3000/api/mobile/auth/me',
-      'http://127.0.0.1:3000/api/mobile/auth/me',
-      'http://10.0.2.2:3000/api/mobile/auth/me',
-      'http://192.168.1.100:3000/api/mobile/auth/me',
-      'http://10.242.90.103:3000/api/mobile/auth/me'
+      'https://dash.doctorphc.id/api/mobile/auth/me', // Production server (primary)
+      'http://localhost:3000/api/mobile/auth/me', // Local development (fallback)
+      'http://127.0.0.1:3000/api/mobile/auth/me', // Local development (fallback)
+      'http://10.0.2.2:3000/api/mobile/auth/me', // Android emulator (fallback)
+      'http://192.168.1.100:3000/api/mobile/auth/me' // Local network (fallback)
     ];
 
     console.log('🔍 Testing all endpoints...');

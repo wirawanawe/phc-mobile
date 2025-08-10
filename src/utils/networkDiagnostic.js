@@ -8,7 +8,7 @@ import { Platform } from 'react-native';
 export class NetworkDiagnostic {
   static async testAllEndpoints() {
     const endpoints = [
-      'http://10.242.90.103:3000/api/mobile/auth/me'
+      'https://dash.doctorphc.id/api/mobile/auth/me'
     ];
 
     const results = [];
