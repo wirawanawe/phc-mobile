@@ -13,55 +13,56 @@ import Icon from "react-native-vector-icons/MaterialCommunityIcons";
 import { LinearGradient } from "expo-linear-gradient";
 import { CustomTheme } from "../theme/theme";
 import { useAuth } from "../contexts/AuthContext";
-import { useLanguage } from "../contexts/LanguageContext";
+
+import { safeGoBack } from "../utils/safeNavigation";
 
 const AboutAppScreen = ({ navigation }: any) => {
   const theme = useTheme<CustomTheme>();
   const { user } = useAuth();
-  const { t } = useLanguage();
+
 
   const appInfo = {
     name: "Wellness WeCare",
     version: "1.0.0",
     buildNumber: "2024.03.15",
-    description: t("about.description"),
+    description: "Aplikasi kesehatan komprehensif yang membantu Anda mengelola dan memantau kesehatan dengan mudah.",
     features: [
-      t("about.features.activityTracking"),
-      t("about.features.consultation"),
-      t("about.features.healthGoals"),
-      t("about.features.medicalHistory"),
-      t("about.features.wellnessChallenges"),
-      t("about.features.healthEducation"),
-      t("about.features.healthCalculator"),
-      t("about.features.healthNotifications"),
+      "Pelacakan Aktivitas Harian",
+      "Konsultasi dengan Dokter",
+      "Pengaturan Tujuan Kesehatan",
+      "Riwayat Medis",
+      "Tantangan Wellness",
+      "Edukasi Kesehatan",
+      "Kalkulator Kesehatan",
+      "Notifikasi Kesehatan",
     ],
     team: [
       {
-        name: t("about.team.development.name"),
-        role: t("about.team.development.role"),
-        description: t("about.team.development.description"),
+        name: "Tim Pengembangan",
+        role: "Developer",
+        description: "Mengembangkan fitur-fitur inovatif untuk kesehatan Anda",
       },
       {
-        name: t("about.team.design.name"),
-        role: t("about.team.design.role"),
-        description: t("about.team.design.description"),
+        name: "Tim Desain",
+        role: "UI/UX Designer",
+        description: "Menciptakan pengalaman pengguna yang intuitif dan menyenangkan",
       },
       {
-        name: t("about.team.medical.name"),
-        role: t("about.team.medical.role"),
-        description: t("about.team.medical.description"),
+        name: "Tim Medis",
+        role: "Konsultan Medis",
+        description: "Memastikan informasi kesehatan yang akurat dan terpercaya",
       },
       {
-        name: t("about.team.support.name"),
-        role: t("about.team.support.role"),
-        description: t("about.team.support.description"),
+        name: "Tim Dukungan",
+        role: "Customer Support",
+        description: "Memberikan bantuan dan dukungan terbaik untuk pengguna",
       },
     ],
     contact: {
       email: "info@wellnesswecare.com",
       website: "https://wellnesswecare.com",
       phone: "+62 812-3456-7890",
-      address: t("about.contact.address"),
+      address: "Jakarta, Indonesia",
     },
   };
 
@@ -77,24 +78,24 @@ const AboutAppScreen = ({ navigation }: any) => {
         Linking.openURL(`tel:${appInfo.contact.phone}`);
         break;
       case "address":
-        Alert.alert(t("about.contact.addressTitle"), appInfo.contact.address);
+        Alert.alert("Alamat", appInfo.contact.address);
         break;
     }
   };
 
   const handleShareApp = () => {
     Alert.alert(
-      t("about.share.title"),
-      t("about.share.message"),
-      [{ text: t("common.ok") }]
+      "Bagikan Aplikasi",
+      "Bagikan aplikasi Wellness WeCare dengan teman dan keluarga Anda!",
+      [{ text: "OK" }]
     );
   };
 
   const handleRateApp = () => {
     Alert.alert(
-      t("about.rate.title"),
-      t("about.rate.message"),
-      [{ text: t("common.ok") }]
+      "Beri Rating",
+      "Bantu kami meningkatkan aplikasi dengan memberikan rating dan ulasan!",
+      [{ text: "OK" }]
     );
   };
 
@@ -145,11 +146,11 @@ const AboutAppScreen = ({ navigation }: any) => {
         <View style={styles.header}>
           <TouchableOpacity
             style={styles.backButton}
-            onPress={() => navigation.goBack()}
+            onPress={() => safeGoBack(navigation, 'Main')}
           >
             <Icon name="arrow-left" size={24} color="#374151" />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>{t("about.title")}</Text>
+          <Text style={styles.headerTitle}>Tentang Aplikasi</Text>
           <View style={styles.headerRight} />
         </View>
 
@@ -164,7 +165,7 @@ const AboutAppScreen = ({ navigation }: any) => {
             </View>
             <View style={styles.appInfo}>
               <Text style={styles.appName}>{appInfo.name}</Text>
-              <Text style={styles.appVersion}>{t("about.version")} {appInfo.version}</Text>
+              <Text style={styles.appVersion}>Versi {appInfo.version}</Text>
               <Text style={styles.appDescription}>{appInfo.description}</Text>
             </View>
           </View>
@@ -172,7 +173,7 @@ const AboutAppScreen = ({ navigation }: any) => {
 
         {/* Features Section */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>{t("about.features.title")}</Text>
+          <Text style={styles.sectionTitle}>Fitur Utama</Text>
           <Card style={styles.card}>
             <Card.Content>
               {appInfo.features.map(renderFeatureItem)}
@@ -182,16 +183,16 @@ const AboutAppScreen = ({ navigation }: any) => {
 
         {/* Mission & Vision */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>{t("about.mission.title")}</Text>
+          <Text style={styles.sectionTitle}>Misi & Visi</Text>
           <View style={styles.missionContainer}>
             <Card style={styles.missionCard}>
               <Card.Content>
                 <View style={styles.missionHeader}>
                   <Icon name="target" size={24} color="#10B981" />
-                  <Text style={styles.missionTitle}>{t("about.mission.mission")}</Text>
+                  <Text style={styles.missionTitle}>Misi</Text>
                 </View>
                 <Text style={styles.missionText}>
-                  {t("about.mission.missionText")}
+                  Memberikan akses mudah ke layanan kesehatan berkualitas untuk semua orang
                 </Text>
               </Card.Content>
             </Card>
@@ -200,10 +201,10 @@ const AboutAppScreen = ({ navigation }: any) => {
               <Card.Content>
                 <View style={styles.missionHeader}>
                   <Icon name="eye" size={24} color="#3B82F6" />
-                  <Text style={styles.missionTitle}>{t("about.mission.vision")}</Text>
+                  <Text style={styles.missionTitle}>Visi</Text>
                 </View>
                 <Text style={styles.missionText}>
-                  {t("about.mission.visionText")}
+                  Menjadi platform kesehatan digital terdepan yang memberdayakan masyarakat untuk hidup lebih sehat
                 </Text>
               </Card.Content>
             </Card>
@@ -212,7 +213,7 @@ const AboutAppScreen = ({ navigation }: any) => {
 
         {/* Team Section */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>{t("about.team.title")}</Text>
+          <Text style={styles.sectionTitle}>Tim Kami</Text>
           <Card style={styles.card}>
             <Card.Content>
               {appInfo.team.map(renderTeamMember)}
@@ -222,23 +223,23 @@ const AboutAppScreen = ({ navigation }: any) => {
 
         {/* Contact Section */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>{t("about.contact.title")}</Text>
+          <Text style={styles.sectionTitle}>Hubungi Kami</Text>
           <Card style={styles.card}>
             <Card.Content>
-              {renderContactItem(t("about.contact.email"), appInfo.contact.email, "email", "email")}
+              {renderContactItem("Email", appInfo.contact.email, "email", "email")}
               <View style={styles.divider} />
-              {renderContactItem(t("about.contact.website"), appInfo.contact.website, "web", "website")}
+              {renderContactItem("Website", appInfo.contact.website, "web", "website")}
               <View style={styles.divider} />
-              {renderContactItem(t("about.contact.phone"), appInfo.contact.phone, "phone", "phone")}
+              {renderContactItem("Telepon", appInfo.contact.phone, "phone", "phone")}
               <View style={styles.divider} />
-              {renderContactItem(t("about.contact.address"), appInfo.contact.address, "map-marker", "address")}
+              {renderContactItem("Alamat", appInfo.contact.address, "map-marker", "address")}
             </Card.Content>
           </Card>
         </View>
 
         {/* Actions Section */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>{t("about.actions.title")}</Text>
+          <Text style={styles.sectionTitle}>Aksi</Text>
           <View style={styles.actionsContainer}>
             <TouchableOpacity
               style={styles.actionButton}
@@ -247,7 +248,7 @@ const AboutAppScreen = ({ navigation }: any) => {
               <View style={[styles.actionIcon, { backgroundColor: "#10B98120" }]}>
                 <Icon name="share" size={24} color="#10B981" />
               </View>
-              <Text style={styles.actionTitle}>{t("about.actions.share")}</Text>
+              <Text style={styles.actionTitle}>Bagikan App</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -257,20 +258,20 @@ const AboutAppScreen = ({ navigation }: any) => {
               <View style={[styles.actionIcon, { backgroundColor: "#F59E0B20" }]}>
                 <Icon name="star" size={24} color="#F59E0B" />
               </View>
-              <Text style={styles.actionTitle}>{t("about.actions.rate")}</Text>
+              <Text style={styles.actionTitle}>Beri Rating</Text>
             </TouchableOpacity>
           </View>
         </View>
 
         {/* Legal Section */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>{t("about.legal.title")}</Text>
+          <Text style={styles.sectionTitle}>Legal</Text>
           <Card style={styles.card}>
             <Card.Content>
               <TouchableOpacity style={styles.legalItem}>
                 <View style={styles.legalContent}>
                   <Icon name="file-document" size={20} color="#6B7280" />
-                  <Text style={styles.legalTitle}>{t("about.legal.terms")}</Text>
+                  <Text style={styles.legalTitle}>Syarat & Ketentuan</Text>
                 </View>
                 <Icon name="chevron-right" size={20} color="#6B7280" />
               </TouchableOpacity>
@@ -278,7 +279,7 @@ const AboutAppScreen = ({ navigation }: any) => {
               <TouchableOpacity style={styles.legalItem}>
                 <View style={styles.legalContent}>
                   <Icon name="shield-check" size={20} color="#6B7280" />
-                  <Text style={styles.legalTitle}>{t("about.legal.privacy")}</Text>
+                  <Text style={styles.legalTitle}>Kebijakan Privasi</Text>
                 </View>
                 <Icon name="chevron-right" size={20} color="#6B7280" />
               </TouchableOpacity>
@@ -286,7 +287,7 @@ const AboutAppScreen = ({ navigation }: any) => {
               <TouchableOpacity style={styles.legalItem}>
                 <View style={styles.legalContent}>
                   <Icon name="cookie" size={20} color="#6B7280" />
-                  <Text style={styles.legalTitle}>{t("about.legal.cookies")}</Text>
+                  <Text style={styles.legalTitle}>Kebijakan Cookie</Text>
                 </View>
                 <Icon name="chevron-right" size={20} color="#6B7280" />
               </TouchableOpacity>
@@ -297,7 +298,7 @@ const AboutAppScreen = ({ navigation }: any) => {
         {/* Footer */}
         <View style={styles.footer}>
           <Text style={styles.footerText}>© 2024 Wellness WeCare</Text>
-          <Text style={styles.footerText}>{t("about.footer.madeWithLove")}</Text>
+          <Text style={styles.footerText}>Dibuat dengan ❤️ di Indonesia</Text>
           <Text style={styles.footerText}>Build: {appInfo.buildNumber}</Text>
         </View>
       </ScrollView>

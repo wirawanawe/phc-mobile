@@ -17,6 +17,7 @@ import { CustomTheme } from "../theme/theme";
 import { useAuth } from "../contexts/AuthContext";
 import api from "../services/api";
 import { handleError, handleAuthError } from "../utils/errorHandler";
+import { safeGoBack } from "../utils/safeNavigation";
 
 const { width } = Dimensions.get("window");
 
@@ -188,7 +189,7 @@ const ExerciseHistoryScreen = ({ navigation }: any) => {
           <View style={styles.header}>
             <TouchableOpacity
               style={styles.backButton}
-              onPress={() => navigation.goBack()}
+              onPress={() => safeGoBack(navigation, 'Main')}
             >
               <Icon name="arrow-left" size={24} color="#1F2937" />
             </TouchableOpacity>

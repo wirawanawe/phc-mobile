@@ -14,6 +14,7 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import apiService from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import LoadingError from '../components/LoadingError';
+import { safeGoBack } from "../utils/safeNavigation";
 
 interface Doctor {
   id: number;
@@ -63,7 +64,7 @@ const ConsultationBookingScreen: React.FC<ConsultationBookingScreenProps> = ({
     } else {
       // If no doctor data, redirect back
       Alert.alert('Error', 'Data dokter tidak ditemukan', [
-        { text: 'OK', onPress: () => navigation.goBack() }
+        { text: 'OK', onPress: () => safeGoBack(navigation, 'Main') }
       ]);
     }
   }, [route.params?.doctor, route.params?.selectedTimeSlot]);
@@ -197,7 +198,7 @@ const ConsultationBookingScreen: React.FC<ConsultationBookingScreenProps> = ({
   if (error && !route.params?.doctor) {
     return (
       <SafeAreaView style={styles.container}>
-        <LoadingError error={error} onRetry={() => navigation.goBack()} />
+        <LoadingError error={error} onRetry={() => safeGoBack(navigation, 'Main')} />
       </SafeAreaView>
     );
   }
@@ -207,7 +208,7 @@ const ConsultationBookingScreen: React.FC<ConsultationBookingScreenProps> = ({
       <StatusBar backgroundColor="#E22345" barStyle="light-content" />
       
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
+        <TouchableOpacity onPress={() => safeGoBack(navigation, 'Main')}>
           <Icon name="arrow-left" size={24} color="#FFFFFF" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Book Konsultasi</Text>

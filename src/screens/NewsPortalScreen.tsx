@@ -12,11 +12,11 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import Icon from "react-native-vector-icons/MaterialCommunityIcons";
 import { CustomTheme } from "../theme/theme";
 import RSSService, { RSSItem } from "../services/RSSService";
-import { useLanguage } from "../contexts/LanguageContext";
+
 
 const NewsPortalScreen = ({ navigation }: any) => {
   const theme = useTheme<CustomTheme>();
-  const { t } = useLanguage();
+
   const [searchQuery, setSearchQuery] = useState("");
 
   const [newsArticles, setNewsArticles] = useState<RSSItem[]>([]);
@@ -61,7 +61,7 @@ const NewsPortalScreen = ({ navigation }: any) => {
         {/* Search Bar */}
         <View style={styles.searchContainer}>
           <Searchbar
-            placeholder={t("language.language") === "en" ? "Search health news..." : "Cari berita kesehatan..."}
+            placeholder="Cari berita kesehatan..."
             onChangeText={setSearchQuery}
             value={searchQuery}
             style={styles.searchBar}
@@ -77,7 +77,7 @@ const NewsPortalScreen = ({ navigation }: any) => {
             <Text
               style={[styles.sectionTitle, { color: theme.colors.primary }]}
             >
-              {t("language.language") === "en" ? "Featured Article" : "Artikel Unggulan"}
+              Artikel Unggulan
             </Text>
             <Card
               style={[
@@ -147,7 +147,7 @@ const NewsPortalScreen = ({ navigation }: any) => {
                   ]}
                   labelStyle={styles.readMoreButtonLabel}
                 >
-                  {t("language.language") === "en" ? "Read More" : "Baca Selengkapnya"}
+                  Baca Selengkapnya
                 </Button>
               </Card.Content>
             </Card>
@@ -157,7 +157,7 @@ const NewsPortalScreen = ({ navigation }: any) => {
         {/* Latest News */}
         <View style={styles.articlesContainer}>
           <Text style={[styles.sectionTitle, { color: theme.colors.primary }]}>
-            {t("language.language") === "en" ? "Latest News" : "Berita Terbaru"}
+            Berita Terbaru
           </Text>
           {regularArticles.map((article) => (
             <Card key={article.id} style={styles.articleCard}>
@@ -226,7 +226,7 @@ const NewsPortalScreen = ({ navigation }: any) => {
                     { color: theme.customColors.darkGreen },
                   ]}
                 >
-                  {t("language.language") === "en" ? "Read More" : "Baca Selengkapnya"}
+                  Baca Selengkapnya
                 </Button>
               </Card.Content>
             </Card>
@@ -248,7 +248,7 @@ const NewsPortalScreen = ({ navigation }: any) => {
                   { color: theme.customColors.darkGreen },
                 ]}
               >
-                📧 {t("language.language") === "en" ? "Stay Updated" : "Tetap Terupdate"}
+                📧 Tetap Terupdate
               </Text>
               <Text
                 style={[
@@ -256,10 +256,7 @@ const NewsPortalScreen = ({ navigation }: any) => {
                   { color: theme.colors.onBackground },
                 ]}
               >
-                {t("language.language") === "en" 
-                  ? "Subscribe to our health newsletter to get the latest health tips and information directly to your inbox."
-                  : "Berlangganan newsletter kesehatan kami untuk mendapatkan tips dan informasi kesehatan terbaru langsung ke inbox Anda."
-                }
+                Berlangganan newsletter kesehatan kami untuk mendapatkan tips dan informasi kesehatan terbaru langsung ke inbox Anda.
               </Text>
               <Button
                 mode="contained"
@@ -272,7 +269,7 @@ const NewsPortalScreen = ({ navigation }: any) => {
                 ]}
                 labelStyle={styles.subscribeButtonLabel}
               >
-                {t("language.language") === "en" ? "Subscribe Newsletter" : "Berlangganan Newsletter"}
+                Berlangganan Newsletter
               </Button>
             </Card.Content>
           </Card>
@@ -362,6 +359,7 @@ const styles = StyleSheet.create({
   articleCard: {
     marginBottom: 15,
     elevation: 2,
+    minHeight: 140, // Ensure minimum height for content
   },
   articleHeader: {
     flexDirection: "row",
@@ -384,15 +382,18 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     marginBottom: 8,
     lineHeight: 22,
+    flexShrink: 1, // Allow text to shrink if needed
   },
   articleSummary: {
     fontSize: 14,
     lineHeight: 18,
+    marginBottom: 8, // Add bottom margin for better spacing
+    flexShrink: 1, // Allow text to shrink if needed
   },
   articleMeta: {
     flexDirection: "row",
     justifyContent: "space-between",
-    marginTop: 10,
+    marginTop: 8, // Reduced from 10 to 8
   },
   articleSource: {
     fontSize: 12,

@@ -16,6 +16,7 @@ import * as ImagePicker from 'expo-image-picker';
 import apiService from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import LoadingError from '../components/LoadingError';
+import { safeGoBack } from "../utils/safeNavigation";
 
 interface PaymentProofScreenProps {
   navigation: any;
@@ -230,7 +231,7 @@ const PaymentProofScreen: React.FC<PaymentProofScreenProps> = ({
       <StatusBar backgroundColor="#E22345" barStyle="light-content" />
       
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
+        <TouchableOpacity onPress={() => safeGoBack(navigation, 'Main')}>
           <Icon name="arrow-left" size={24} color="#FFFFFF" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Upload Bukti Pembayaran</Text>

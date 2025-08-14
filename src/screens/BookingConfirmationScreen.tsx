@@ -13,6 +13,7 @@ import Icon from "react-native-vector-icons/MaterialCommunityIcons";
 import { LinearGradient } from "expo-linear-gradient";
 import { CustomTheme } from "../theme/theme";
 import apiService from "../services/api";
+import { safeGoBack } from "../utils/safeNavigation";
 
 const BookingConfirmationScreen = ({ navigation, route }: any) => {
   const theme = useTheme<CustomTheme>();
@@ -396,7 +397,7 @@ const BookingConfirmationScreen = ({ navigation, route }: any) => {
                   if (onBookingUpdate) {
                     onBookingUpdate();
                   }
-                  navigation.goBack();
+                  safeGoBack(navigation, 'Main');
                 },
               },
             ]
@@ -419,7 +420,7 @@ const BookingConfirmationScreen = ({ navigation, route }: any) => {
   };
 
   const handleCancelBooking = () => {
-    navigation.goBack();
+    safeGoBack(navigation, 'Main');
   };
 
   return (
@@ -431,7 +432,7 @@ const BookingConfirmationScreen = ({ navigation, route }: any) => {
           <View style={styles.header}>
             <TouchableOpacity
               style={styles.backButton}
-              onPress={() => navigation.goBack()}
+              onPress={() => safeGoBack(navigation, 'Main')}
             >
               <Icon name="arrow-left" size={24} color="#1F2937" />
             </TouchableOpacity>

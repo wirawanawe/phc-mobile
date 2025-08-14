@@ -13,13 +13,14 @@ import Icon from "react-native-vector-icons/MaterialCommunityIcons";
 import { LinearGradient } from "expo-linear-gradient";
 import { CustomTheme } from "../theme/theme";
 import { useAuth } from "../contexts/AuthContext";
-import { useLanguage } from "../contexts/LanguageContext";
+
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { safeGoBack } from "../utils/safeNavigation";
 
 const PrivacySettingsScreen = ({ navigation }: any) => {
   const theme = useTheme<CustomTheme>();
   const { user } = useAuth();
-  const { t } = useLanguage();
+
   const [loading, setLoading] = useState(false);
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [passwordData, setPasswordData] = useState({
@@ -37,17 +38,17 @@ const PrivacySettingsScreen = ({ navigation }: any) => {
 
   const handlePasswordChange = async () => {
     if (!passwordData.currentPassword || !passwordData.newPassword || !passwordData.confirmPassword) {
-      Alert.alert(t("error"), t("privacy.fillAllFields"));
+      Alert.alert("Error", "Mohon isi semua field yang diperlukan");
       return;
     }
 
     if (passwordData.newPassword !== passwordData.confirmPassword) {
-      Alert.alert(t("error"), t("privacy.passwordMismatch"));
+      Alert.alert("Error", "Password tidak cocok");
       return;
     }
 
     if (passwordData.newPassword.length < 6) {
-      Alert.alert(t("error"), t("privacy.passwordTooShort"));
+      Alert.alert("Error", "Password minimal 6 karakter");
       return;
     }
 
@@ -60,11 +61,11 @@ const PrivacySettingsScreen = ({ navigation }: any) => {
       await AsyncStorage.setItem("userPassword", passwordData.newPassword);
       
       Alert.alert(
-        t("success"),
-        t("privacy.passwordChanged"),
+        "Berhasil",
+        "Password berhasil diubah",
         [
           {
-            text: t("common.ok"),
+            text: "OK",
             onPress: () => {
               setShowPasswordModal(false);
               setPasswordData({
@@ -78,7 +79,7 @@ const PrivacySettingsScreen = ({ navigation }: any) => {
       );
     } catch (error) {
       console.error("Error changing password:", error);
-      Alert.alert(t("error"), t("privacy.passwordChangeError"));
+      Alert.alert("Error", "Gagal mengubah password");
     } finally {
       setLoading(false);
     }
@@ -93,16 +94,16 @@ const PrivacySettingsScreen = ({ navigation }: any) => {
 
   const handleLogoutAllDevices = () => {
     Alert.alert(
-      t("privacy.logoutAllDevices.title"),
-      t("privacy.logoutAllDevices.message"),
+      "Keluar dari Semua Perangkat",
+      "Apakah Anda yakin ingin keluar dari semua perangkat?",
       [
-        { text: t("common.cancel"), style: "cancel" },
+        { text: "Batal", style: "cancel" },
         {
-          text: t("privacy.logoutAllDevices.confirm"),
+          text: "Keluar",
           style: "destructive",
           onPress: () => {
             // Implement logout all devices logic
-            Alert.alert(t("success"), t("privacy.logoutAllDevices.success"));
+            Alert.alert("Berhasil", "Berhasil keluar dari semua perangkat");
           },
         },
       ]
@@ -111,16 +112,16 @@ const PrivacySettingsScreen = ({ navigation }: any) => {
 
   const handleDeleteAccount = () => {
     Alert.alert(
-      t("privacy.deleteAccount.title"),
-      t("privacy.deleteAccount.message"),
+      "Hapus Akun",
+      "Apakah Anda yakin ingin menghapus akun? Tindakan ini tidak dapat dibatalkan.",
       [
-        { text: t("common.cancel"), style: "cancel" },
+        { text: "Batal", style: "cancel" },
         {
-          text: t("privacy.deleteAccount.confirm"),
+          text: "Hapus",
           style: "destructive",
           onPress: () => {
             // Implement account deletion logic
-            Alert.alert(t("success"), t("privacy.deleteAccount.success"));
+            Alert.alert("Berhasil", "Akun berhasil dihapus");
           },
         },
       ]
@@ -160,17 +161,17 @@ const PrivacySettingsScreen = ({ navigation }: any) => {
         <View style={styles.header}>
           <TouchableOpacity
             style={styles.backButton}
-            onPress={() => navigation.goBack()}
+            onPress={() => safeGoBack(navigation, 'Main')}
           >
             <Icon name="arrow-left" size={24} color="#374151" />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>{t("privacy.title")}</Text>
+          <Text style={styles.headerTitle}>Pengaturan Privasi</Text>
           <View style={styles.headerRight} />
         </View>
 
         {/* Security Section */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>{t("privacy.security.title")}</Text>
+          <Text style={styles.sectionTitle}>Keamanan</Text>
           <Card style={styles.card}>
             <Card.Content>
               <TouchableOpacity
@@ -182,9 +183,9 @@ const PrivacySettingsScreen = ({ navigation }: any) => {
                     <Icon name="lock" size={20} color="#EF4444" />
                   </View>
                   <View style={styles.menuItemText}>
-                    <Text style={styles.menuItemTitle}>{t("privacy.changePassword.title")}</Text>
+                    <Text style={styles.menuItemTitle}>Ubah Password</Text>
                     <Text style={styles.menuItemSubtitle}>
-                      {t("privacy.changePassword.subtitle")}
+                      Ubah password akun Anda
                     </Text>
                   </View>
                 </View>
@@ -202,9 +203,9 @@ const PrivacySettingsScreen = ({ navigation }: any) => {
                     <Icon name="logout" size={20} color="#F59E0B" />
                   </View>
                   <View style={styles.menuItemText}>
-                    <Text style={styles.menuItemTitle}>{t("privacy.logoutAllDevices.title")}</Text>
+                    <Text style={styles.menuItemTitle}>Keluar dari Semua Perangkat</Text>
                     <Text style={styles.menuItemSubtitle}>
-                      {t("privacy.logoutAllDevices.subtitle")}
+                      Keluar dari semua perangkat yang terhubung
                     </Text>
                   </View>
                 </View>
@@ -216,12 +217,12 @@ const PrivacySettingsScreen = ({ navigation }: any) => {
 
         {/* Privacy Settings Section */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>{t("privacy.settings.title")}</Text>
+          <Text style={styles.sectionTitle}>Pengaturan Privasi</Text>
           <Card style={styles.card}>
             <Card.Content>
               {renderPrivacyOption(
-                t("privacy.biometric.title"),
-                t("privacy.biometric.subtitle"),
+                "Autentikasi Biometrik",
+                "Gunakan sidik jari atau Face ID untuk masuk",
                 "fingerprint",
                 "biometricEnabled",
                 privacySettings.biometricEnabled,
@@ -231,8 +232,8 @@ const PrivacySettingsScreen = ({ navigation }: any) => {
               <View style={styles.divider} />
 
               {renderPrivacyOption(
-                t("privacy.dataSharing.title"),
-                t("privacy.dataSharing.subtitle"),
+                "Berbagi Data",
+                "Izinkan berbagi data untuk meningkatkan layanan",
                 "share-variant",
                 "dataSharing",
                 privacySettings.dataSharing,
@@ -242,8 +243,8 @@ const PrivacySettingsScreen = ({ navigation }: any) => {
               <View style={styles.divider} />
 
               {renderPrivacyOption(
-                t("privacy.location.title"),
-                t("privacy.location.subtitle"),
+                "Akses Lokasi",
+                "Izinkan akses lokasi untuk fitur terdekat",
                 "map-marker",
                 "locationSharing",
                 privacySettings.locationSharing,
@@ -253,8 +254,8 @@ const PrivacySettingsScreen = ({ navigation }: any) => {
               <View style={styles.divider} />
 
               {renderPrivacyOption(
-                t("privacy.healthData.title"),
-                t("privacy.healthData.subtitle"),
+                "Data Kesehatan",
+                "Sinkronisasi dengan aplikasi kesehatan lainnya",
                 "heart-pulse",
                 "healthDataSharing",
                 privacySettings.healthDataSharing,
@@ -264,8 +265,8 @@ const PrivacySettingsScreen = ({ navigation }: any) => {
               <View style={styles.divider} />
 
               {renderPrivacyOption(
-                t("privacy.notifications.title"),
-                t("privacy.notifications.subtitle"),
+                "Notifikasi",
+                "Terima notifikasi tentang aktivitas kesehatan",
                 "bell",
                 "notifications",
                 privacySettings.notifications,
@@ -277,7 +278,7 @@ const PrivacySettingsScreen = ({ navigation }: any) => {
 
         {/* Account Management Section */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>{t("privacy.accountManagement.title")}</Text>
+          <Text style={styles.sectionTitle}>Manajemen Akun</Text>
           <Card style={styles.card}>
             <Card.Content>
               <TouchableOpacity
@@ -290,10 +291,10 @@ const PrivacySettingsScreen = ({ navigation }: any) => {
                   </View>
                   <View style={styles.menuItemText}>
                     <Text style={[styles.menuItemTitle, { color: "#DC2626" }]}>
-                      {t("privacy.deleteAccount.title")}
+                      Hapus Akun
                     </Text>
                     <Text style={styles.menuItemSubtitle}>
-                      {t("privacy.deleteAccount.subtitle")}
+                      Hapus akun dan semua data secara permanen
                     </Text>
                   </View>
                 </View>

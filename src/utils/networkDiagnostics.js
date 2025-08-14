@@ -2,201 +2,196 @@ import { Platform } from 'react-native';
 
 /**
  * Network Diagnostics Utility
- * Helps troubleshoot network connectivity issues between mobile app and backend server
+ * Helps diagnose and troubleshoot network connectivity issues in the mobile app
  */
 
 export class NetworkDiagnostics {
-  static async testConnectivity(baseURL) {
-    const results = {
-      url: baseURL,
-      reachable: false,
-      responseTime: null,
-      error: null,
-      details: {}
-    };
-
+  static async testEndpoint(url, timeout = 10000) {
+    const startTime = Date.now();
+    
     try {
-      const startTime = Date.now();
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), timeout);
       
-      const response = await fetch(`${baseURL}/auth/me`, {
+      console.log(`🔍 Testing endpoint: ${url}`);
+      
+      const response = await fetch(url, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
         },
-        timeout: 10000 // 10 second timeout
+        signal: controller.signal
       });
-
-      const endTime = Date.now();
-      results.responseTime = endTime - startTime;
-      results.reachable = true;
-      results.details.status = response.status;
-      results.details.statusText = response.statusText;
-
-      // Try to get response body for more details
-      try {
-        const responseText = await response.text();
-        results.details.responseBody = responseText;
-      } catch (textError) {
-        results.details.responseBody = 'Could not read response body';
-      }
-
+      
+      clearTimeout(timeoutId);
+      const responseTime = Date.now() - startTime;
+      
+      const result = {
+        url,
+        success: true,
+        status: response.status,
+        responseTime,
+        timestamp: new Date().toISOString()
+      };
+      
+      console.log(`✅ ${url}: HTTP ${response.status} (${responseTime}ms)`);
+      return result;
+      
     } catch (error) {
-      results.error = error.message;
-      results.details.errorType = error.name;
-      results.details.errorCode = error.code;
+      const responseTime = Date.now() - startTime;
+      
+      const result = {
+        url,
+        success: false,
+        error: error.message,
+        errorType: error.name,
+        responseTime,
+        timestamp: new Date().toISOString()
+      };
+      
+      console.log(`❌ ${url}: ${error.message} (${responseTime}ms)`);
+      return result;
     }
-
-    return results;
   }
 
   static async runFullDiagnostics() {
-    const possibleURLs = [
-      "https://dash.doctorphc.id/api/mobile"
-    ];
-
-    const results = [];
-
-    for (const url of possibleURLs) {
-      const result = await this.testConnectivity(url);
-      results.push(result);
+    console.log('🌐 Starting Network Diagnostics...');
+    console.log('Platform:', Platform.OS);
+    console.log('Development mode:', __DEV__);
+    
+    const endpoints = [
+      // Local development endpoints
+      'http://localhost:3000/api/health',
+      'http://10.0.2.2:3000/api/health', // Android emulator
+      'http://127.0.0.1:3000/api/health', // Alternative localhost
       
-      if (result.reachable) {
-      } else {
+      // Mobile API endpoints
+      'http://localhost:3000/api/mobile/auth/me',
+      'http://10.0.2.2:3000/api/mobile/auth/me', // Android emulator
+      
+      // Production endpoints
+      'https://dash.doctorphc.id/api/health',
+      'https://dash.doctorphc.id/api/mobile/auth/me',
+      
+      // Internet connectivity test
+      'https://httpbin.org/status/200'
+    ];
+    
+    const results = [];
+    
+    for (const endpoint of endpoints) {
+      const result = await this.testEndpoint(endpoint, 5000);
+      results.push(result);
+    }
+    
+    // Analyze results
+    const analysis = this.analyzeResults(results);
+    
+    console.log('\n📊 DIAGNOSTIC SUMMARY:');
+    console.log('=' .repeat(50));
+    console.log(`✅ Working endpoints: ${analysis.working}/${results.length}`);
+    console.log(`❌ Failed endpoints: ${analysis.failed}/${results.length}`);
+    console.log(`🌐 Internet connectivity: ${analysis.hasInternet ? 'OK' : 'FAILED'}`);
+    console.log(`🏠 Local server: ${analysis.hasLocalServer ? 'OK' : 'FAILED'}`);
+    console.log(`🚀 Production server: ${analysis.hasProductionServer ? 'OK' : 'FAILED'}`);
+    
+    if (analysis.recommendations.length > 0) {
+      console.log('\n🔧 RECOMMENDATIONS:');
+      analysis.recommendations.forEach(rec => console.log(`  - ${rec}`));
+    }
+    
+    return {
+      results,
+      analysis,
+      platform: Platform.OS,
+      isDevelopment: __DEV__,
+      timestamp: new Date().toISOString()
+    };
+  }
+
+  static analyzeResults(results) {
+    const working = results.filter(r => r.success).length;
+    const failed = results.filter(r => !r.success).length;
+    
+    const hasInternet = results.some(r => 
+      r.success && (r.url.includes('httpbin.org') || r.url.includes('dash.doctorphc.id'))
+    );
+    
+    const hasLocalServer = results.some(r => 
+      r.success && (r.url.includes('localhost') || r.url.includes('10.0.2.2') || r.url.includes('127.0.0.1'))
+    );
+    
+    const hasProductionServer = results.some(r => 
+      r.success && r.url.includes('dash.doctorphc.id')
+    );
+    
+    const recommendations = [];
+    
+    if (!hasInternet) {
+      recommendations.push('Check your internet connection');
+    }
+    
+    if (!hasLocalServer && __DEV__) {
+      recommendations.push('Start the local server: cd dash-app && npm run dev');
+      if (Platform.OS === 'android') {
+        recommendations.push('Make sure Android emulator can reach 10.0.2.2:3000');
       }
     }
-
-    // Find the best URL
-    const workingURLs = results.filter(r => r.reachable);
-    const bestURL = workingURLs.length > 0 
-      ? workingURLs.reduce((best, current) => 
-          current.responseTime < best.responseTime ? current : best
-        )
-      : null;
-
-    const diagnosticReport = {
-      timestamp: new Date().toISOString(),
-      platform: Platform.OS,
-      totalURLs: possibleURLs.length,
-      workingURLs: workingURLs.length,
-      bestURL: bestURL?.url || null,
-      allResults: results,
-      recommendations: this.generateRecommendations(results)
-    };
-
-    return diagnosticReport;
-  }
-
-  static generateRecommendations(results) {
-    const recommendations = [];
-
-    const workingURLs = results.filter(r => r.reachable);
-    const unreachableURLs = results.filter(r => !r.reachable);
-
-    if (workingURLs.length === 0) {
-      recommendations.push('❌ No servers are reachable. Check if backend is running.');
-      recommendations.push('🔧 Try running: cd dash-app && npm run dev');
-      recommendations.push('🌐 Ensure mobile device and computer are on same network');
-    } else if (workingURLs.length === 1) {
-      recommendations.push('✅ Found 1 working server');
-      recommendations.push(`🎯 Using: ${workingURLs[0].url}`);
-    } else {
-      recommendations.push(`✅ Found ${workingURLs.length} working servers`);
-      const fastest = workingURLs.reduce((best, current) => 
-        current.responseTime < best.responseTime ? current : best
-      );
-      recommendations.push(`⚡ Fastest: ${fastest.url} (${fastest.responseTime}ms)`);
-    }
-
-    if (unreachableURLs.length > 0) {
-      recommendations.push('⚠️ Some servers are unreachable:');
-      unreachableURLs.forEach(url => {
-        recommendations.push(`   - ${url.url}: ${url.error}`);
-      });
-    }
-
-    return recommendations;
-  }
-
-  static async checkServerHealth() {
-    try {
-      const response = await fetch('https://dash.doctorphc.id/api/mobile/auth/me', {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        timeout: 5000
-      });
-
-      return {
-        healthy: true,
-        status: response.status,
-        statusText: response.statusText,
-        timestamp: new Date().toISOString()
-      };
-    } catch (error) {
-      return {
-        healthy: false,
-        error: error.message,
-        timestamp: new Date().toISOString()
-      };
-    }
-  }
-
-  static async diagnoseConnection() {
-    const endpoints = [
-      'http://localhost:3000',
-      'http://192.168.1.100:3000',
-      'http://10.0.2.2:3000',
-      'http://127.0.0.1:3000'
-    ];
-
-    const results = await Promise.all(
-      endpoints.map(async (url) => {
-        try {
-          const startTime = Date.now();
-          const response = await fetch(`${url}/health`, {
-            method: 'GET',
-            timeout: 5000,
-          });
-          const endTime = Date.now();
-          const responseTime = endTime - startTime;
-
-          if (response.ok) {
-            return { url, responseTime, success: true };
-          } else {
-            return { url, error: `HTTP ${response.status}`, success: false };
-          }
-        } catch (error) {
-          return { url, error: error.message, success: false };
-        }
-      })
-    );
-
-    const workingEndpoints = results.filter(result => result.success);
     
-    if (workingEndpoints.length === 0) {
-      return {
-        status: 'FAILED',
-        message: 'No endpoints are reachable',
-        bestEndpoint: null,
-        workingCount: 0,
-        totalCount: endpoints.length
-      };
+    if (!hasProductionServer && !__DEV__) {
+      recommendations.push('Production server may be down or unreachable');
     }
-
-    const fastest = workingEndpoints.reduce((prev, current) => 
-      prev.responseTime < current.responseTime ? prev : current
-    );
-
+    
+    if (hasLocalServer && __DEV__) {
+      recommendations.push('Local server is working - app should connect successfully');
+    }
+    
     return {
-      status: 'SUCCESS',
-      message: 'Connection established',
-      bestEndpoint: fastest.url,
-      workingCount: workingEndpoints.length,
-      totalCount: endpoints.length,
-      responseTime: fastest.responseTime
+      working,
+      failed,
+      hasInternet,
+      hasLocalServer,
+      hasProductionServer,
+      recommendations
+    };
+  }
+
+  static getRecommendedEndpoint() {
+    if (__DEV__) {
+      if (Platform.OS === 'android') {
+        return 'http://10.0.2.2:3000/api/mobile';
+      } else if (Platform.OS === 'ios') {
+        return 'http://localhost:3000/api/mobile';
+      } else {
+        return 'http://localhost:3000/api/mobile';
+      }
+    } else {
+      return 'https://dash.doctorphc.id/api/mobile';
+    }
+  }
+
+  static async testCurrentConfiguration() {
+    const endpoint = this.getRecommendedEndpoint();
+    console.log(`🧪 Testing current configuration: ${endpoint}`);
+    
+    const healthEndpoint = endpoint.replace('/api/mobile', '/api/health');
+    const authEndpoint = `${endpoint}/mobile/auth/me`;
+    
+    const healthTest = await this.testEndpoint(healthEndpoint);
+    const authTest = await this.testEndpoint(authEndpoint);
+    
+    const isWorking = healthTest.success && authTest.success;
+    
+    console.log(`${isWorking ? '✅' : '❌'} Current configuration: ${isWorking ? 'WORKING' : 'FAILED'}`);
+    
+    return {
+      endpoint,
+      healthTest,
+      authTest,
+      isWorking,
+      timestamp: new Date().toISOString()
     };
   }
 }
 
-export default NetworkDiagnostics; 
+export default NetworkDiagnostics;

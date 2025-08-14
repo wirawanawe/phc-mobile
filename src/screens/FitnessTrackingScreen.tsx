@@ -169,7 +169,7 @@ const FitnessTrackingScreen = ({ navigation }: any) => {
             <View style={styles.header}>
               {/* <TouchableOpacity
                 style={styles.backButton}
-                onPress={() => navigation.goBack()}
+                onPress={() => safeGoBack(navigation, 'Main')}
               >
                 <Icon name="arrow-left" size={24} color="#1F2937" />
               </TouchableOpacity>

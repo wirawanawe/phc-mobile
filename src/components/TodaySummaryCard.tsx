@@ -6,7 +6,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { CustomTheme } from '../theme/theme';
 import ProgressRing from './ProgressRing';
 import ActivityDetectionService from '../services/ActivityDetectionService';
-import api from '../services/api';
+import apiService from '../services/api';
 import { handleAuthError } from '../utils/errorHandler';
 import eventEmitter from '../utils/eventEmitter';
 import dateChangeDetector from '../utils/dateChangeDetector';
@@ -145,9 +145,9 @@ const TodaySummaryCard: React.FC<TodaySummaryCardProps> = ({ onMoreDetailsPress,
       // Ambil summary sesuai tanggal
       let todaySummaryResponse;
       if (date) {
-        todaySummaryResponse = await api.getSummaryByDate(date);
+        todaySummaryResponse = await apiService.getSummaryByDate(date);
       } else {
-        todaySummaryResponse = await api.getTodaySummary();
+        todaySummaryResponse = await apiService.getTodaySummary();
       }
       
       // Get activity data from local service (only for today)
@@ -176,7 +176,7 @@ const TodaySummaryCard: React.FC<TodaySummaryCardProps> = ({ onMoreDetailsPress,
             let nutritionResponse;
             if (date) {
               // For historical data, we'll use the meal history with date filter
-              nutritionResponse = await api.getMealHistory({ date });
+              nutritionResponse = await apiService.getMealHistory({ date });
               console.log('TodaySummaryCard - Nutrition history response:', nutritionResponse);
               if (nutritionResponse.success && nutritionResponse.data && nutritionResponse.data.length > 0) {
                 // Sum up calories from all meals for the date
@@ -184,9 +184,9 @@ const TodaySummaryCard: React.FC<TodaySummaryCardProps> = ({ onMoreDetailsPress,
                   return total + (meal.calories || 0);
                 }, 0);
               }
-            } else {
-              nutritionResponse = await api.getTodayNutrition();
-            }
+                      } else {
+            nutritionResponse = await apiService.getTodayNutrition();
+          }
             console.log('TodaySummaryCard - Nutrition API response:', nutritionResponse);
             if (nutritionResponse.success && nutritionResponse.data) {
               // Handle the confirmed API response structure
@@ -213,7 +213,7 @@ const TodaySummaryCard: React.FC<TodaySummaryCardProps> = ({ onMoreDetailsPress,
           let nutritionResponse;
           if (date) {
             // For historical data, we'll use the meal history with date filter
-            nutritionResponse = await api.getMealHistory({ date });
+            nutritionResponse = await apiService.getMealHistory({ date });
             console.log('TodaySummaryCard - Nutrition history response:', nutritionResponse);
             if (nutritionResponse.success && nutritionResponse.data && nutritionResponse.data.length > 0) {
               // Sum up calories from all meals for the date
@@ -222,7 +222,7 @@ const TodaySummaryCard: React.FC<TodaySummaryCardProps> = ({ onMoreDetailsPress,
               }, 0);
             }
           } else {
-            nutritionResponse = await api.getTodayNutrition();
+            nutritionResponse = await apiService.getTodayNutrition();
           }
           console.log('TodaySummaryCard - Nutrition API response:', nutritionResponse);
           if (nutritionResponse.success && nutritionResponse.data) {
@@ -257,7 +257,7 @@ const TodaySummaryCard: React.FC<TodaySummaryCardProps> = ({ onMoreDetailsPress,
           // Use date-specific water API if date is provided
           let waterResponse;
           if (date) {
-            waterResponse = await api.getWaterHistory({ date });
+            waterResponse = await apiService.getWaterHistory({ date });
             console.log('TodaySummaryCard - Water history response:', waterResponse);
             if (waterResponse.success && waterResponse.data && waterResponse.data.length > 0) {
               // Sum up water intake from all entries for the date
@@ -266,7 +266,7 @@ const TodaySummaryCard: React.FC<TodaySummaryCardProps> = ({ onMoreDetailsPress,
               }, 0);
             }
           } else {
-            waterResponse = await api.getTodayWaterIntake();
+            waterResponse = await apiService.getTodayWaterIntake();
           }
           console.log('TodaySummaryCard - Water response:', waterResponse);
           if (waterResponse.success && waterResponse.data) {
@@ -286,7 +286,7 @@ const TodaySummaryCard: React.FC<TodaySummaryCardProps> = ({ onMoreDetailsPress,
         // Use date-specific water API if date is provided
         let waterResponse;
         if (date) {
-          waterResponse = await api.getWaterHistory({ date });
+                      waterResponse = await apiService.getWaterHistory({ date });
           console.log('TodaySummaryCard - Water history response:', waterResponse);
           if (waterResponse.success && waterResponse.data && waterResponse.data.length > 0) {
             // Sum up water intake from all entries for the date
@@ -294,9 +294,9 @@ const TodaySummaryCard: React.FC<TodaySummaryCardProps> = ({ onMoreDetailsPress,
               return total + (entry.amount_ml || 0);
             }, 0);
           }
-        } else {
-          waterResponse = await api.getTodayWaterIntake();
-        }
+                  } else {
+            waterResponse = await apiService.getTodayWaterIntake();
+          }
         console.log('TodaySummaryCard - Water response:', waterResponse);
         if (waterResponse.success && waterResponse.data) {
           // Handle both old and new API response structures
@@ -331,7 +331,7 @@ const TodaySummaryCard: React.FC<TodaySummaryCardProps> = ({ onMoreDetailsPress,
             // Use date-specific fitness API if date is provided
             let fitnessResponse;
             if (date) {
-              fitnessResponse = await api.getFitnessHistory({ date });
+              fitnessResponse = await apiService.getFitnessHistory({ date });
               console.log('TodaySummaryCard - Fitness history response:', fitnessResponse);
               if (fitnessResponse.success && fitnessResponse.data && fitnessResponse.data.length > 0) {
                 // Sum up fitness data from all entries for the date
@@ -343,7 +343,7 @@ const TodaySummaryCard: React.FC<TodaySummaryCardProps> = ({ onMoreDetailsPress,
                 }, 0);
               }
             } else {
-              fitnessResponse = await api.getTodayFitness();
+              fitnessResponse = await apiService.getTodayFitness();
             }
             console.log('TodaySummaryCard - Fitness API response:', fitnessResponse);
             if (fitnessResponse.success && fitnessResponse.data) {
@@ -369,7 +369,7 @@ const TodaySummaryCard: React.FC<TodaySummaryCardProps> = ({ onMoreDetailsPress,
           // Use date-specific fitness API if date is provided
           let fitnessResponse;
           if (date) {
-            fitnessResponse = await api.getFitnessHistory({ date });
+            fitnessResponse = await apiService.getFitnessHistory({ date });
             console.log('TodaySummaryCard - Fitness history response:', fitnessResponse);
             if (fitnessResponse.success && fitnessResponse.data && fitnessResponse.data.length > 0) {
               // Sum up fitness data from all entries for the date
@@ -381,7 +381,7 @@ const TodaySummaryCard: React.FC<TodaySummaryCardProps> = ({ onMoreDetailsPress,
               }, 0);
             }
           } else {
-            fitnessResponse = await api.getTodayFitness();
+            fitnessResponse = await apiService.getTodayFitness();
           }
           console.log('TodaySummaryCard - Fitness API response:', fitnessResponse);
           if (fitnessResponse.success && fitnessResponse.data) {
@@ -517,17 +517,17 @@ const TodaySummaryCard: React.FC<TodaySummaryCardProps> = ({ onMoreDetailsPress,
     
     switch (type) {
       case 'calories':
-        return numValue.toString();
+        return Number.isFinite(numValue) ? numValue.toString() : '--';
       case 'water':
         return numValue.toFixed(1);
       case 'steps':
-        return numValue.toString();
+        return Number.isFinite(numValue) ? numValue.toString() : '--';
       case 'exercise':
-        return numValue.toString();
+        return Number.isFinite(numValue) ? numValue.toString() : '--';
       case 'distance':
         return numValue.toFixed(1);
       default:
-        return numValue.toString();
+        return Number.isFinite(numValue) ? numValue.toString() : '--';
     }
   };
 

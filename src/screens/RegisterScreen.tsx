@@ -4,7 +4,6 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  Alert,
   KeyboardAvoidingView,
   Platform,
   TextInput,
@@ -15,15 +14,18 @@ import { LinearGradient } from "expo-linear-gradient";
 import Icon from "react-native-vector-icons/MaterialCommunityIcons";
 import { CustomTheme } from "../theme/theme";
 import LogoPutih from "../components/LogoPutih";
+import CustomAlert from "../components/CustomAlert";
+import useAlert from "../hooks/useAlert";
 import { useAuth } from "../contexts/AuthContext";
-import { useLanguage } from "../contexts/LanguageContext";
+import { safeGoBack } from "../utils/safeNavigation";
 import { CommonActions } from "@react-navigation/native";
 import { handleError } from "../utils/errorHandler";
 
 const RegisterScreen = ({ navigation }: any) => {
   const theme = useTheme<CustomTheme>();
   const { register } = useAuth();
-  const { t } = useLanguage();
+  const { alertState, showAlert, hideAlert, showSuccessAlert, showErrorAlert, showWarningAlert } = useAlert();
+  
   const [formData, setFormData] = useState({
     name: "",
     email: "",
@@ -32,30 +34,38 @@ const RegisterScreen = ({ navigation }: any) => {
     phone: "",
   });
   const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState("");
 
   const handleRegister = async () => {
-    // Clear any previous errors
-    setError("");
-
     // Client-side validation
     if (!formData.name.trim() || !formData.email.trim() || !formData.password.trim() || !formData.confirmPassword.trim()) {
-      setError(t("language.language") === "en" ? "Please fill in all required fields" : "Mohon isi semua field yang diperlukan");
+      showWarningAlert(
+        "Data Tidak Lengkap",
+        "Mohon isi semua field yang diperlukan"
+      );
       return;
     }
 
     if (!isValidEmail(formData.email)) {
-      setError(t("language.language") === "en" ? "Please enter a valid email address" : "Mohon masukkan alamat email yang valid");
+      showWarningAlert(
+        "Email Tidak Valid",
+        "Mohon masukkan alamat email yang valid"
+      );
       return;
     }
 
     if (formData.password.length < 6) {
-      setError(t("language.language") === "en" ? "Password must be at least 6 characters" : "Password minimal 6 karakter");
+      showWarningAlert(
+        "Password Terlalu Pendek",
+        "Password minimal 6 karakter"
+      );
       return;
     }
 
     if (formData.password !== formData.confirmPassword) {
-      setError(t("language.language") === "en" ? "Passwords do not match" : "Password tidak cocok");
+      showWarningAlert(
+        "Password Tidak Cocok",
+        "Password dan konfirmasi password tidak sama"
+      );
       return;
     }
 
@@ -70,31 +80,40 @@ const RegisterScreen = ({ navigation }: any) => {
       });
 
       if (result.success) {
-        // Registration successful - navigate to Main screen
-        navigation.replace("Main");
+        showSuccessAlert(
+          "Pendaftaran Berhasil",
+          "Akun Anda telah berhasil dibuat. Silakan login untuk melanjutkan.",
+          () => {
+            // Registration successful - navigate to Main screen
+            navigation.replace("Main");
+          }
+        );
       } else {
-        setError(result.message || (t("language.language") === "en" ? "Registration failed. Please try again." : "Pendaftaran gagal. Silakan coba lagi."));
+        showErrorAlert(
+          "Pendaftaran Gagal",
+          result.message || "Pendaftaran gagal. Silakan coba lagi."
+        );
       }
     } catch (error: any) {
       console.error("❌ Register: Registration error:", error);
       
-      let errorMessage = t("language.language") === "en" ? "Registration failed. Please try again." : "Pendaftaran gagal. Silakan coba lagi.";
+      let errorMessage = "Pendaftaran gagal. Silakan coba lagi.";
       
       if (error?.message) {
         const message = error.message.toLowerCase();
         
         if (message.includes("email already exists") || message.includes("email sudah terdaftar")) {
-          errorMessage = t("language.language") === "en" ? "Email already registered. Please login instead." : "Email sudah terdaftar. Silakan login.";
+          errorMessage = "Email sudah terdaftar. Silakan login.";
         } else if (message.includes("invalid email")) {
-          errorMessage = t("language.language") === "en" ? "Please enter a valid email address" : "Mohon masukkan alamat email yang valid";
+          errorMessage = "Mohon masukkan alamat email yang valid";
         } else if (message.includes("network") || message.includes("koneksi")) {
-          errorMessage = t("language.language") === "en" ? "Connection failed. Check your internet and try again." : "Koneksi gagal. Periksa internet Anda dan coba lagi.";
+          errorMessage = "Koneksi gagal. Periksa internet Anda dan coba lagi.";
         } else if (message.includes("server error")) {
-          errorMessage = t("language.language") === "en" ? "Server error occurred. Please try again later." : "Terjadi kesalahan pada server. Silakan coba lagi nanti.";
+          errorMessage = "Terjadi kesalahan pada server. Silakan coba lagi nanti.";
         }
       }
       
-      setError(errorMessage);
+      showErrorAlert("Pendaftaran Gagal", errorMessage);
     } finally {
       setIsLoading(false);
     }
@@ -127,19 +146,16 @@ const RegisterScreen = ({ navigation }: any) => {
             <View style={styles.header}>
               <TouchableOpacity
                 style={styles.backButton}
-                onPress={() => navigation.goBack()}
+                onPress={() => safeGoBack(navigation, 'Main')}
               >
                 <Icon name="arrow-left" size={24} color="#FFFFFF" />
               </TouchableOpacity>
               <LogoPutih size="large" />
               <Text style={styles.welcomeText}>
-                {t("language.language") === "en" ? "Create Account" : "Buat Akun"}
+                Buat Akun
               </Text>
               <Text style={styles.subtitleText}>
-                {t("language.language") === "en" 
-                  ? "Join us to start your health journey"
-                  : "Bergabunglah untuk memulai perjalanan kesehatan Anda"
-                }
+                Bergabunglah untuk memulai perjalanan kesehatan Anda
               </Text>
             </View>
 
@@ -156,7 +172,7 @@ const RegisterScreen = ({ navigation }: any) => {
                   />
                   <TextInput
                     style={styles.textInput}
-                    placeholder={t("form.name")}
+                    placeholder="Nama"
                     placeholderTextColor="#9CA3AF"
                     value={formData.name}
                     onChangeText={(text) => setFormData({ ...formData, name: text })}
@@ -176,7 +192,7 @@ const RegisterScreen = ({ navigation }: any) => {
                   />
                   <TextInput
                     style={styles.textInput}
-                    placeholder={t("auth.email")}
+                    placeholder="Email"
                     placeholderTextColor="#9CA3AF"
                     value={formData.email}
                     onChangeText={(text) => setFormData({ ...formData, email: text })}
@@ -197,7 +213,7 @@ const RegisterScreen = ({ navigation }: any) => {
                   />
                   <TextInput
                     style={styles.textInput}
-                    placeholder={t("form.phone")}
+                    placeholder="Telepon"
                     placeholderTextColor="#9CA3AF"
                     value={formData.phone}
                     onChangeText={(text) => setFormData({ ...formData, phone: text })}
@@ -217,7 +233,7 @@ const RegisterScreen = ({ navigation }: any) => {
                   />
                   <TextInput
                     style={styles.textInput}
-                    placeholder={t("auth.password")}
+                    placeholder="Password"
                     placeholderTextColor="#9CA3AF"
                     value={formData.password}
                     onChangeText={(text) => setFormData({ ...formData, password: text })}
@@ -237,7 +253,7 @@ const RegisterScreen = ({ navigation }: any) => {
                   />
                   <TextInput
                     style={styles.textInput}
-                    placeholder={t("auth.confirmPassword")}
+                    placeholder="Konfirmasi Password"
                     placeholderTextColor="#9CA3AF"
                     value={formData.confirmPassword}
                     onChangeText={(text) => setFormData({ ...formData, confirmPassword: text })}
@@ -245,13 +261,6 @@ const RegisterScreen = ({ navigation }: any) => {
                   />
                 </View>
               </View>
-
-              {/* Error Display */}
-              {error ? (
-                <View style={styles.errorContainer}>
-                  <Text style={styles.errorText}>{error}</Text>
-                </View>
-              ) : null}
 
               {/* Register Button */}
               <Button
@@ -265,8 +274,8 @@ const RegisterScreen = ({ navigation }: any) => {
                 textColor="#E22345"
               >
                 {isLoading 
-                  ? (t("language.language") === "en" ? "Creating Account..." : "Membuat Akun...") 
-                  : t("auth.createAccount")
+                  ? "Membuat Akun..." 
+                  : "Buat Akun"
                 }
               </Button>
 
@@ -274,7 +283,7 @@ const RegisterScreen = ({ navigation }: any) => {
               <View style={styles.dividerContainer}>
                 <View style={styles.dividerLine} />
                 <Text style={styles.dividerText}>
-                  {t("language.language") === "en" ? "or" : "atau"}
+                  atau
                 </Text>
                 <View style={styles.dividerLine} />
               </View>
@@ -282,10 +291,7 @@ const RegisterScreen = ({ navigation }: any) => {
               {/* Social Login Buttons */}
               <View style={styles.socialContainer}>
                 <Text style={styles.socialText}>
-                  {t("language.language") === "en" 
-                    ? "Register with social media"
-                    : "Daftar dengan media sosial"
-                  }
+                  Daftar dengan media sosial
                 </Text>
                 {/* Add social login buttons here */}
               </View>
@@ -294,14 +300,29 @@ const RegisterScreen = ({ navigation }: any) => {
             {/* Footer */}
             <View style={styles.footer}>
               <Text style={styles.footerText}>
-                {t("auth.alreadyHaveAccount")}{" "}
+                Sudah punya akun?{" "}
                 <Text style={styles.loginLink} onPress={handleLogin}>
-                  {t("auth.login")}
+                  Masuk
                 </Text>
               </Text>
             </View>
           </ScrollView>
         </KeyboardAvoidingView>
+
+        {/* Custom Alert Modal */}
+        <CustomAlert
+          visible={alertState.visible}
+          title={alertState.title}
+          message={alertState.message}
+          type={alertState.type}
+          onPress={alertState.onPress}
+          onCancel={alertState.onCancel}
+          buttonText={alertState.buttonText}
+          cancelButtonText={alertState.cancelButtonText}
+          showCancelButton={alertState.showCancelButton}
+          autoClose={alertState.autoClose}
+          autoCloseDelay={alertState.autoCloseDelay}
+        />
       </LinearGradient>
     </SafeAreaView>
   );

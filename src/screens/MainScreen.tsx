@@ -8,6 +8,7 @@ import {
   TouchableOpacity,
   FlatList,
   RefreshControl,
+  Image,
 } from "react-native";
 
 import { Text, useTheme } from "react-native-paper";
@@ -24,7 +25,6 @@ import GradientButton from "../components/GradientButton";
 import ModernIconButton from "../components/ModernIconButton";
 import ActivityDetectionService from "../services/ActivityDetectionService";
 import { useAuth } from "../contexts/AuthContext";
-import { useLanguage } from "../contexts/LanguageContext";
 import { useFocusEffect } from "@react-navigation/native";
 import api from "../services/api";
 import { withRetry } from "../utils/errorHandler";
@@ -81,7 +81,6 @@ interface UserMission {
 const HomeTab = ({ navigation }: any) => {
   const theme = useTheme<CustomTheme>();
   const { user, isAuthenticated } = useAuth();
-  const { t } = useLanguage();
   const [missionStats, setMissionStats] = useState<MissionStats>({
     totalMissions: 0,
     completedMissions: 0,
@@ -374,11 +373,44 @@ const HomeTab = ({ navigation }: any) => {
     }
   };
 
+  // Function to format date for articles
+  const formatDate = (dateString?: string) => {
+    if (!dateString) return 'Today';
+    
+    try {
+      const date = new Date(dateString);
+      const now = new Date();
+      const diffTime = Math.abs(now.getTime() - date.getTime());
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+      
+      if (diffDays === 1) return 'Today';
+      if (diffDays === 2) return 'Yesterday'; 
+      if (diffDays <= 7) return `${diffDays} days ago`;
+      
+      return date.toLocaleDateString('id-ID', { 
+        day: 'numeric', 
+        month: 'short' 
+      });
+    } catch (error) {
+      return 'Today';
+    }
+  };
+
+  // Function to handle article press
+  const handleArticlePress = (article: RSSItem) => {
+    try {
+      navigation.navigate("ArticleDetail", { article });
+    } catch (error) {
+      console.warn("ArticleDetail screen not found, navigating to NewsPortal instead");
+      navigation.navigate("NewsPortal");
+    }
+  };
+
   const todayMetrics = [
     {
       id: "1",
       icon: "food-fork-drink",
-      value: (todaySummary.calories || 0) > 0 ? (todaySummary.calories || 0).toString() : '--',
+      value: Number.isFinite(Number(todaySummary?.calories)) && (Number(todaySummary?.calories) as number) > 0 ? Number(todaySummary?.calories).toString() : '--',
       unit: "kcal",
       color: "#FF6B8A",
       bgColor: "#FEF2F2",
@@ -398,7 +430,7 @@ const HomeTab = ({ navigation }: any) => {
     {
       id: "3",
       icon: "walk",
-      value: (activityData?.steps || 0) > 0 ? (activityData?.steps || 0).toString() : '--',
+      value: Number.isFinite(Number(activityData?.steps)) && (Number(activityData?.steps) as number) > 0 ? Number(activityData?.steps).toString() : '--',
       unit: "step",
       color: "#3182CE",
       bgColor: "#EBF8FF",
@@ -408,7 +440,7 @@ const HomeTab = ({ navigation }: any) => {
     {
       id: "4",
       icon: "run",
-      value: (todaySummary?.exerciseMinutes || 0) > 0 ? (todaySummary?.exerciseMinutes || 0).toString() : '--',
+      value: Number.isFinite(Number(todaySummary?.exerciseMinutes)) && (Number(todaySummary?.exerciseMinutes) as number) > 0 ? Number(todaySummary?.exerciseMinutes).toString() : '--',
       unit: "min",
       color: "#ED8936",
       bgColor: "#FFFAF0",
@@ -433,7 +465,7 @@ const HomeTab = ({ navigation }: any) => {
       title: "Auto Fitness",
       icon: "radar",
       color: "#38A169",
-      gradient: ["#38A169", "#2F855A"] as const,
+      bgColor: "#F0FDF4",
       action: () => {
         try {
           navigation.navigate("RealtimeFitness");
@@ -444,11 +476,11 @@ const HomeTab = ({ navigation }: any) => {
       },
     },
     {
-      id: "3",
+      id: "2",
       title: "Log Meal",
       icon: "food-apple",
-      color: "#38A169",
-      gradient: ["#38A169", "#2F855A"] as const,
+      color: "#FF6B8A",
+      bgColor: "#FEF2F2",
       action: () => {
         if (isAuthenticated) {
           try {
@@ -463,11 +495,11 @@ const HomeTab = ({ navigation }: any) => {
       },
     },
     {
-      id: "4",
+      id: "3",
       title: "Track Water",
       icon: "water",
       color: "#3182CE",
-      gradient: ["#3182CE", "#2B6CB0"] as const,
+      bgColor: "#EBF8FF",
       action: () => {
         if (isAuthenticated) {
           try {
@@ -482,11 +514,11 @@ const HomeTab = ({ navigation }: any) => {
       },
     },
     {
-      id: "5",
+      id: "4",
       title: "Log Exercise",
       icon: "dumbbell",
       color: "#E53E3E",
-      gradient: ["#E53E3E", "#C53030"] as const,
+      bgColor: "#FEF2F2",
       action: () => {
         if (isAuthenticated) {
           try {
@@ -501,11 +533,11 @@ const HomeTab = ({ navigation }: any) => {
       },
     },
     {
-      id: "6",
+      id: "5",
       title: "Mood Check",
       icon: "emoticon",
       color: "#D69E2E",
-      gradient: ["#D69E2E", "#B7791F"] as const,
+      bgColor: "#FFFBEB",
       action: () => {
         if (isAuthenticated) {
           try {
@@ -520,11 +552,11 @@ const HomeTab = ({ navigation }: any) => {
       },
     },
     {
-      id: "7",
+      id: "6",
       title: "Sleep Track",
       icon: "sleep",
       color: "#9F7AEA",
-      gradient: ["#9F7AEA", "#805AD5"] as const,
+      bgColor: "#FAF5FF",
       action: () => {
         if (isAuthenticated) {
           try {
@@ -594,13 +626,11 @@ const HomeTab = ({ navigation }: any) => {
   ];
 
   const renderQuickAction = ({ item }: any) => (
-    <TouchableOpacity style={styles.quickActionCard} onPress={item.action}>
-      <View
-        style={[styles.quickActionIcon, { backgroundColor: item.color + "20" }]}
-      >
-        <Icon name={item.icon} size={24} color={item.color} />
+    <TouchableOpacity style={styles.quickActionCardSlider} onPress={item.action}>
+      <View style={styles.quickActionIconSlider}>
+        <Icon name={item.icon} size={28} color={item.color} />
       </View>
-      <Text style={styles.quickActionTitle}>{item.title}</Text>
+      <Text style={styles.quickActionTitleSlider}>{item.title}</Text>
     </TouchableOpacity>
   );
 
@@ -616,6 +646,40 @@ const HomeTab = ({ navigation }: any) => {
         }
       }}
     />
+  );
+
+  const renderFeaturedArticleSlider = ({ item }: { item: RSSItem }) => (
+    <TouchableOpacity
+      style={styles.featuredArticleCardSlider}
+      onPress={() => handleArticlePress(item)}
+      activeOpacity={0.8}
+    >
+      <View style={styles.featuredArticleImageContainerSlider}>
+        <Image
+          source={{ uri: item.image }}
+          style={styles.featuredArticleImageSlider}
+          resizeMode="cover"
+        />
+        <View style={styles.featuredArticleOverlaySlider}>
+          <Text style={styles.featuredArticleCategorySlider}>
+            {item.category || "Health"}
+          </Text>
+        </View>
+      </View>
+      <View style={styles.featuredArticleContentSlider}>
+        <Text style={styles.featuredArticleTitleSlider} numberOfLines={2}>
+          {item.title}
+        </Text>
+        <View style={styles.featuredArticleMetaSlider}>
+          <Text style={styles.featuredArticleDateSlider}>
+            {formatDate(item.pubDate)}
+          </Text>
+          <Text style={styles.featuredArticleSourceSlider}>
+            {item.source || "Health News"}
+          </Text>
+        </View>
+      </View>
+    </TouchableOpacity>
   );
 
   const renderCalculatorProgram = ({ item }: any) => (
@@ -646,6 +710,7 @@ const HomeTab = ({ navigation }: any) => {
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.contentContainer}
+        nestedScrollEnabled={true}
         refreshControl={
           <RefreshControl
             refreshing={loading}
@@ -738,13 +803,10 @@ const HomeTab = ({ navigation }: any) => {
                   </View>
                   <View style={styles.welcomeTextContainer}>
                     <Text style={styles.welcomeCardTitle}>
-                      {t("language.language") === "en" ? "Start Your Health Journey" : "Mulai Perjalanan Kesehatan Anda"}
+                      Mulai Perjalanan Kesehatan Anda
                     </Text>
                     <Text style={styles.welcomeCardSubtitle}>
-                      {t("language.language") === "en" 
-                        ? "Login or register to access complete wellness program features"
-                        : "Login atau daftar untuk akses fitur lengkap wellness program"
-                      }
+                      Login atau daftar untuk akses fitur lengkap wellness program
                     </Text>
                   </View>
                 </View>
@@ -794,8 +856,8 @@ const HomeTab = ({ navigation }: any) => {
           </TouchableOpacity>
         )}
 
-        {/* Clinics Booking Card - Only for authenticated users */}
-        {isAuthenticated && (
+        {/* Clinics Booking Card - Temporarily hidden */}
+        {/* {isAuthenticated && (
           <TouchableOpacity 
             style={styles.clinicsCard}
             onPress={() => {
@@ -818,13 +880,10 @@ const HomeTab = ({ navigation }: any) => {
                   </View>
                   <View style={styles.clinicsTextContainer}>
                     <Text style={styles.clinicsCardTitle}>
-                      {t("language.language") === "en" ? "Clinics Booking" : "Booking Klinik"}
+                      Booking Klinik
                     </Text>
                     <Text style={styles.clinicsCardSubtitle}>
-                      {t("language.language") === "en"
-                        ? "Book consultations with doctors and health services"
-                        : "Booking konsultasi dengan dokter dan layanan kesehatan"
-                      }
+                      Booking konsultasi dengan dokter dan layanan kesehatan
                     </Text>
                   </View>
                 </View>
@@ -834,7 +893,7 @@ const HomeTab = ({ navigation }: any) => {
               </View>
             </LinearGradient>
           </TouchableOpacity>
-        )}
+        )} */}
 
         {/* Today Summary Card - Only for authenticated users */}
         {isAuthenticated && (
@@ -851,7 +910,7 @@ const HomeTab = ({ navigation }: any) => {
         )}
 
         {/* Quick Actions - Only show if user has joined wellness program */}
-        {isAuthenticated && hasJoinedWellnessProgram && (
+        {/* {isAuthenticated && hasJoinedWellnessProgram && (
           <View style={styles.quickActionsContainer}>
             <Text style={styles.sectionTitle}>Quick Actions</Text>
             <FlatList
@@ -860,11 +919,11 @@ const HomeTab = ({ navigation }: any) => {
               keyExtractor={(item) => item.id}
               horizontal
               showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.quickActionsListContainer}
-              style={styles.quickActionsFlatList}
+              contentContainerStyle={styles.quickActionsSlider}
+              ItemSeparatorComponent={() => <View style={{ width: 12 }} />}
             />
           </View>
-        )}
+        )} */}
 
         {/* Calculator Programs */}
         <View style={styles.calculatorContainer}>
@@ -910,10 +969,7 @@ const HomeTab = ({ navigation }: any) => {
         <View style={styles.featuredContainer}>
           <View style={styles.featuredSectionHeader}>
             <View style={styles.featuredHeaderLeft}>
-              <Text style={styles.featuredSectionTitle}>📰 Featured Health Articles</Text>
-              <Text style={styles.featuredSectionSubtitle}>
-                Latest from DetikHealth - Health & Lifestyle
-              </Text>
+              <Text style={styles.featuredSectionTitle}>Health Articles</Text>
             </View>
             <View style={styles.featuredHeaderRight}>
               <TouchableOpacity
@@ -950,13 +1006,14 @@ const HomeTab = ({ navigation }: any) => {
             </View>
           ) : featuredArticles.length > 0 ? (
             <FlatList
-              data={featuredArticles}
-              renderItem={renderFeaturedArticle}
+              data={featuredArticles.slice(0, 6)}
+              renderItem={renderFeaturedArticleSlider}
               keyExtractor={(item) => item.id}
               horizontal
               showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.featuredListContainer}
-              style={styles.featuredFlatList}
+              contentContainerStyle={styles.featuredArticlesSlider}
+              ItemSeparatorComponent={() => <View style={{ width: 12 }} />}
+              style={{ marginBottom: 0 }}
             />
           ) : (
             <View style={styles.articlesErrorContainer}>
@@ -976,10 +1033,7 @@ const HomeTab = ({ navigation }: any) => {
   );
 };
 
-// Wellness Tab Component - Show wellness content or login prompt
-const ActivityTab = ({ navigation }: any) => {
-  return <ActivityScreen navigation={navigation} />;
-};
+
 
 // Health Tab Component
 const DoctorTab = ({ navigation }: any) => {
@@ -1250,19 +1304,76 @@ const DailyMissionTab = ({ navigation }: any) => {
   return <View style={{ flex: 1 }} />;
 };
 
-// Consultation Tab Component
-const ConsultationTab = ({ navigation }: any) => {
+// Tracking Tab Component
+const TrackingTab = ({ navigation }: any) => {
   const { isAuthenticated } = useAuth();
+
+  const trackingOptions = [
+    {
+      id: 1,
+      title: "Log Makanan",
+      subtitle: "Catat asupan kalori harian",
+      icon: "food-apple",
+      color: "#FF6B8A",
+      backgroundColor: "#FFF0F3",
+      onPress: () => navigation.navigate("MealLogging"),
+    },
+    {
+      id: 2,
+      title: "Track Air",
+      subtitle: "Monitor konsumsi air minum",
+      icon: "cup-water",
+      color: "#4ECDC4",
+      backgroundColor: "#F0FDFA",
+      onPress: () => navigation.navigate("WaterTracking"),
+    },
+    {
+      id: 3,
+      title: "Log Olahraga",
+      subtitle: "Catat aktivitas fisik",
+      icon: "dumbbell",
+      color: "#45B7D1",
+      backgroundColor: "#F0F9FF",
+      onPress: () => navigation.navigate("FitnessTracking"),
+    },
+    {
+      id: 4,
+      title: "Auto Fitness",
+      subtitle: "Deteksi aktivitas otomatis",
+      icon: "heart-pulse",
+      color: "#96CEB4",
+      backgroundColor: "#F0FDF4",
+      onPress: () => navigation.navigate("RealtimeFitness"),
+    },
+    {
+      id: 5,
+      title: "Mood Check",
+      subtitle: "Monitor suasana hati",
+      icon: "emoticon",
+      color: "#F59E0B",
+      backgroundColor: "#FFFBEB",
+      onPress: () => navigation.navigate("MoodTracking"),
+    },
+    {
+      id: 6,
+      title: "Sleep Track",
+      subtitle: "Lacak pola tidur",
+      icon: "sleep",
+      color: "#9F7AEA",
+      backgroundColor: "#FAF5FF",
+      onPress: () => navigation.navigate("SleepTracking"),
+    },
+  ];
 
   if (!isAuthenticated) {
     return (
       <LinearGradient colors={["#FAFBFC", "#F7FAFC"]} style={styles.container}>
         <StatusBar barStyle="dark-content" backgroundColor="#FAFBFC" />
         <View style={styles.authPrompt}>
-          <Icon name="calendar-account" size={64} color="#E22345" />
-          <Text style={styles.authPromptTitle}>Konsultasi dengan Dokter</Text>
+          <Icon name="chart-line" size={64} color="#E22345" />
+          <Text style={styles.authPromptTitle}>Wellness Tracking</Text>
           <Text style={styles.authPromptSubtitle}>
-            Login untuk melihat riwayat konsultasi dan booking konsultasi baru dengan dokter
+            Login untuk mengakses fitur tracking kesehatan dan wellness
           </Text>
           <TouchableOpacity
             style={styles.loginButton}
@@ -1275,15 +1386,105 @@ const ConsultationTab = ({ navigation }: any) => {
     );
   }
 
-  return <ConsultationHistoryScreen navigation={navigation} />;
+  return (
+    <LinearGradient colors={["#FAFBFC", "#F7FAFC"]} style={styles.container}>
+      <StatusBar barStyle="dark-content" backgroundColor="#FAFBFC" />
+      
+      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+        {/* Header */}
+        <View style={styles.header}>
+          <View style={styles.headerLeft}>
+            <Text style={styles.headerTitle}>Wellness Tracking</Text>
+            <Text style={styles.headerSubtitle}>Monitor kesehatan Anda dengan berbagai fitur tracking</Text>
+          </View>
+        </View>
+
+        {/* Tracking Categories */}
+        <View style={styles.trackingSection}>
+          <Text style={styles.sectionTitle}>Tracking Categories</Text>
+          <View style={styles.trackingWrapper}>
+            <View style={styles.trackingList}>
+              {trackingOptions.map((item) => (
+                <TouchableOpacity
+                  key={item.id.toString()}
+                  style={[styles.modernTrackingCard, { backgroundColor: item.backgroundColor }]}
+                  onPress={item.onPress}
+                  activeOpacity={0.8}
+                >
+                  <View style={styles.modernTrackingCardContent}>
+                    <View style={styles.modernTrackingIconContainer}>
+                      <Icon name={item.icon} size={36} color={item.color} />
+                    </View>
+                    <View style={styles.modernTrackingContent}>
+                      <Text style={styles.modernTrackingTitle}>{item.title}</Text>
+                      <Text style={styles.modernTrackingSubtitle}>{item.subtitle}</Text>
+                    </View>
+                    <View style={styles.modernTrackingArrow}>
+                      <Icon name="chevron-right" size={20} color={item.color} />
+                    </View>
+                  </View>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+        </View>
+      </ScrollView>
+    </LinearGradient>
+  );
 };
 
-
+// Booking Tab Component
+const BookingTab = ({ navigation }: any) => {
+  return (
+    <LinearGradient colors={["#FAFBFC", "#F7FAFC"]} style={styles.container}>
+      <StatusBar barStyle="dark-content" backgroundColor="#FAFBFC" />
+      <View style={styles.developmentContainer}>
+        <View style={styles.developmentIconContainer}>
+          <LinearGradient
+            colors={["#F59E0B", "#D97706"]}
+            style={styles.developmentIconGradient}
+          >
+            <Icon name="tools" size={64} color="#FFFFFF" />
+          </LinearGradient>
+        </View>
+        <Text style={styles.developmentTitle}>Fitur Sedang Dalam Pengembangan</Text>
+        <Text style={styles.developmentSubtitle}>
+          Fitur booking akan segera hadir dengan pengalaman yang lebih baik untuk Anda
+        </Text>
+        <View style={styles.developmentFeatures}>
+          <View style={styles.developmentFeature}>
+            <Icon name="check-circle" size={20} color="#10B981" />
+            <Text style={styles.developmentFeatureText}>Booking Klinik</Text>
+          </View>
+          <View style={styles.developmentFeature}>
+            <Icon name="check-circle" size={20} color="#10B981" />
+            <Text style={styles.developmentFeatureText}>Konsultasi Online</Text>
+          </View>
+          <View style={styles.developmentFeature}>
+            <Icon name="check-circle" size={20} color="#10B981" />
+            <Text style={styles.developmentFeatureText}>Riwayat Booking</Text>
+          </View>
+        </View>
+        <TouchableOpacity
+          style={styles.backToHomeButton}
+          onPress={() => navigation.navigate("HOME")}
+        >
+          <LinearGradient
+            colors={["#E22345", "#C53030"]}
+            style={styles.backToHomeButtonGradient}
+          >
+            <Icon name="home" size={20} color="#FFFFFF" />
+            <Text style={styles.backToHomeButtonText}>Kembali ke Beranda</Text>
+          </LinearGradient>
+        </TouchableOpacity>
+      </View>
+    </LinearGradient>
+  );
+};
 
 // Main Screen with Tabs
 const MainScreen = ({ navigation }: any) => {
   const theme = useTheme<CustomTheme>();
-  const { t } = useLanguage();
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -1294,12 +1495,12 @@ const MainScreen = ({ navigation }: any) => {
 
             if (route.name === "HOME") {
               iconName = focused ? "home" : "home-outline";
-            } else if (route.name === "ACTIVITY") {
-              iconName = focused ? "run" : "run";
+            } else if (route.name === "BOOKING") {
+              iconName = focused ? "calendar" : "calendar-outline";
             } else if (route.name === "HEALTH") {
-              iconName = focused ? "doctor" : "stethoscope";
+              iconName = focused ? "account-tie" : "account-tie-outline";
             } else if (route.name === "CONSULTATION") {
-              iconName = focused ? "calendar-account" : "calendar-account-outline";
+              iconName = focused ? "chart-line" : "chart-line-variant";
             }
             return <Icon name={iconName} size={size} color={color} />;
           },
@@ -1333,12 +1534,13 @@ const MainScreen = ({ navigation }: any) => {
         <Tab.Screen
           name="HOME"
           component={HomeTab}
-          options={{ tabBarLabel: t("nav.home") }}
+          options={{ tabBarLabel: "Beranda" }}
         />
+
         <Tab.Screen
-          name="ACTIVITY"
-          component={ActivityTab}
-          options={{ tabBarLabel: t("nav.wellness") }}
+          name="BOOKING"
+          component={BookingTab}
+          options={{ tabBarLabel: "Booking" }}
         />
         <Tab.Screen
           name="DAILY_MISSION"
@@ -1374,12 +1576,12 @@ const MainScreen = ({ navigation }: any) => {
         <Tab.Screen
           name="HEALTH"
           component={DoctorTab}
-          options={{ tabBarLabel: t("nav.clinics") }}
+          options={{ tabBarLabel: "Doctor" }}
         />
         <Tab.Screen
           name="CONSULTATION"
-          component={ConsultationTab}
-          options={{ tabBarLabel: t("nav.news") }}
+          component={TrackingTab}
+          options={{ tabBarLabel: "Tracking" }}
         />
       </Tab.Navigator>
     </SafeAreaView>
@@ -1395,7 +1597,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   contentContainer: {
-    paddingBottom: 90,
+    paddingBottom: 80,
   },
   header: {
     flexDirection: "row",
@@ -1930,8 +2132,8 @@ const styles = StyleSheet.create({
   },
   featuredContainer: {
     marginHorizontal: 20,
-    marginBottom: 25,
-    paddingBottom: 10,
+    marginBottom: 12,
+    paddingBottom: 0,
   },
   featuredListContainer: {
     paddingHorizontal: 5,
@@ -2148,6 +2350,12 @@ const styles = StyleSheet.create({
     marginHorizontal: 20,
     marginBottom: 25,
   },
+  quickActionsGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "space-between",
+    gap: 12,
+  },
   quickActionsListContainer: {
     paddingHorizontal: 5,
     paddingBottom: 10,
@@ -2156,8 +2364,7 @@ const styles = StyleSheet.create({
     minHeight: 100,
   },
   quickActionCard: {
-    width: 120,
-    marginRight: 15,
+    width: "48%",
     backgroundColor: "#FFFFFF",
     borderRadius: 16,
     padding: 16,
@@ -2169,6 +2376,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#E2E8F0",
     alignItems: "center",
+    minHeight: 100,
   },
   quickActionIcon: {
     width: 50,
@@ -2184,6 +2392,34 @@ const styles = StyleSheet.create({
     color: "#1F2937",
     textAlign: "center",
     lineHeight: 18,
+  },
+  quickActionsSlider: {
+    paddingHorizontal: 20,
+  },
+  quickActionCardSlider: {
+    width: 80,
+    height: 80,
+    backgroundColor: "transparent",
+    borderRadius: 12,
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 0,
+  },
+  quickActionIconSlider: {
+    width: 50,
+    height: 50,
+    borderRadius: 12,
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 8,
+    backgroundColor: "transparent",
+  },
+  quickActionTitleSlider: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: "#1F2937",
+    textAlign: "center",
+    lineHeight: 14,
   },
   healthInsightsContainer: {
     marginHorizontal: 20,
@@ -2496,6 +2732,63 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#E2E8F0",
   },
+  // Tracking styles
+  trackingSection: {
+    marginHorizontal: 20,
+    marginBottom: 25,
+  },
+  trackingWrapper: {
+    marginTop: 16,
+  },
+  trackingList: {
+    gap: 12,
+  },
+  modernTrackingCard: {
+    borderRadius: 16,
+    padding: 16,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 4,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+  },
+  modernTrackingCardContent: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  modernTrackingIconContainer: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: "rgba(255, 255, 255, 0.8)",
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 16,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  modernTrackingContent: {
+    flex: 1,
+  },
+  modernTrackingTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#1F2937",
+    marginBottom: 4,
+  },
+  modernTrackingSubtitle: {
+    fontSize: 14,
+    color: "#64748B",
+    lineHeight: 20,
+  },
+  modernTrackingArrow: {
+    marginLeft: 12,
+  },
   welcomeMessageTitle: {
     fontSize: 18,
     fontWeight: "700",
@@ -2748,6 +3041,294 @@ const styles = StyleSheet.create({
     color: '#6B7280',
     textAlign: 'center',
     fontWeight: '500',
+  },
+  headerTitle: {
+    fontSize: 20,
+    fontWeight: "700",
+    color: "#1F2937",
+    marginBottom: 8,
+  },
+  headerSubtitle: {
+    fontSize: 14,
+    color: "#64748B",
+    fontWeight: "500",
+  },
+  content: {
+    flex: 1,
+  },
+  featuredArticleCard: {
+    width: "48%",
+    backgroundColor: "#FFFFFF",
+    borderRadius: 16,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 4,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    overflow: "hidden",
+  },
+  featuredArticleImage: {
+    width: "100%",
+    height: 120,
+    backgroundColor: "#F3F4F6",
+  },
+  featuredArticleContent: {
+    padding: 12,
+  },
+  featuredArticleTitle: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#1F2937",
+    marginBottom: 8,
+    lineHeight: 18,
+  },
+  featuredArticleDate: {
+    fontSize: 12,
+    color: "#64748B",
+    fontWeight: "500",
+  },
+  featuredArticlesGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  featuredArticleImageContainer: {
+    position: "relative",
+    width: "100%",
+    height: 120,
+    borderRadius: 12,
+    overflow: "hidden",
+  },
+  featuredArticleOverlay: {
+    position: "absolute",
+    top: 8,
+    left: 8,
+    backgroundColor: "rgba(0, 0, 0, 0.7)",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  featuredArticleCategory: {
+    fontSize: 10,
+    color: "#FFFFFF",
+    fontWeight: "600",
+  },
+  featuredArticleMeta: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginTop: 8,
+  },
+  featuredArticleSource: {
+    fontSize: 10,
+    color: "#E53E3E",
+    fontWeight: "600",
+  },
+  featuredArticlesSlider: {
+    paddingHorizontal: 20,
+    paddingBottom: 0,
+  },
+  featuredArticleCardSlider: {
+    width: 200,
+    height: 200, // Increased height to prevent content cutoff
+    backgroundColor: "#FFFFFF",
+    borderRadius: 16,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 4,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    overflow: "hidden",
+  },
+  featuredArticleImageContainerSlider: {
+    position: "relative",
+    width: "100%",
+    height: 100,
+    borderRadius: 12,
+    overflow: "hidden",
+  },
+  featuredArticleImageSlider: {
+    width: "100%",
+    height: 100,
+    backgroundColor: "#F3F4F6",
+  },
+  featuredArticleOverlaySlider: {
+    position: "absolute",
+    top: 8,
+    left: 8,
+    backgroundColor: "rgba(0, 0, 0, 0.7)",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  featuredArticleCategorySlider: {
+    fontSize: 9,
+    color: "#FFFFFF",
+    fontWeight: "600",
+  },
+  featuredArticleContentSlider: {
+    padding: 12,
+    minHeight: 100,
+    flex: 1, // Take remaining space
+    justifyContent: 'space-between', // Distribute content evenly
+  },
+  featuredArticleTitleSlider: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#1F2937",
+    marginBottom: 8,
+    lineHeight: 16,
+    flexShrink: 1, // Allow text to shrink if needed
+  },
+  featuredArticleMetaSlider: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginTop: 0,
+  },
+  featuredArticleDateSlider: {
+    fontSize: 10,
+    color: "#64748B",
+    fontWeight: "500",
+  },
+  featuredArticleSourceSlider: {
+    fontSize: 9,
+    color: "#E53E3E",
+    fontWeight: "600",
+  },
+  bookingSection: {
+    marginHorizontal: 20,
+    marginBottom: 25,
+  },
+  bookingCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 16,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  bookingCardContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  bookingIconContainer: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: "rgba(255, 255, 255, 0.2)",
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 16,
+  },
+  bookingContent: {
+    flex: 1,
+  },
+  bookingTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#1F2937",
+    marginBottom: 4,
+  },
+  bookingSubtitle: {
+    fontSize: 14,
+    color: "#64748B",
+    lineHeight: 20,
+    fontWeight: "500",
+  },
+  bookingArrow: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: "#E53E3E",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  // Development Page Styles
+  developmentContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 32,
+    paddingVertical: 64,
+  },
+  developmentIconContainer: {
+    marginBottom: 32,
+  },
+  developmentIconGradient: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    justifyContent: "center",
+    alignItems: "center",
+    shadowColor: "#F59E0B",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.3,
+    shadowRadius: 16,
+    elevation: 12,
+  },
+  developmentTitle: {
+    fontSize: 24,
+    fontWeight: "800",
+    color: "#1F2937",
+    textAlign: "center",
+    marginBottom: 16,
+    letterSpacing: -0.5,
+  },
+  developmentSubtitle: {
+    fontSize: 16,
+    color: "#64748B",
+    textAlign: "center",
+    lineHeight: 24,
+    marginBottom: 32,
+    paddingHorizontal: 20,
+  },
+  developmentFeatures: {
+    marginBottom: 40,
+    width: "100%",
+  },
+  developmentFeature: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 16,
+    paddingHorizontal: 20,
+  },
+  developmentFeatureText: {
+    fontSize: 16,
+    color: "#374151",
+    fontWeight: "600",
+    marginLeft: 12,
+  },
+  backToHomeButton: {
+    borderRadius: 16,
+    overflow: "hidden",
+    shadowColor: "#E22345",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  backToHomeButtonGradient: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 16,
+    paddingHorizontal: 24,
+  },
+  backToHomeButtonText: {
+    color: "#FFFFFF",
+    fontSize: 16,
+    fontWeight: "700",
+    marginLeft: 8,
   },
 });
 

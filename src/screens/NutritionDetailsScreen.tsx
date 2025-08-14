@@ -12,6 +12,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import Icon from "react-native-vector-icons/MaterialCommunityIcons";
 import { LinearGradient } from "expo-linear-gradient";
 import { CustomTheme } from "../theme/theme";
+import { safeGoBack } from "../utils/safeNavigation";
 
 const { width } = Dimensions.get("window");
 
@@ -124,7 +125,7 @@ const NutritionDetailsScreen = ({ navigation }: any) => {
           name="arrow-left"
           size={24}
           color="#1F2937"
-          onPress={() => navigation.goBack()}
+          onPress={() => safeGoBack(navigation, 'Main')}
           style={styles.backButton}
         />
         <Text style={styles.headerTitle}>Nutrition Details</Text>

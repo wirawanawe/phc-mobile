@@ -13,6 +13,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import Icon from "react-native-vector-icons/MaterialCommunityIcons";
 import { CustomTheme } from "../theme/theme";
+import { safeGoBack } from "../utils/safeNavigation";
 
 interface Message {
   id: string;
@@ -133,7 +134,7 @@ const ChatAssistantScreen = ({ navigation }: any) => {
         {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity
-            onPress={() => navigation.goBack()}
+            onPress={() => safeGoBack(navigation, 'Main')}
             style={styles.backButton}
           >
             <Icon name="arrow-left" size={24} color="#6B7280" />

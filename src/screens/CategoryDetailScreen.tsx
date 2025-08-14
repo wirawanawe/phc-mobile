@@ -9,6 +9,7 @@ import {
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import Icon from "react-native-vector-icons/MaterialCommunityIcons";
+import { safeGoBack } from "../utils/safeNavigation";
 
 const CategoryDetailScreen = ({ navigation, route }: any) => {
   const { category } = route.params;
@@ -73,7 +74,7 @@ const CategoryDetailScreen = ({ navigation, route }: any) => {
       {/* <View style={styles.header}>
         <TouchableOpacity
           style={styles.backButton}
-          onPress={() => navigation.goBack()}
+          onPress={() => safeGoBack(navigation, 'Main')}
         >
           <Icon name="arrow-left" size={24} color="#1F2937" />
         </TouchableOpacity>
@@ -238,6 +239,7 @@ const styles = StyleSheet.create({
     elevation: 4,
     borderWidth: 1,
     borderColor: "#F1F5F9",
+    minHeight: 160, // Ensure minimum height for content
   },
   articleContent: {
     flex: 1,
@@ -275,12 +277,14 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     lineHeight: 24,
     letterSpacing: -0.3,
+    flexShrink: 1, // Allow text to shrink if needed
   },
   articleDescription: {
     fontSize: 15,
     color: "#6B7280",
     lineHeight: 22,
     marginBottom: 16,
+    flexShrink: 1, // Allow text to shrink if needed
   },
   articleFooter: {
     flexDirection: "row",

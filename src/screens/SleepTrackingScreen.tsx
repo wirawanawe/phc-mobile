@@ -8,7 +8,11 @@ import {
   StatusBar,
   ActivityIndicator,
   Alert,
+  Platform,
 } from "react-native";
+import CustomAlert from "../components/CustomAlert";
+import { debugSleepResponse, validateSleepData } from "../utils/sleepDebugger";
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { Text, useTheme } from "react-native-paper";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Icon from "react-native-vector-icons/MaterialCommunityIcons";
@@ -30,6 +34,9 @@ const SleepTrackingScreen = ({ navigation }: any) => {
   const [selectedSleepQuality, setSelectedSleepQuality] = useState<string>("good");
   const [loading, setLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [showSleepTimePicker, setShowSleepTimePicker] = useState(false);
+  const [showWakeTimePicker, setShowWakeTimePicker] = useState(false);
+  const [tempTime, setTempTime] = useState(new Date());
   const [sleepQualityData, setSleepQualityData] = useState<Array<{
     day: string;
     hours: number;
@@ -59,6 +66,13 @@ const SleepTrackingScreen = ({ navigation }: any) => {
     color: string;
   }>>([]);
   const [totalSleepHours, setTotalSleepHours] = useState("0");
+  const [showCustomAlert, setShowCustomAlert] = useState(false);
+  const [alertConfig, setAlertConfig] = useState({
+    title: "",
+    message: "",
+    type: "info" as "success" | "error" | "warning" | "info",
+    onPress: () => {}
+  });
 
   const sleepTips = [
     {
@@ -138,28 +152,52 @@ const SleepTrackingScreen = ({ navigation }: any) => {
       }
       
       // Fetch weekly sleep data
-      const weeklyResponse = await api.getWeeklySleepData();
+      const weeklyResponse = await apiService.getWeeklySleepData();
+      console.log('SleepTrackingScreen - Weekly response:', weeklyResponse);
+      
       if (weeklyResponse.success && weeklyResponse.data && weeklyResponse.data.daily_breakdown) {
         // Transform the API response to match the expected format
-        const transformedData = weeklyResponse.data.daily_breakdown.map((day: any) => ({
-          day: new Date(day.date).toLocaleDateString('en-US', { weekday: 'short' }),
-          hours: day.total_hours || 0,
-          quality: day.quality ? getQualityScore(day.quality) : 0,
-          date: day.date,
-          bedtime: day.bedtime,
-          wake_time: day.wake_time,
-        }));
+        const transformedData = weeklyResponse.data.daily_breakdown.map((day: any) => {
+          // Handle multiple possible field names for hours
+          let hours = 0;
+          if (day.total_hours !== undefined && day.total_hours !== null) {
+            hours = parseFloat(day.total_hours) || 0;
+          } else if (day.sleep_hours !== undefined && day.sleep_hours !== null) {
+            hours = parseFloat(day.sleep_hours) || 0;
+          } else if (day.duration_minutes !== undefined && day.duration_minutes !== null) {
+            hours = (parseFloat(day.duration_minutes) || 0) / 60;
+          }
+          
+          return {
+            day: day.date ? new Date(day.date).toLocaleDateString('en-US', { weekday: 'short' }) : 'Unknown',
+            hours: hours,
+            quality: day.quality && typeof day.quality === 'string' ? getQualityScore(day.quality) : 0,
+            date: day.date,
+            bedtime: day.bedtime,
+            wake_time: day.wake_time,
+          };
+        });
         
+        console.log('SleepTrackingScreen - Transformed data:', transformedData);
         setSleepQualityData(transformedData);
         
         // Calculate total sleep hours for today (last entry with data)
         const todayData = transformedData.find((day: any) => day.hours > 0);
-        if (todayData && todayData.hours) {
+        console.log('SleepTrackingScreen - Today data found:', todayData);
+        
+        if (todayData && todayData.hours !== undefined && todayData.hours !== null) {
+          console.log('SleepTrackingScreen - Setting total sleep hours:', todayData.hours);
           setTotalSleepHours(todayData.hours.toFixed(1));
           setSelectedSleepTime(todayData.bedtime || "22:30");
           setSelectedWakeTime(todayData.wake_time || "07:00");
+        } else {
+          console.log('SleepTrackingScreen - No valid today data found, using defaults');
+          setTotalSleepHours("0");
+          setSelectedSleepTime("22:30");
+          setSelectedWakeTime("07:00");
         }
       } else {
+        console.log('SleepTrackingScreen - No weekly data available, setting defaults');
         // Set default data if API fails or no data
         setSleepQualityData([
           { day: "Mon", hours: 0, quality: 0 },
@@ -170,10 +208,14 @@ const SleepTrackingScreen = ({ navigation }: any) => {
           { day: "Sat", hours: 0, quality: 0 },
           { day: "Sun", hours: 0, quality: 0 },
         ]);
+        // Set default values for today
+        setTotalSleepHours("0");
+        setSelectedSleepTime("22:30");
+        setSelectedWakeTime("07:00");
       }
 
       // Fetch sleep analysis
-      const analysisResponse = await api.getSleepAnalysis();
+      const analysisResponse = await apiService.getSleepAnalysis();
       if (analysisResponse.success && analysisResponse.data) {
         const analysis = analysisResponse.data;
         setSleepMetrics([
@@ -265,7 +307,7 @@ const SleepTrackingScreen = ({ navigation }: any) => {
       }
 
       // Fetch sleep stages
-      const stagesResponse = await api.getSleepStages();
+      const stagesResponse = await apiService.getSleepStages();
       if (stagesResponse.success && stagesResponse.data && Array.isArray(stagesResponse.data)) {
         setSleepStages(stagesResponse.data);
       } else {
@@ -309,6 +351,10 @@ const SleepTrackingScreen = ({ navigation }: any) => {
         { day: "Sat", hours: 0, quality: 0 },
         { day: "Sun", hours: 0, quality: 0 },
       ]);
+      // Set default values for today
+      setTotalSleepHours("0");
+      setSelectedSleepTime("22:30");
+      setSelectedWakeTime("07:00");
       // Set default sleep stages if API fails
       setSleepStages([
         {
@@ -341,15 +387,153 @@ const SleepTrackingScreen = ({ navigation }: any) => {
     }
   };
 
+  const handleTimeChange = (event: any, selectedDate?: Date) => {
+    const currentPlatform = Platform.OS;
+    
+    if (currentPlatform === 'android') {
+      setShowSleepTimePicker(false);
+      setShowWakeTimePicker(false);
+    }
+    
+    if (selectedDate) {
+      setTempTime(selectedDate);
+      const hours = selectedDate.getHours().toString().padStart(2, '0');
+      const minutes = selectedDate.getMinutes().toString().padStart(2, '0');
+      const timeString = `${hours}:${minutes}`;
+      
+      if (showSleepTimePicker) {
+        setSelectedSleepTime(timeString);
+        if (currentPlatform === 'ios') {
+          setShowSleepTimePicker(false);
+        }
+      } else if (showWakeTimePicker) {
+        setSelectedWakeTime(timeString);
+        if (currentPlatform === 'ios') {
+          setShowWakeTimePicker(false);
+        }
+      }
+    } else {
+      // User cancelled the picker
+      setShowSleepTimePicker(false);
+      setShowWakeTimePicker(false);
+    }
+  };
+
+  const showTimePicker = (type: 'sleep' | 'wake') => {
+    const currentTime = type === 'sleep' ? selectedSleepTime : selectedWakeTime;
+    const [hours, minutes] = currentTime.split(':').map(Number);
+    const date = new Date();
+    date.setHours(hours, minutes, 0, 0);
+    setTempTime(date);
+    
+    if (type === 'sleep') {
+      setShowSleepTimePicker(true);
+    } else {
+      setShowWakeTimePicker(true);
+    }
+  };
+
   const handleSaveSleep = async () => {
     if (!isAuthenticated) {
-      Alert.alert("Authentication Required", "Please log in to save your sleep data");
+      showAlert("Authentication Required", "Please log in to save your sleep data", "warning");
       return;
     }
 
     setIsSaving(true);
 
     try {
+      // Check if sleep data already exists for today
+      const today = new Date().toISOString().split('T')[0];
+      const existingData = await apiService.getSleepDataByDate(today);
+      
+      if (existingData.sleepData && existingData.sleepData.length > 0) {
+        const existingEntry = existingData.sleepData[0];
+        
+
+        Alert.alert(
+          "Sleep Data Already Exists",
+          "You have already logged sleep data for today. Would you like to update your existing entry?",
+          [
+            {
+              text: "Cancel",
+              style: "cancel",
+            },
+            {
+              text: "Update",
+              onPress: async () => {
+                try {
+                  setIsSaving(true);
+                  
+                  // Calculate sleep duration in hours and minutes
+                  const [sleepHour, sleepMinute] = selectedSleepTime.split(':').map(Number);
+                  const [wakeHour, wakeMinute] = selectedWakeTime.split(':').map(Number);
+                  
+                  let sleepDurationMinutes = (wakeHour * 60 + wakeMinute) - (sleepHour * 60 + sleepMinute);
+                  if (sleepDurationMinutes <= 0) {
+                    sleepDurationMinutes += 24 * 60; // Add 24 hours if wake time is next day
+                  }
+
+                  const sleepHours = Math.floor(sleepDurationMinutes / 60);
+                  const sleepMinutes = sleepDurationMinutes % 60;
+
+                  const updatedSleepData = {
+                    sleep_date: today,
+                    sleep_hours: sleepHours,
+                    sleep_minutes: sleepMinutes,
+                    sleep_quality: selectedSleepQuality,
+                    bedtime: selectedSleepTime,
+                    wake_time: selectedWakeTime,
+                    notes: `Sleep duration: ${sleepHours}h ${sleepMinutes}m, Quality: ${selectedSleepQuality}`
+                  };
+
+                  // Validate sleep data before sending
+                  const validation = validateSleepData(updatedSleepData);
+                  if (!validation.isValid) {
+                    console.log("❌ SleepTrackingScreen: Validation failed for update:", validation.errors);
+                    showAlert("Validation Error", validation.errors.join('\n'), "error");
+                    return;
+                  }
+
+                  console.log("✅ SleepTrackingScreen: Update data validated successfully:", updatedSleepData);
+                  const updateResponse = await apiService.updateSleepEntry(existingEntry.id, updatedSleepData);
+                  console.log("🔍 SleepTrackingScreen: API Response for update:", updateResponse);
+                  
+                  // Debug response structure
+                  const debugInfo = debugSleepResponse(updateResponse, 'update');
+                  console.log("🔍 SleepTrackingScreen: Debug info for update:", debugInfo);
+
+                  // Check if response is successful
+                  if (updateResponse && updateResponse.success) {
+                    console.log("✅ SleepTrackingScreen: Showing success alert for update");
+                    showAlert(
+                      "Update Success",
+                      "Sleep data updated successfully!",
+                      "success",
+                      () => {
+                        safeGoBack(navigation);
+                        eventEmitter.emitSleepLogged();
+                      }
+                    );
+                  } else {
+                    const errorMessage = updateResponse?.message || "Failed to update sleep data";
+                    console.log("❌ SleepTrackingScreen: Showing error alert for update -", errorMessage);
+                    showAlert("Update Error", errorMessage, "error");
+                  }
+                } catch (updateError: any) {
+                  console.error("Error updating sleep data:", updateError);
+                  const errorMessage = updateError?.message || "Failed to update sleep data. Please try again.";
+                  console.log("❌ SleepTrackingScreen: Showing catch error alert for update -", errorMessage);
+                  showAlert("Update Error", errorMessage, "error");
+                } finally {
+                  setIsSaving(false);
+                }
+              },
+            },
+          ]
+        );
+        return;
+      }
+
       // Calculate sleep duration in hours and minutes
       const [sleepHour, sleepMinute] = selectedSleepTime.split(':').map(Number);
       const [wakeHour, wakeMinute] = selectedWakeTime.split(':').map(Number);
@@ -363,7 +547,7 @@ const SleepTrackingScreen = ({ navigation }: any) => {
       const sleepMinutes = sleepDurationMinutes % 60;
 
       const sleepData = {
-        sleep_date: new Date().toISOString().split('T')[0],
+        sleep_date: today,
         sleep_hours: sleepHours,
         sleep_minutes: sleepMinutes,
         sleep_quality: selectedSleepQuality,
@@ -372,30 +556,44 @@ const SleepTrackingScreen = ({ navigation }: any) => {
         notes: `Sleep duration: ${sleepHours}h ${sleepMinutes}m, Quality: ${selectedSleepQuality}`
       };
 
-      const response = await apiService.createSleepEntry(sleepData);
+      // Validate sleep data before sending
+      const validation = validateSleepData(sleepData);
+      if (!validation.isValid) {
+        console.log("❌ SleepTrackingScreen: Validation failed:", validation.errors);
+        showAlert("Validation Error", validation.errors.join('\n'), "error");
+        return;
+      }
 
-      if (response.success) {
-        Alert.alert(
-          "Success",
+      console.log("✅ SleepTrackingScreen: Sleep data validated successfully:", sleepData);
+      const response = await apiService.createSleepEntry(sleepData);
+      console.log("🔍 SleepTrackingScreen: API Response for create:", response);
+      
+      // Debug response structure
+      const debugInfo = debugSleepResponse(response, 'create');
+      console.log("🔍 SleepTrackingScreen: Debug info for create:", debugInfo);
+
+      // Check if response is successful
+      if (response && response.success) {
+        console.log("✅ SleepTrackingScreen: Showing success alert for create");
+        showAlert(
+          "Save Success",
           "Sleep data saved successfully!",
-          [
-            {
-              text: "OK",
-              onPress: () => {
-                safeGoBack(navigation);
-              },
-            },
-          ]
+          "success",
+          () => {
+            safeGoBack(navigation);
+            eventEmitter.emitSleepLogged();
+          }
         );
-        
-        // Emit event to notify other components that sleep data has been updated
-        eventEmitter.emitSleepLogged();
       } else {
-        Alert.alert("Error", response.message || "Failed to save sleep data");
+        const errorMessage = response?.message || "Failed to save sleep data";
+        console.log("❌ SleepTrackingScreen: Showing error alert for create -", errorMessage);
+        showAlert("Save Error", errorMessage, "error");
       }
     } catch (error: any) {
       console.error("Error saving sleep data:", error);
-      Alert.alert("Error", "Failed to save sleep data. Please try again.");
+      const errorMessage = error?.message || "Failed to save sleep data. Please try again.";
+      console.log("❌ SleepTrackingScreen: Showing catch error alert for create -", errorMessage);
+      showAlert("Save Error", errorMessage, "error");
     } finally {
       setIsSaving(false);
     }
@@ -410,6 +608,22 @@ const SleepTrackingScreen = ({ navigation }: any) => {
       poor: 1,
     };
     return qualityScores[quality as keyof typeof qualityScores] || 0;
+  };
+
+  // Helper function to show custom alert
+  const showAlert = (title: string, message: string, type: "success" | "error" | "warning" | "info", onPress?: () => void) => {
+    console.log(`🔍 CustomAlert: Showing ${type} alert - "${title}"`);
+    setAlertConfig({
+      title,
+      message,
+      type,
+      onPress: () => {
+        console.log(`🔍 CustomAlert: Alert closed - "${title}"`);
+        setShowCustomAlert(false);
+        if (onPress) onPress();
+      }
+    });
+    setShowCustomAlert(true);
   };
 
   const renderSleepMetric = ({ item }: any) => (
@@ -510,7 +724,7 @@ const SleepTrackingScreen = ({ navigation }: any) => {
           <View style={styles.header}>
             <TouchableOpacity
               style={styles.backButton}
-              onPress={() => navigation.goBack()}
+              onPress={() => safeGoBack(navigation, 'Main')}
             >
               <Icon name="arrow-left" size={24} color="#1F2937" />
             </TouchableOpacity>
@@ -528,7 +742,10 @@ const SleepTrackingScreen = ({ navigation }: any) => {
                 <View style={styles.sleepTimeItem}>
                   <Icon name="moon-waning-crescent" size={24} color="#8B5CF6" />
                   <Text style={styles.sleepTimeLabel}>Bedtime</Text>
-                  <TouchableOpacity style={styles.timeButton}>
+                  <TouchableOpacity 
+                    style={styles.timeButton}
+                    onPress={() => showTimePicker('sleep')}
+                  >
                     <Text style={styles.timeText}>{selectedSleepTime}</Text>
                   </TouchableOpacity>
                 </View>
@@ -538,7 +755,10 @@ const SleepTrackingScreen = ({ navigation }: any) => {
                 <View style={styles.sleepTimeItem}>
                   <Icon name="weather-sunny" size={24} color="#F59E0B" />
                   <Text style={styles.sleepTimeLabel}>Wake Time</Text>
-                  <TouchableOpacity style={styles.timeButton}>
+                  <TouchableOpacity 
+                    style={styles.timeButton}
+                    onPress={() => showTimePicker('wake')}
+                  >
                     <Text style={styles.timeText}>{selectedWakeTime}</Text>
                   </TouchableOpacity>
                 </View>
@@ -604,114 +824,6 @@ const SleepTrackingScreen = ({ navigation }: any) => {
             </View>
           </View>
 
-          {/* Sleep Quality Chart */}
-          <View style={styles.sleepQualityContainer}>
-            <Text style={styles.sectionTitle}>This Week</Text>
-            <View style={styles.sleepQualityChart}>
-              {sleepQualityData.map((item, index) => (
-                <View key={index} style={styles.sleepQualityBar}>
-                  <View style={styles.sleepQualityBarContainer}>
-                    <View
-                      style={[
-                        styles.sleepQualityBarFill,
-                        {
-                          height: `${(item.hours / 10) * 80}%`,
-                          backgroundColor: index === 6 ? "#8B5CF6" : "#E5E7EB",
-                        },
-                      ]}
-                    />
-                  </View>
-                  <Text style={styles.sleepQualityBarLabel}>{item.day}</Text>
-                  <Text style={styles.sleepQualityBarValue}>{item.hours}h</Text>
-                  <Text style={styles.sleepQualityBarQuality}>
-                    {item.quality}%
-                  </Text>
-                </View>
-              ))}
-            </View>
-          </View>
-
-          {/* Sleep Metrics */}
-          <View style={styles.sleepMetricsContainer}>
-            <Text style={styles.sectionTitle}>Sleep Analysis</Text>
-            <View style={styles.sleepMetricsGrid}>
-              {sleepMetrics.map((metric) => (
-                <View key={metric.id} style={styles.sleepMetricCard}>
-                  <View style={styles.sleepMetricHeader}>
-                    <View
-                      style={[
-                        styles.sleepMetricIcon,
-                        { backgroundColor: metric.color + "20" },
-                      ]}
-                    >
-                      <Icon name={metric.icon} size={20} color={metric.color} />
-                    </View>
-                    <Text style={styles.sleepMetricTitle}>{metric.title}</Text>
-                  </View>
-                  <View style={styles.sleepMetricValue}>
-                    <Text style={styles.sleepMetricValueText}>
-                      {metric.value}
-                      <Text style={styles.sleepMetricUnit}> {metric.unit}</Text>
-                    </Text>
-                  </View>
-                  <View style={styles.sleepMetricTrend}>
-                    <Icon
-                      name={
-                        metric.trendPositive ? "trending-up" : "trending-down"
-                      }
-                      size={14}
-                      color={metric.trendPositive ? "#10B981" : "#EF4444"}
-                    />
-                    <Text
-                      style={[
-                        styles.sleepMetricTrendText,
-                        { color: metric.trendPositive ? "#10B981" : "#EF4444" },
-                      ]}
-                    >
-                      {metric.trend}
-                    </Text>
-                  </View>
-                </View>
-              ))}
-            </View>
-          </View>
-
-          {/* Sleep Stages */}
-          <View style={styles.sleepStagesContainer}>
-            <Text style={styles.sectionTitle}>Sleep Stages</Text>
-            <View style={styles.sleepStagesCard}>
-              {sleepStages?.map((stage, index) => (
-                <View key={index} style={styles.sleepStageCard}>
-                  <View style={styles.sleepStageHeader}>
-                    <View
-                      style={[
-                        styles.sleepStageIndicator,
-                        { backgroundColor: stage.color },
-                      ]}
-                    />
-                    <Text style={styles.sleepStageTitle}>{stage.stage}</Text>
-                    <Text style={styles.sleepStageDuration}>
-                      {stage.duration}
-                    </Text>
-                  </View>
-                  <View style={styles.sleepStageBar}>
-                    <View
-                      style={[
-                        styles.sleepStageFill,
-                        {
-                          width: `${stage.percentage}%`,
-                          backgroundColor: stage.color,
-                        },
-                      ]}
-                    />
-                  </View>
-                  <Text style={styles.sleepStagePercentage}>
-                    {stage.percentage}%
-                  </Text>
-                </View>
-              ))}
-            </View>
-          </View>
 
           {/* Sleep Tips */}
           <View style={styles.sleepTipsContainer}>
@@ -738,6 +850,60 @@ const SleepTrackingScreen = ({ navigation }: any) => {
             </View>
           </View>
         </ScrollView>
+        
+        {/* DateTimePicker Components */}
+        {showSleepTimePicker && (
+          <>
+            <DateTimePicker
+              value={tempTime}
+              mode="time"
+              is24Hour={true}
+              display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+              onChange={handleTimeChange}
+            />
+            {Platform.OS === 'ios' && (
+              <View style={styles.pickerButtonContainer}>
+                <TouchableOpacity
+                  style={styles.pickerDoneButton}
+                  onPress={() => setShowSleepTimePicker(false)}
+                >
+                  <Text style={styles.pickerDoneButtonText}>Done</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+          </>
+        )}
+        
+        {showWakeTimePicker && (
+          <>
+            <DateTimePicker
+              value={tempTime}
+              mode="time"
+              is24Hour={true}
+              display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+              onChange={handleTimeChange}
+            />
+            {Platform.OS === 'ios' && (
+              <View style={styles.pickerButtonContainer}>
+                <TouchableOpacity
+                  style={styles.pickerDoneButton}
+                  onPress={() => setShowWakeTimePicker(false)}
+                >
+                  <Text style={styles.pickerDoneButtonText}>Done</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+          </>
+        )}
+        
+        {/* Custom Alert Modal */}
+        <CustomAlert
+          visible={showCustomAlert}
+          title={alertConfig.title}
+          message={alertConfig.message}
+          type={alertConfig.type}
+          onPress={alertConfig.onPress}
+        />
       </SafeAreaView>
     </LinearGradient>
   );
@@ -907,11 +1073,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "700",
     color: "#FFFFFF",
-  },
-  loadingContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
   },
   sleepQualityContainer: {
     paddingHorizontal: 20,
@@ -1132,6 +1293,28 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#6B7280",
     lineHeight: 20,
+  },
+  pickerButtonContainer: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: '#FFFFFF',
+    borderTopWidth: 1,
+    borderTopColor: '#E5E7EB',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+  },
+  pickerDoneButton: {
+    backgroundColor: '#8B5CF6',
+    borderRadius: 8,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  pickerDoneButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
   },
 });
 

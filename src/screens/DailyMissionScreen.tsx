@@ -19,6 +19,7 @@ import api from "../services/api";
 import { handleError } from "../utils/errorHandler";
 import { Mission, UserMission } from "../types";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { safeGoBack } from "../utils/safeNavigation";
 
 const { width } = Dimensions.get("window");
 
@@ -405,7 +406,7 @@ const DailyMissionScreen = ({ navigation }: any) => {
           name="arrow-left"
           size={24}
           color="#1F2937"
-          onPress={() => navigation.goBack()}
+          onPress={() => safeGoBack(navigation, 'Main')}
           style={styles.backButton}
         />
         <Text style={styles.headerTitle}>Daily Missions</Text>

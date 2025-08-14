@@ -40,11 +40,11 @@ export class NetworkHelper {
 
   static async findBestServer() {
     const servers = [
-      'https://dash.doctorphc.id', // Production server (primary)
-      'http://10.242.90.103:3000', // Server IP from server.js (fallback)
-      'http://localhost:3000', // Local development (fallback)
+      'http://localhost:3000', // Local development (primary)
+      'http://127.0.0.1:3000', // Local development (fallback)
       'http://10.0.2.2:3000', // Android emulator (fallback)
-      'http://127.0.0.1:3000' // Local development (fallback)
+      'http://10.242.90.103:3000', // Server IP from server.js (fallback)
+      'https://dash.doctorphc.id' // Production server (fallback)
     ];
 
     const results = await Promise.all(
@@ -103,8 +103,8 @@ export class NetworkHelper {
   }
 
   static getDefaultURL() {
-    // Always use production server
-    return 'https://dash.doctorphc.id/api/mobile';
+    // Use localhost for development
+    return 'http://localhost:3000/api/mobile';
   }
 
   static createTimeoutController(timeout = 15000) {

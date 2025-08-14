@@ -13,6 +13,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import NetworkDiagnostics from '../utils/networkDiagnostics';
 import apiService from '../services/api';
+import { safeGoBack } from "../utils/safeNavigation";
 
 const NetworkTroubleshootingScreen = ({ navigation }: any) => {
   const [isRunningDiagnostics, setIsRunningDiagnostics] = useState(false);
@@ -196,7 +197,7 @@ const NetworkTroubleshootingScreen = ({ navigation }: any) => {
       <LinearGradient colors={['#F8FAFC', '#E8EAFF']} style={styles.container}>
         <View style={styles.header}>
           <TouchableOpacity
-            onPress={() => navigation.goBack()}
+            onPress={() => safeGoBack(navigation, 'Main')}
             style={styles.backButton}
           >
             <Icon name="arrow-left" size={24} color="#333" />

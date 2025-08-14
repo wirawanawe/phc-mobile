@@ -1,4 +1,4 @@
-const fetch = require('node-fetch');
+import fetch from 'node-fetch';
 
 // Test configuration
 const BASE_URL = 'http://localhost:3000/api/mobile';
@@ -112,9 +112,8 @@ async function testAuthentication() {
     console.log('🎉 All tests completed successfully!');
 
   } catch (error) {
-    console.error('❌ Test failed with error:', error);
+    console.log('❌ Test failed with error:', error);
   }
 }
 
-// Run the test
 testAuthentication(); 

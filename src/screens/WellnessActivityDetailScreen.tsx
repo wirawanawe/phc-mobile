@@ -15,6 +15,8 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useAuth } from '../contexts/AuthContext';
 import api from '../services/api';
 import { handleAuthError } from '../utils/errorHandler';
+import { safeGoBack } from "../utils/safeNavigation";
+import { WellnessActivityDetailScreenProps } from "../types/navigation";
 
 interface WellnessActivity {
   id: number;
@@ -27,15 +29,6 @@ interface WellnessActivity {
   calories_burn?: number;
   instructions?: string;
   is_active: boolean;
-}
-
-interface WellnessActivityDetailScreenProps {
-  route: {
-    params: {
-      activity: WellnessActivity;
-    };
-  };
-  navigation: any;
 }
 
 const { width } = Dimensions.get('window');
@@ -86,7 +79,7 @@ const WellnessActivityDetailScreen = ({ route, navigation }: WellnessActivityDet
             {
               text: 'OK',
               onPress: () => {
-                navigation.goBack();
+                safeGoBack(navigation, 'Main');
               },
             },
           ]
@@ -151,7 +144,7 @@ const WellnessActivityDetailScreen = ({ route, navigation }: WellnessActivityDet
       <View style={styles.header}>
         <TouchableOpacity
           style={styles.backButton}
-          onPress={() => navigation.goBack()}
+          onPress={() => safeGoBack(navigation, 'Main')}
         >
           <Icon name="arrow-left" size={24} color="#1F2937" />
         </TouchableOpacity>

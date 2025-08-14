@@ -86,13 +86,15 @@ const FeaturedArticleCard: React.FC<FeaturedArticleCardProps> = ({ article, onPr
 
         {/* Content */}
         <View style={styles.content}>
-          <Text style={styles.title} numberOfLines={3}>
-            {article.title}
-          </Text>
-          
-          <Text style={styles.description} numberOfLines={2}>
-            {article.description}
-          </Text>
+          <View style={styles.textContent}>
+            <Text style={styles.title} numberOfLines={3}>
+              {article.title}
+            </Text>
+            
+            <Text style={styles.description} numberOfLines={3}>
+              {article.description}
+            </Text>
+          </View>
 
           {/* Footer with Date and Read Time */}
           <View style={styles.footer}>
@@ -128,7 +130,7 @@ const FeaturedArticleCard: React.FC<FeaturedArticleCardProps> = ({ article, onPr
 const styles = StyleSheet.create({
   container: {
     width: width * 0.75,
-    height: 280, // Fixed height for all cards
+    height: 320, // Increased height to prevent content cutoff
     marginRight: 16,
   },
   card: {
@@ -146,7 +148,7 @@ const styles = StyleSheet.create({
   },
   header: {
     padding: 16,
-    paddingBottom: 0,
+    paddingBottom: 12,
     flexDirection: 'row',
     alignItems: 'flex-start',
     justifyContent: 'space-between',
@@ -185,9 +187,13 @@ const styles = StyleSheet.create({
   },
   content: {
     padding: 16,
-    paddingTop: 12,
+    paddingTop: 0,
     flex: 1, // Take remaining space
     justifyContent: 'space-between', // Distribute content evenly
+  },
+  textContent: {
+    flex: 1, // Take available space for text
+    marginBottom: 12,
   },
   title: {
     fontSize: 16,
@@ -201,9 +207,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#64748B',
     lineHeight: 18,
-    marginBottom: 12,
     fontWeight: '500',
-    flex: 1, // Take available space
   },
   footer: {
     flexDirection: 'row',

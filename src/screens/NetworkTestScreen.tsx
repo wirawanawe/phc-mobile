@@ -12,6 +12,7 @@ import { CustomTheme } from '../theme/theme';
 import NetworkDiagnostic from '../utils/networkDiagnostic';
 import apiService from '../services/api';
 import { testApiConnection } from '../utils/testConnection';
+import { clearRateLimits } from '../utils/rateLimitHelper';
 
 const NetworkTestScreen = ({ navigation }: any) => {
   const theme = useTheme<CustomTheme>();
@@ -40,8 +41,8 @@ const NetworkTestScreen = ({ navigation }: any) => {
       
       const testData = {
         name: 'Test User',
-        email: `test${Date.now()}@example.com`,
-        password: 'testpassword123',
+        email: `testuser${Date.now()}@example.com`,
+        password: 'temppass123',
         phone: '081234567890',
         dateOfBirth: '1990-01-01',
         gender: 'male'
@@ -105,7 +106,7 @@ const NetworkTestScreen = ({ navigation }: any) => {
       // Initialize API service
       await apiService.initialize();
       
-      const result = await apiService.login('test@example.com', 'password123');
+      const result = await apiService.login('testuser@example.com', 'temppass123');
       setTestResults(prev => [...prev, {
         type: 'login',
         success: true,
@@ -132,6 +133,43 @@ const NetworkTestScreen = ({ navigation }: any) => {
   const clearResults = () => {
     setDiagnosticResults(null);
     setTestResults([]);
+  };
+
+  const clearRateLimitsTest = async () => {
+    setIsLoading(true);
+    try {
+      await apiService.initialize();
+      const success = await clearRateLimits(apiService.baseURL);
+      
+      if (success) {
+        Alert.alert('Success', 'Rate limits cleared successfully!');
+        setTestResults(prev => [...prev, {
+          type: 'clear_rate_limits',
+          success: true,
+          data: { message: 'Rate limits cleared' },
+          timestamp: new Date().toISOString()
+        }]);
+      } else {
+        Alert.alert('Failed', 'Failed to clear rate limits');
+        setTestResults(prev => [...prev, {
+          type: 'clear_rate_limits',
+          success: false,
+          error: 'Failed to clear rate limits',
+          timestamp: new Date().toISOString()
+        }]);
+      }
+    } catch (error) {
+      console.error('❌ Clear rate limits failed:', error);
+      Alert.alert('Error', error.message);
+      setTestResults(prev => [...prev, {
+        type: 'clear_rate_limits',
+        success: false,
+        error: error.message,
+        timestamp: new Date().toISOString()
+      }]);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -185,6 +223,16 @@ const NetworkTestScreen = ({ navigation }: any) => {
             style={styles.button}
           >
             Test Login
+          </Button>
+
+          <Button
+            mode="outlined"
+            onPress={clearRateLimitsTest}
+            loading={isLoading}
+            disabled={isLoading}
+            style={styles.button}
+          >
+            Clear Rate Limits
           </Button>
 
           <Button

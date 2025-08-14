@@ -18,6 +18,7 @@ import { CustomTheme } from "../theme/theme";
 import apiService from "../services/api";
 import eventEmitter from "../utils/eventEmitter";
 import dateChangeDetector from "../utils/dateChangeDetector";
+import { safeGoBack } from "../utils/safeNavigation";
 
 const { width, height } = Dimensions.get("window");
 
@@ -528,7 +529,7 @@ const WaterTrackingScreen = ({ navigation }: any) => {
           <View style={styles.header}>
             <TouchableOpacity
               style={styles.backButton}
-              onPress={() => navigation.goBack()}
+              onPress={() => safeGoBack(navigation, 'Main')}
             >
               <Icon name="arrow-left" size={24} color="#FFFFFF" />
             </TouchableOpacity>

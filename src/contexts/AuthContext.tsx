@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import apiService from "../services/api";
 import { handleAuthError, handleError } from "../utils/errorHandler";
+import { testNetworkConnectivity } from "../utils/networkTest";
 
 interface User {
   id: string;
@@ -81,10 +82,17 @@ const clearAuthData = async (): Promise<void> => {
 const validateToken = async (token: string): Promise<boolean> => {
   try {
     console.log('🔍 Auth: Validating token...');
+    
+    // Ensure API service is initialized
+    if (!apiService.isInitialized) {
+      console.log('🔄 Auth: Initializing API service...');
+      await apiService.initialize();
+    }
+    
     console.log('🔗 Auth: API URL:', apiService.baseURL);
     
-    // Test token validity by making a simple API call
-    const response = await fetch(`${apiService.baseURL}/auth/me`, {
+    // Test token validity by making a simple API call using the API service
+    const response = await apiService.request('/auth/me', {
       method: 'GET',
       headers: {
         'Authorization': `Bearer ${token}`,
@@ -92,11 +100,11 @@ const validateToken = async (token: string): Promise<boolean> => {
       },
     });
     
-    console.log('📡 Auth: Response status:', response.status);
-    console.log('📡 Auth: Response ok:', response.ok);
+    console.log('📡 Auth: Response status:', response.status || 'N/A');
+    console.log('📡 Auth: Response success:', response.success);
     
-    return response.ok;
-  } catch (error) {
+    return response.success;
+  } catch (error: any) {
     console.error('❌ Auth: Token validation failed:', error);
     console.error('❌ Auth: Error details:', {
       message: error.message,
@@ -163,6 +171,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
   const checkAuthStatus = useCallback(async () => {
     try {
       console.log("🔍 Auth: Checking authentication status...");
+      
+      // Test network connectivity first
+      console.log("🌐 Auth: Testing network connectivity...");
+      const networkTest = await testNetworkConnectivity();
+      if (!networkTest.success) {
+        console.log("⚠️ Auth: Network connectivity issues detected");
+      } else {
+        console.log("✅ Auth: Network connectivity OK");
+      }
+      
       const token = await getAuthToken();
       
       if (!token) {

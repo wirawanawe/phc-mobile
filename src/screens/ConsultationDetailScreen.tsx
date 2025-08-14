@@ -13,6 +13,7 @@ import Icon from "react-native-vector-icons/MaterialCommunityIcons";
 import { CustomTheme } from "../theme/theme";
 import { useAuth } from "../contexts/AuthContext";
 import api from "../services/api";
+import { safeGoBack } from "../utils/safeNavigation";
 
 interface Consultation {
   id: number;
@@ -254,7 +255,7 @@ const ConsultationDetailScreen: React.FC<ConsultationDetailScreenProps> = ({
         <LinearGradient colors={["#F8FAFF", "#E8EAFF"]} style={styles.container}>
           <View style={styles.header}>
             <TouchableOpacity
-              onPress={() => navigation.goBack()}
+              onPress={() => safeGoBack(navigation, 'Main')}
               style={styles.backButton}
             >
               <Icon name="arrow-left" size={24} color="#6B7280" />
@@ -276,7 +277,7 @@ const ConsultationDetailScreen: React.FC<ConsultationDetailScreenProps> = ({
         <LinearGradient colors={["#F8FAFF", "#E8EAFF"]} style={styles.container}>
           <View style={styles.header}>
             <TouchableOpacity
-              onPress={() => navigation.goBack()}
+              onPress={() => safeGoBack(navigation, 'Main')}
               style={styles.backButton}
             >
               <Icon name="arrow-left" size={24} color="#6B7280" />
@@ -306,7 +307,7 @@ const ConsultationDetailScreen: React.FC<ConsultationDetailScreenProps> = ({
       <LinearGradient colors={["#F8FAFF", "#E8EAFF"]} style={styles.container}>
         <View style={styles.header}>
           <TouchableOpacity
-            onPress={() => navigation.goBack()}
+            onPress={() => safeGoBack(navigation, 'Main')}
             style={styles.backButton}
           >
             <Icon name="arrow-left" size={24} color="#6B7280" />

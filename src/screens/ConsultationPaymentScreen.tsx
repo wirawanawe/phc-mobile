@@ -13,15 +13,8 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import apiService from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import LoadingError from '../components/LoadingError';
-
-interface ConsultationPaymentScreenProps {
-  navigation: any;
-  route: {
-    params: {
-      consultationId: number;
-    };
-  };
-}
+import { safeGoBack } from "../utils/safeNavigation";
+import { ConsultationPaymentScreenProps } from "../types/navigation";
 
 interface Consultation {
   id: number;
@@ -214,7 +207,7 @@ const ConsultationPaymentScreen: React.FC<ConsultationPaymentScreenProps> = ({
       <StatusBar backgroundColor="#E22345" barStyle="light-content" />
       
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
+        <TouchableOpacity onPress={() => safeGoBack(navigation, 'Main')}>
           <Icon name="arrow-left" size={24} color="#FFFFFF" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Payment</Text>

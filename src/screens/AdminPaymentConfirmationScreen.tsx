@@ -15,6 +15,7 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import apiService from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import LoadingError from '../components/LoadingError';
+import { safeGoBack } from "../utils/safeNavigation";
 
 interface AdminPaymentConfirmationScreenProps {
   navigation: any;
@@ -294,7 +295,7 @@ const AdminPaymentConfirmationScreen: React.FC<AdminPaymentConfirmationScreenPro
       <StatusBar backgroundColor="#E22345" barStyle="light-content" />
       
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
+        <TouchableOpacity onPress={() => safeGoBack(navigation, 'Main')}>
           <Icon name="arrow-left" size={24} color="#FFFFFF" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Konfirmasi Pembayaran</Text>

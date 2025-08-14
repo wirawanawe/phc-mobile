@@ -16,6 +16,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useTheme } from 'react-native-paper';
 import { CustomTheme } from '../theme/theme';
+import { safeGoBack } from "../utils/safeNavigation";
 
 const { width } = Dimensions.get('window');
 
@@ -113,7 +114,7 @@ const ArticleDetailScreen: React.FC<ArticleDetailScreenProps> = ({ navigation, r
       <View style={styles.header}>
         <TouchableOpacity
           style={styles.backButton}
-          onPress={() => navigation.goBack()}
+          onPress={() => safeGoBack(navigation, 'Main')}
         >
           <Icon name="arrow-left" size={24} color="#1F2937" />
         </TouchableOpacity>

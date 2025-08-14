@@ -14,6 +14,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { CustomTheme } from "../theme/theme";
 import { useAuth } from "../contexts/AuthContext";
 import api from "../services/api";
+import { safeGoBack } from "../utils/safeNavigation";
 
 interface MedicalVisit {
   id: string;
@@ -45,69 +46,20 @@ const MedicalHistoryScreen = ({ navigation }: any) => {
   const loadMedicalHistory = async () => {
     setLoading(true);
     try {
-      // Mock data - replace with actual API call
-      const mockVisits: MedicalVisit[] = [
-        {
-          id: "1",
-          date: "2024-03-15",
-          clinicName: "Klinik Sehat Jaya",
-          doctorName: "Dr. Sarah Johnson",
-          visitType: "Konsultasi Umum",
-          diagnosis: "Hipertensi ringan",
-          treatment: "Pemantauan tekanan darah dan perubahan gaya hidup",
-          prescription: ["Amlodipine 5mg", "Lifestyle modification"],
-          notes: "Pasien disarankan untuk mengurangi konsumsi garam dan olahraga teratur",
-          status: "completed",
-          cost: 150000,
-          paymentStatus: "paid",
-        },
-        {
-          id: "2",
-          date: "2024-02-28",
-          clinicName: "Puskesmas Kota",
-          doctorName: "Dr. Ahmad Rahman",
-          visitType: "Pemeriksaan Rutin",
-          diagnosis: "Kolesterol tinggi",
-          treatment: "Diet rendah lemak dan olahraga",
-          prescription: ["Simvastatin 20mg", "Omega-3 supplement"],
-          notes: "Kontrol dalam 3 bulan untuk evaluasi",
-          status: "completed",
-          cost: 120000,
-          paymentStatus: "paid",
-        },
-        {
-          id: "3",
-          date: "2024-04-10",
-          clinicName: "Klinik Gigi Sejahtera",
-          doctorName: "Dr. Maria Santos",
-          visitType: "Pemeriksaan Gigi",
-          diagnosis: "Karies gigi",
-          treatment: "Penambalan gigi dan pembersihan karang",
-          prescription: ["Antibiotik (jika diperlukan)", "Pasta gigi khusus"],
-          notes: "Kontrol 6 bulan untuk pembersihan rutin",
-          status: "scheduled",
-          cost: 200000,
-          paymentStatus: "pending",
-        },
-        {
-          id: "4",
-          date: "2024-01-20",
-          clinicName: "Rumah Sakit Umum",
-          doctorName: "Dr. Budi Santoso",
-          visitType: "Pemeriksaan Darah",
-          diagnosis: "Anemia ringan",
-          treatment: "Suplemen zat besi",
-          prescription: ["Ferrous sulfate 200mg", "Vitamin C"],
-          notes: "Kontrol dalam 1 bulan untuk evaluasi Hb",
-          status: "completed",
-          cost: 180000,
-          paymentStatus: "paid",
-        },
-      ];
-      setVisits(mockVisits);
+      const response = await api.getMedicalHistory({
+        page: 1,
+        limit: 50
+      });
+      
+      if (response.success && response.data) {
+        setVisits(response.data);
+      } else {
+        setVisits([]);
+      }
     } catch (error) {
       console.error("Error loading medical history:", error);
       Alert.alert("Error", "Gagal memuat riwayat medis");
+      setVisits([]);
     } finally {
       setLoading(false);
     }
@@ -344,7 +296,7 @@ const MedicalHistoryScreen = ({ navigation }: any) => {
       <View style={styles.header}>
         <TouchableOpacity
           style={styles.backButton}
-          onPress={() => navigation.goBack()}
+          onPress={() => safeGoBack(navigation, 'Main')}
         >
           <Icon name="arrow-left" size={24} color="#374151" />
         </TouchableOpacity>

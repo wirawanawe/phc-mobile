@@ -254,15 +254,15 @@ const DashboardScreen = ({ navigation }: any) => {
             action: () => navigation.navigate("Activity"),
   });
 
-  // Add clinic booking recommendation
-  recommendations.push({
-    id: "4",
-    title: "Schedule Health Checkup",
-    description: "Regular health checkups help maintain your wellness goals",
-    priority: "low",
-    color: theme.customColors.softPink,
-    action: () => navigation.navigate("ClinicBooking"),
-  });
+  // Clinic booking recommendation - temporarily commented out
+  // recommendations.push({
+  //   id: "4",
+  //   title: "Schedule Health Checkup",
+  //   description: "Regular health checkups help maintain your wellness goals",
+  //   priority: "low",
+  //   color: theme.customColors.softPink,
+  //   action: () => navigation.navigate("ClinicBooking"),
+  // });
 
   const getActivityIcon = (type: string) => {
     switch (type) {
@@ -818,7 +818,8 @@ const DashboardScreen = ({ navigation }: any) => {
                 </Text>
               </Card.Content>
             </Card>
-            <Card
+            {/* Book Clinic Card - temporarily commented out */}
+            {/* <Card
               style={[
                 styles.actionCard,
                 { backgroundColor: "rgba(255,255,255,0.95)" },
@@ -843,7 +844,7 @@ const DashboardScreen = ({ navigation }: any) => {
                   Book Clinic
                 </Text>
               </Card.Content>
-            </Card>
+            </Card> */}
           </View>
         </View>
       </ScrollView>

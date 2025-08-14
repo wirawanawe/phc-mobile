@@ -75,17 +75,17 @@ export class ConnectionTest {
       current.responseTime < best.responseTime ? current : best
     );
 
-    return fastest.url.replace('/auth/me', '');
+    return fastest.url.replace('/mobile/auth/me', '');
   }
 
   static async testLoginEndpoint(baseUrl) {
     const testData = {
-      email: 'test@mobile.com',
-      password: 'password123'
+      email: 'testuser@example.com',
+      password: 'testpass123'
     };
 
     try {
-      const response = await fetch(`${baseUrl}/auth/login`, {
+      const response = await fetch(`${baseUrl}/mobile/auth/login`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

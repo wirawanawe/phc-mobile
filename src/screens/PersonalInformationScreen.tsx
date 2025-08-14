@@ -14,6 +14,43 @@ import { LinearGradient } from "expo-linear-gradient";
 import Icon from "react-native-vector-icons/MaterialCommunityIcons";
 import { useAuth } from "../contexts/AuthContext";
 import apiService from "../services/api";
+import { safeGoBack } from "../utils/safeNavigation";
+
+// Helper functions for formatting
+const formatDateOfBirth = (dateStr: string): string => {
+  if (!dateStr) return "";
+  try {
+    const date = new Date(dateStr);
+    if (!isNaN(date.getTime())) {
+      const day = String(date.getDate()).padStart(2, '0');
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const year = date.getFullYear();
+      return `${day}/${month}/${year}`;
+    }
+  } catch (error) {
+    console.error("Error formatting date:", error);
+  }
+  return dateStr;
+};
+
+const formatGender = (gender: string): string => {
+  if (!gender) return "";
+  const genderMap: { [key: string]: string } = {
+    'male': 'Laki-laki',
+    'female': 'Perempuan',
+    'other': 'Lainnya'
+  };
+  return genderMap[gender] || gender;
+};
+
+const formatInsuranceType = (type: string): string => {
+  const typeMap: { [key: string]: string } = {
+    'umum': 'Umum',
+    'bpjs': 'BPJS Kesehatan',
+    'swasta': 'Asuransi Swasta'
+  };
+  return typeMap[type] || type;
+};
 
 const PersonalInformationScreen = ({ navigation }: any) => {
   const { user } = useAuth();
@@ -26,8 +63,6 @@ const PersonalInformationScreen = ({ navigation }: any) => {
     ktp_number: "",
     address: "",
     insurance_type: "umum",
-    insurance_provider: "",
-    insurance_number: "",
   });
 
   const [isEditing, setIsEditing] = useState(false);
@@ -51,8 +86,6 @@ const PersonalInformationScreen = ({ navigation }: any) => {
           ktp_number: response.data.ktp_number || "",
           address: response.data.address || "",
           insurance_type: response.data.insurance_type || "umum",
-          insurance_provider: response.data.insurance_provider || "",
-          insurance_number: response.data.insurance_number || "",
         });
       }
     } catch (error) {
@@ -65,22 +98,6 @@ const PersonalInformationScreen = ({ navigation }: any) => {
       // Validation
       if (userInfo.ktp_number && userInfo.ktp_number.length !== 16) {
         Alert.alert("Error", "KTP number must be exactly 16 digits");
-        return;
-      }
-
-      if (userInfo.insurance_type !== "umum" && !userInfo.insurance_provider) {
-        Alert.alert(
-          "Error",
-          "Insurance provider is required when insurance type is not Umum"
-        );
-        return;
-      }
-
-      if (userInfo.insurance_type !== "umum" && !userInfo.insurance_number) {
-        Alert.alert(
-          "Error",
-          "Insurance number is required when insurance type is not Umum"
-        );
         return;
       }
 
@@ -139,13 +156,44 @@ const PersonalInformationScreen = ({ navigation }: any) => {
     </View>
   );
 
+  const renderFormattedField = (
+    label: string,
+    value: string,
+    key: keyof typeof userInfo,
+    formatter: (value: string) => string,
+    keyboardType:
+      | "default"
+      | "email-address"
+      | "phone-pad"
+      | "numeric" = "default",
+    multiline: boolean = false
+  ) => (
+    <View style={styles.fieldContainer}>
+      <Text style={styles.fieldLabel}>{label}</Text>
+      {isEditing ? (
+        <TextInput
+          style={[styles.input, multiline && styles.multilineInput]}
+          value={value}
+          onChangeText={(text) => setUserInfo({ ...userInfo, [key]: text })}
+          keyboardType={keyboardType}
+          multiline={multiline}
+          numberOfLines={multiline ? 3 : 1}
+        />
+      ) : (
+        <Text style={[styles.fieldValue, !value && styles.fieldValueEmpty]}>
+          {value ? formatter(value) : "Not provided"}
+        </Text>
+      )}
+    </View>
+  );
+
   return (
     <SafeAreaView style={styles.container}>
       {/* Header */}
       {/* <View style={styles.header}>
         <TouchableOpacity
           style={styles.backButton}
-          onPress={() => navigation.goBack()}
+          onPress={() => safeGoBack(navigation, 'Main')}
         >
           <Icon name="arrow-left" size={24} color="#1F2937" />
         </TouchableOpacity>
@@ -194,12 +242,47 @@ const PersonalInformationScreen = ({ navigation }: any) => {
           {renderField("Full Name", userInfo.name, "name")}
           {renderField("Email", userInfo.email, "email", "email-address")}
           {renderField("Phone", userInfo.phone, "phone", "phone-pad")}
-          {renderField(
+          {renderFormattedField(
             "Date of Birth",
             userInfo.date_of_birth,
-            "date_of_birth"
+            "date_of_birth",
+            formatDateOfBirth
           )}
-          {renderField("Gender", userInfo.gender, "gender")}
+          
+          {/* Gender Selection */}
+          <View style={styles.fieldContainer}>
+            <Text style={styles.fieldLabel}>Gender</Text>
+            {isEditing ? (
+              <View style={styles.genderContainer}>
+                {["male", "female", "other"].map((gender) => (
+                  <TouchableOpacity
+                    key={gender}
+                    style={[
+                      styles.genderButton,
+                      userInfo.gender === gender && styles.genderButtonActive,
+                    ]}
+                    onPress={() =>
+                      setUserInfo({ ...userInfo, gender })
+                    }
+                  >
+                    <Text
+                      style={[
+                        styles.genderText,
+                        userInfo.gender === gender && styles.genderTextActive,
+                      ]}
+                    >
+                      {formatGender(gender)}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            ) : (
+              <Text style={styles.fieldValue}>
+                {userInfo.gender ? formatGender(userInfo.gender) : "Not provided"}
+              </Text>
+            )}
+          </View>
+          
           {renderField("No. KTP", userInfo.ktp_number, "ktp_number", "numeric")}
 
           <Text style={styles.sectionTitle}>Address</Text>
@@ -231,41 +314,17 @@ const PersonalInformationScreen = ({ navigation }: any) => {
                           styles.insuranceTypeTextActive,
                       ]}
                     >
-                      {type === "umum"
-                        ? "Umum"
-                        : type === "bpjs"
-                        ? "BPJS"
-                        : "Swasta"}
+                      {formatInsuranceType(type)}
                     </Text>
                   </TouchableOpacity>
                 ))}
               </View>
             ) : (
               <Text style={styles.fieldValue}>
-                {userInfo.insurance_type === "umum"
-                  ? "Umum"
-                  : userInfo.insurance_type === "bpjs"
-                  ? "BPJS"
-                  : "Swasta"}
+                {formatInsuranceType(userInfo.insurance_type)}
               </Text>
             )}
           </View>
-
-          {/* Insurance Provider - only show if not umum */}
-          {userInfo.insurance_type !== "umum" && (
-            <>
-              {renderField(
-                "Insurance Provider",
-                userInfo.insurance_provider,
-                "insurance_provider"
-              )}
-              {renderField(
-                "Insurance Number",
-                userInfo.insurance_number,
-                "insurance_number"
-              )}
-            </>
-          )}
         </View>
 
         {/* Action Buttons */}
@@ -491,6 +550,32 @@ const styles = StyleSheet.create({
     color: "#6B7280",
   },
   insuranceTypeTextActive: {
+    color: "#FFFFFF",
+  },
+  genderContainer: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  genderButton: {
+    flex: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#D1D5DB",
+    backgroundColor: "#FFFFFF",
+    alignItems: "center",
+  },
+  genderButtonActive: {
+    borderColor: "#6366F1",
+    backgroundColor: "#6366F1",
+  },
+  genderText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#6B7280",
+  },
+  genderTextActive: {
     color: "#FFFFFF",
   },
 });

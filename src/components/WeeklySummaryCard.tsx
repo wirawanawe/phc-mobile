@@ -5,7 +5,7 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { CustomTheme } from '../theme/theme';
 import ProgressRing from './ProgressRing';
-import api from '../services/api';
+import apiService from '../services/api';
 import { handleAuthError } from '../utils/errorHandler';
 
 const { width } = Dimensions.get('window');
@@ -53,7 +53,7 @@ const WeeklySummaryCard: React.FC<WeeklySummaryCardProps> = ({ onMoreDetailsPres
       // This loads accumulated weekly data (7 days) - shows averages per day
       // For daily data that resets each day, see TodaySummaryCard component
       
-      const weeklyResponse = await api.getWeeklySummary();
+      const weeklyResponse = await apiService.getWeeklySummary();
       console.log('WeeklySummaryCard - Weekly summary response:', weeklyResponse);
       
       if (weeklyResponse.success && weeklyResponse.data) {
@@ -112,19 +112,19 @@ const WeeklySummaryCard: React.FC<WeeklySummaryCardProps> = ({ onMoreDetailsPres
     
     switch (type) {
       case 'calories':
-        return value.toString();
+        return Number.isFinite(Number(value)) ? Number(value).toString() : '--';
       case 'water':
         return value.toFixed(1);
       case 'steps':
-        return value.toString();
+        return Number.isFinite(Number(value)) ? Number(value).toString() : '--';
       case 'exercise':
-        return value.toString();
+        return Number.isFinite(Number(value)) ? Number(value).toString() : '--';
       case 'distance':
         return value.toFixed(1);
       case 'sleep':
         return value.toFixed(1);
       default:
-        return value.toString();
+        return Number.isFinite(Number(value)) ? Number(value).toString() : '--';
     }
   };
 

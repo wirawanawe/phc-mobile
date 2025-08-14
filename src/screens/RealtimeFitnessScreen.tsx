@@ -15,6 +15,7 @@ import { CustomTheme } from '../theme/theme';
 import { useAuth } from '../contexts/AuthContext';
 import FitnessIntegrationService, { FitnessData, DeviceConnection } from '../services/FitnessIntegrationService';
 import ActivityStatusCard from '../components/ActivityStatusCard';
+import { safeGoBack } from "../utils/safeNavigation";
 
 const { width } = Dimensions.get('window');
 
@@ -117,7 +118,7 @@ const RealtimeFitnessScreen = ({ navigation }: any) => {
           {/* <View style={styles.header}>
             <TouchableOpacity
               style={styles.backButton}
-              onPress={() => navigation.goBack()}
+              onPress={() => safeGoBack(navigation, 'Main')}
             >
               <Icon name="arrow-left" size={24} color="#1F2937" />
             </TouchableOpacity>

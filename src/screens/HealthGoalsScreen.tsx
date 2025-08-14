@@ -14,6 +14,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { CustomTheme } from "../theme/theme";
 import { useAuth } from "../contexts/AuthContext";
 import api from "../services/api";
+import { safeGoBack } from "../utils/safeNavigation";
 
 interface HealthGoal {
   id: string;
@@ -387,7 +388,7 @@ const HealthGoalsScreen = ({ navigation }: any) => {
         <View style={styles.header}>
           <TouchableOpacity
             style={styles.backButton}
-            onPress={() => navigation.goBack()}
+            onPress={() => safeGoBack(navigation, 'Main')}
           >
             <Icon name="arrow-left" size={24} color="#374151" />
           </TouchableOpacity>

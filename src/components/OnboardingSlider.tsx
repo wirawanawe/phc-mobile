@@ -7,7 +7,7 @@ import {
   TouchableOpacity,
   Animated,
 } from "react-native";
-import { Text, Button } from "react-native-paper";
+import { Text, Button, useTheme } from "react-native-paper";
 import { LinearGradient } from "expo-linear-gradient";
 import LogoPutih from "./LogoPutih";
 
@@ -26,6 +26,7 @@ interface OnboardingSliderProps {
 }
 
 const OnboardingSlider: React.FC<OnboardingSliderProps> = ({ onComplete }) => {
+  const theme = useTheme();
   const [currentIndex, setCurrentIndex] = useState(0);
   const flatListRef = useRef<FlatList>(null);
   const scrollX = useRef(new Animated.Value(0)).current;
@@ -37,7 +38,7 @@ const OnboardingSlider: React.FC<OnboardingSliderProps> = ({ onComplete }) => {
       description:
         "Platform kesehatan dan kebugaran terdepan untuk karyawan Indonesia. Mulai perjalanan kesehatan Anda bersama kami.",
       icon: "🏥",
-      gradient: ["#E22345", "#E22345"],
+      gradient: ((theme as any).customColors?.primaryGradient as string[]) || ["#E22345", "#C53030"],
     },
     {
       id: "2",
@@ -45,7 +46,7 @@ const OnboardingSlider: React.FC<OnboardingSliderProps> = ({ onComplete }) => {
       description:
         "Daftar klinik online dengan mudah. Tersedia klinik terdepan di Indonesia.",
       icon: "🏥",
-      gradient: ["#E22345", "#E22345"],
+      gradient: ((theme as any).customColors?.primaryGradient as string[]) || ["#E22345", "#C53030"],
     },
     {
       id: "3",
@@ -53,7 +54,7 @@ const OnboardingSlider: React.FC<OnboardingSliderProps> = ({ onComplete }) => {
       description:
         "Konsultasi langsung dengan dokter berpengalaman. Layanan kesehatan yang cepat dan terpercaya.",
       icon: "👨‍⚕️",
-      gradient: ["#E22345", "#E22345"],
+      gradient: ((theme as any).customColors?.primaryGradient as string[]) || ["#E22345", "#C53030"],
     },
     {
       id: "4",
@@ -61,7 +62,7 @@ const OnboardingSlider: React.FC<OnboardingSliderProps> = ({ onComplete }) => {
       description:
         "Program kebugaran yang menyenangkan dengan gamifikasi dan tantangan yang memotivasi untuk gaya hidup sehat.",
       icon: "🏃‍♂️",
-      gradient: ["#E22345", "#E22345"],
+      gradient: ((theme as any).customColors?.primaryGradient as string[]) || ["#E22345", "#C53030"],
     },
     {
       id: "5",
@@ -69,7 +70,7 @@ const OnboardingSlider: React.FC<OnboardingSliderProps> = ({ onComplete }) => {
       description:
         "Bergabunglah dengan ribuan karyawan yang telah merasakan manfaat platform kesehatan PHC. Mari mulai perjalanan sehat Anda!",
       icon: "🚀",
-      gradient: ["#E22345", "#E22345"],
+      gradient: ((theme as any).customColors?.primaryGradient as string[]) || ["#E22345", "#C53030"],
     },
   ];
 

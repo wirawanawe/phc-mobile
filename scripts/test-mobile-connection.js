@@ -1,50 +1,72 @@
-const fetch = require('node-fetch');
+import fetch from 'node-fetch';
 
-async function testMobileConnection() {
-  const baseUrls = [
-    'http://localhost:3000',
-    'http://10.242.90.103:3000'
-  ];
-
-  for (const baseUrl of baseUrls) {
-    console.log(`\n🧪 Testing connection to: ${baseUrl}`);
+const testConnection = async () => {
+  console.log('🔍 Testing mobile app connection to server...\n');
+  
+  const endpoint = 'http://192.168.18.30:3000/api/mobile/auth/login';
+  
+  try {
+    console.log(`📡 Testing endpoint: ${endpoint}`);
+    const startTime = Date.now();
+    
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 15000);
     
     try {
-      // Test health endpoint
-      const healthResponse = await fetch(`${baseUrl}/api/health`);
-      console.log(`📊 Health Status: ${healthResponse.status}`);
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          email: 'test@mobile.com',
+          password: 'password123'
+        }),
+        signal: controller.signal
+      });
       
-      // Test mobile help contact endpoint
-      const contactResponse = await fetch(`${baseUrl}/api/mobile/help/contact`);
-      const contactData = await contactResponse.json();
+      clearTimeout(timeoutId);
+      const endTime = Date.now();
+      const responseTime = endTime - startTime;
       
-      console.log(`📊 Contact Status: ${contactResponse.status}`);
+      console.log(`✅ Connection successful!`);
+      console.log(`📊 Response time: ${responseTime}ms`);
+      console.log(`📊 Status code: ${response.status}`);
       
-      if (contactData.success) {
-        console.log('✅ Contact API working!');
-        console.log('📞 Contact methods found:', contactData.data.contactMethods.length);
+      if (response.ok) {
+        const data = await response.json();
+        console.log(`✅ Login successful: ${data.message}`);
+        console.log(`👤 User: ${data.data?.user?.name}`);
+        console.log(`🔑 Access Token: ${data.data?.accessToken ? '✅ Received' : '❌ Missing'}`);
+        console.log(`🔄 Refresh Token: ${data.data?.refreshToken ? '✅ Received' : '❌ Missing'}`);
         
-        // Show first contact method details
-        const firstContact = contactData.data.contactMethods[0];
-        console.log('📞 First contact method:');
-        console.log(`   Title: ${firstContact.title}`);
-        console.log(`   Value: ${firstContact.value}`);
-        console.log(`   Action: ${firstContact.action}`);
-        
-        // Check if it's using database data or default
-        if (firstContact.value === '+62-21-12345678') {
-          console.log('✅ Using database data (Kantor Pusat PHC)');
-        } else {
-          console.log('❌ Not using expected database data');
-        }
-      } else {
-        console.log('❌ Contact API failed:', contactData.message);
+        console.log('\n🎉 Mobile app should now be able to connect successfully!');
+        console.log('💡 If you\'re still getting timeout errors, try:');
+        console.log('   1. Restart your mobile app (expo start --clear)');
+        console.log('   2. Clear the app cache');
+        console.log('   3. Make sure your mobile device is on the same WiFi network');
+        console.log('   4. Try the login again with the updated configuration');
       }
       
-    } catch (error) {
-      console.log(`❌ Connection failed: ${error.message}`);
+    } catch (fetchError) {
+      clearTimeout(timeoutId);
+      throw fetchError;
+    }
+    
+  } catch (error) {
+    console.log(`❌ Connection failed: ${error.message}`);
+    
+    if (error.name === 'AbortError') {
+      console.log('⏰ Timeout after 15 seconds');
+      console.log('💡 Try restarting the server: cd dash-app && npm run dev');
+    } else if (error.message.includes('ECONNREFUSED')) {
+      console.log('🚫 Connection refused - server may not be running');
+      console.log('💡 Start the server: cd dash-app && npm run dev');
+    } else if (error.message.includes('ENOTFOUND')) {
+      console.log('🔍 Host not found - check network configuration');
     }
   }
-}
+};
 
-testMobileConnection();
+// Run the test
+testConnection().catch(console.error);

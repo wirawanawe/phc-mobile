@@ -11,6 +11,7 @@ import {
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import Icon from "react-native-vector-icons/MaterialCommunityIcons";
+import { safeGoBack } from "../utils/safeNavigation";
 
 const CalculatorScreen = ({ navigation, route }: any) => {
   const { program } = route.params;
@@ -365,7 +366,7 @@ const CalculatorScreen = ({ navigation, route }: any) => {
       {/* <View style={styles.header}>
         <TouchableOpacity
           style={styles.backButton}
-          onPress={() => navigation.goBack()}
+          onPress={() => safeGoBack(navigation, 'Main')}
         >
           <Icon name="arrow-left" size={24} color="#1F2937" />
         </TouchableOpacity>

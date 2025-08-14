@@ -70,7 +70,7 @@ export class NetworkDiagnostic {
       current.responseTime < best.responseTime ? current : best
     );
 
-    return fastest.endpoint.replace('/auth/me', '');
+    return fastest.endpoint.replace('/mobile/auth/me', '');
   }
 
   static async diagnoseConnection() {

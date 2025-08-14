@@ -15,6 +15,7 @@ import Icon from "react-native-vector-icons/MaterialCommunityIcons";
 import { LinearGradient } from "expo-linear-gradient";
 import { CustomTheme } from "../theme/theme";
 import { useAuth } from "../contexts/AuthContext";
+import { safeGoBack } from "../utils/safeNavigation";
 
 const WellnessScreen = ({ navigation }: any) => {
   const theme = useTheme<CustomTheme>();
@@ -145,7 +146,7 @@ const WellnessScreen = ({ navigation }: any) => {
       
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
+        <TouchableOpacity onPress={() => safeGoBack(navigation, 'Main')}>
           <Icon name="arrow-left" size={24} color={theme.colors.primary} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Wellness Session</Text>
@@ -154,7 +155,7 @@ const WellnessScreen = ({ navigation }: any) => {
         </TouchableOpacity>
       </View>
 
-      <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
+      <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false} nestedScrollEnabled={true}>
         {/* Category Tabs */}
         <View style={styles.categoryTabsContainer}>
           <FlatList

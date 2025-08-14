@@ -16,6 +16,7 @@ import Icon from "react-native-vector-icons/MaterialCommunityIcons";
 import { CustomTheme } from "../theme/theme";
 import { useAuth } from "../contexts/AuthContext";
 import api from "../services/api";
+import { safeGoBack } from "../utils/safeNavigation";
 
 interface Message {
   id: number;
@@ -123,7 +124,7 @@ const ChatDetailScreen = ({ navigation, route }: any) => {
                 if (chatType === "doctor") {
                   navigation.navigate('ConsultationHistory');
                 } else {
-                  navigation.goBack();
+                  safeGoBack(navigation, 'Main');
                 }
               } else {
                 Alert.alert("Error", response.message || "Gagal menutup chat");
@@ -171,14 +172,14 @@ const ChatDetailScreen = ({ navigation, route }: any) => {
                     if (chatType === "doctor") {
                       navigation.navigate('ConsultationHistory');
                     } else {
-                      navigation.goBack();
+                      safeGoBack(navigation, 'Main');
                     }
                   } catch (error) {
                     console.error("Error closing chat after ending consultation:", error);
                     if (chatType === "doctor") {
                       navigation.navigate('ConsultationHistory');
                     } else {
-                      navigation.goBack();
+                      safeGoBack(navigation, 'Main');
                     }
                   }
                 }, 2000);
@@ -316,7 +317,7 @@ const ChatDetailScreen = ({ navigation, route }: any) => {
                 navigation.navigate('ConsultationHistory');
               } else {
                 // Untuk chat AI, kembali ke halaman sebelumnya
-                navigation.goBack();
+                safeGoBack(navigation, 'Main');
               }
             }}
             style={styles.backButton}

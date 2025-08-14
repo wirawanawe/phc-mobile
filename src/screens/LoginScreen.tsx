@@ -18,8 +18,9 @@ import LogoPutih from "../components/LogoPutih";
 import LoginErrorDisplay from "../components/LoginErrorDisplay";
 import SocialLoginButtons from "../components/SocialLoginButtons";
 import OTPVerification from "../components/OTPVerification";
+import { safeGoBack } from "../utils/safeNavigation";
 import { useAuth } from "../contexts/AuthContext";
-import { useLanguage } from "../contexts/LanguageContext";
+
 import { CommonActions } from "@react-navigation/native";
 import { handleError } from "../utils/errorHandler";
 
@@ -27,7 +28,6 @@ import { handleError } from "../utils/errorHandler";
 const LoginScreen = ({ navigation }: any) => {
   const theme = useTheme<CustomTheme>();
   const { login, socialLogin } = useAuth();
-  const { t } = useLanguage();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -45,17 +45,17 @@ const LoginScreen = ({ navigation }: any) => {
 
     // Client-side validation
     if (!email.trim() || !password.trim()) {
-      setError(t("language.language") === "en" ? "Please fill in all required fields" : "Mohon isi semua field yang diperlukan");
+      setError("Mohon isi semua field yang diperlukan");
       return;
     }
 
     if (!isValidEmail(email)) {
-      setError(t("language.language") === "en" ? "Please enter a valid email address" : "Mohon masukkan alamat email yang valid");
+      setError("Mohon masukkan alamat email yang valid");
       return;
     }
 
     if (password.length < 6) {
-      setError(t("language.language") === "en" ? "Password must be at least 6 characters" : "Password minimal 6 karakter");
+      setError("Password minimal 6 karakter");
       return;
     }
 
@@ -211,19 +211,16 @@ const LoginScreen = ({ navigation }: any) => {
             <View style={styles.header}>
               <TouchableOpacity
                 style={styles.backButton}
-                onPress={() => navigation.goBack()}
+                onPress={() => safeGoBack(navigation, 'Main')}
               >
                 <Icon name="arrow-left" size={24} color="#FFFFFF" />
               </TouchableOpacity>
               <LogoPutih size="large" />
               <Text style={styles.welcomeText}>
-          {t("language.language") === "en" ? "Welcome Back!" : "Selamat Datang Kembali!"}
+          Selamat Datang Kembali!
         </Text>
                               <Text style={styles.subtitleText}>
-                  {t("language.language") === "en" 
-                    ? "Sign in to continue your health journey"
-                    : "Masuk untuk melanjutkan perjalanan kesehatan Anda"
-                  }
+                  Masuk untuk melanjutkan perjalanan kesehatan Anda
                 </Text>
             </View>
 
@@ -240,7 +237,7 @@ const LoginScreen = ({ navigation }: any) => {
                   />
                   <TextInput
                     style={styles.textInput}
-                    placeholder={t("auth.email")}
+                    placeholder="Email"
                     placeholderTextColor="#9CA3AF"
                     value={email}
                     onChangeText={setEmail}
@@ -262,7 +259,7 @@ const LoginScreen = ({ navigation }: any) => {
                   />
                   <TextInput
                     style={styles.textInput}
-                    placeholder={t("auth.password")}
+                    placeholder="Password"
                     placeholderTextColor="#9CA3AF"
                     value={password}
                     onChangeText={setPassword}
@@ -297,7 +294,7 @@ const LoginScreen = ({ navigation }: any) => {
                 style={styles.forgotPasswordContainer}
               >
                 <Text style={styles.forgotPasswordText}>
-                  {t("auth.forgotPassword")}?
+                  Lupa Password?
                 </Text>
               </TouchableOpacity>
 
@@ -315,8 +312,8 @@ const LoginScreen = ({ navigation }: any) => {
                 textColor="#E22345"
               >
                 {isLoading 
-                  ? (t("language.language") === "en" ? "Signing In..." : "Sedang Masuk...") 
-                  : t("auth.signIn")
+                  ? "Sedang Masuk..." 
+                  : "Masuk"
                 }
               </Button>
 
@@ -326,7 +323,7 @@ const LoginScreen = ({ navigation }: any) => {
               <View style={styles.dividerContainer}>
                 <View style={styles.dividerLine} />
                 <Text style={styles.dividerText}>
-                  {t("language.language") === "en" ? "or" : "atau"}
+                  atau
                 </Text>
                 <View style={styles.dividerLine} />
               </View>
@@ -337,14 +334,16 @@ const LoginScreen = ({ navigation }: any) => {
                 onSocialLoginError={handleSocialLoginError}
                 loading={socialLoading}
               />
+
+
             </View>
 
                           {/* Footer */}
               <View style={styles.footer}>
                 <Text style={styles.footerText}>
-                  {t("auth.dontHaveAccount")}{" "}
+                  Tidak punya akun?{" "}
                   <Text style={styles.registerLink} onPress={handleRegister}>
-                    {t("auth.register")}
+                    Daftar
                   </Text>
                 </Text>
               </View>
@@ -534,33 +533,7 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
     fontWeight: "600",
   },
-  testCredentialsContainer: {
-    marginBottom: 16,
-    padding: 12,
-    backgroundColor: "rgba(255, 255, 255, 0.1)",
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.2)",
-  },
-  testCredentialsTitle: {
-    color: "#FFFFFF",
-    fontSize: 12,
-    fontWeight: "600",
-    marginBottom: 8,
-    textAlign: "center",
-  },
-  testCredentialButton: {
-    paddingVertical: 6,
-    paddingHorizontal: 8,
-    marginVertical: 2,
-    backgroundColor: "rgba(255, 255, 255, 0.1)",
-    borderRadius: 6,
-  },
-  testCredentialText: {
-    color: "#FFFFFF",
-    fontSize: 11,
-    textAlign: "center",
-  },
+
 });
 
 export default LoginScreen;

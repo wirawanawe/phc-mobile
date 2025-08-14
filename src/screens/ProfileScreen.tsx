@@ -11,20 +11,17 @@ import {
 import { LinearGradient } from "expo-linear-gradient";
 import Icon from "react-native-vector-icons/MaterialCommunityIcons";
 import { useAuth } from "../contexts/AuthContext";
-import { useLanguage } from "../contexts/LanguageContext";
 import apiService from "../services/api";
-import LanguageSelector from "../components/LanguageSelector";
+import { safeGoBack } from "../utils/safeNavigation";
 
 const ProfileScreen = ({ navigation }: any) => {
   const { logout, user, isAuthenticated } = useAuth();
-  const { t } = useLanguage();
   const [userStats, setUserStats] = useState({
     daysActive: 0,
     achievements: 0,
     healthScore: 0,
   });
   const [loading, setLoading] = useState(true);
-  const [showLanguageSelector, setShowLanguageSelector] = useState(false);
 
   // Function to get initials from full name
   const getInitials = (name: string) => {
@@ -122,72 +119,64 @@ const ProfileScreen = ({ navigation }: any) => {
   const profileMenuItems = [
     {
       id: "1",
-      title: t("profile.personalInformation"),
-      subtitle: t("profile.personalInformationSubtitle"),
+      title: "Informasi Pribadi",
+      subtitle: "Kelola detail pribadi Anda",
       icon: "account-edit",
       color: "#3B82F6",
       screenName: "PersonalInformation",
     },
     ...(user?.role === "admin" ? [{
       id: "admin",
-      title: t("profile.adminDashboard"),
-      subtitle: t("profile.adminDashboardSubtitle"),
+      title: "Dashboard Admin",
+      subtitle: "Kelola sistem dan pengguna",
       icon: "view-dashboard",
       color: "#DC2626",
       screenName: "AdminDashboard",
     }] : []),
     {
       id: "2",
-      title: t("profile.healthGoals"),
-      subtitle: t("profile.healthGoalsSubtitle"),
+      title: "Tujuan Kesehatan",
+      subtitle: "Atur dan lacak tujuan kesehatan Anda",
       icon: "target",
       color: "#10B981",
       screenName: "HealthGoals",
     },
     {
       id: "3",
-      title: t("profile.medicalHistory"),
-      subtitle: t("profile.medicalHistorySubtitle"),
+      title: "Riwayat Medis",
+      subtitle: "Lihat catatan kesehatan Anda",
       icon: "medical-bag",
       color: "#F59E0B",
       screenName: "MedicalHistory",
     },
     {
       id: "4",
-      title: t("profile.privacySettings"),
-      subtitle: t("profile.privacySettingsSubtitle"),
+      title: "Pengaturan Privasi",
+      subtitle: "Kelola privasi dan keamanan Anda",
       icon: "shield-account",
       color: "#EF4444",
       screenName: "PrivacySettings",
     },
     {
       id: "5",
-      title: t("profile.helpSupport"),
-      subtitle: t("profile.helpSupportSubtitle"),
+      title: "Bantuan & Dukungan",
+      subtitle: "Dapatkan bantuan dan hubungi dukungan",
       icon: "help-circle-outline",
       color: "#06B6D4",
       screenName: "HelpSupport",
     },
     {
       id: "6",
-      title: t("profile.aboutApp"),
-      subtitle: t("profile.aboutAppSubtitle"),
+      title: "Tentang Aplikasi",
+      subtitle: "Pelajari lebih lanjut tentang Wellness WeCare",
       icon: "information-outline",
       color: "#6366F1",
       screenName: "AboutApp",
     },
     {
       id: "7",
-      title: t("language.select"),
-      subtitle: "Change app language",
-      icon: "translate",
-      color: "#8B5CF6",
-      action: "language",
-    },
-    {
-      id: "8",
-      title: t("profile.logout"),
-      subtitle: t("profile.logoutSubtitle"),
+      title: "Keluar",
+      subtitle: "Keluar dari akun Anda",
       icon: "logout",
       color: "#6B7280",
       screenName: "Welcome",
@@ -195,39 +184,48 @@ const ProfileScreen = ({ navigation }: any) => {
   ];
 
   const handleMenuPress = (item: any) => {
-    if (item.title === t("profile.logout")) {
-      Alert.alert(t("alert.logoutTitle"), t("alert.logoutMessage"), [
+    if (item.title === "Keluar") {
+      Alert.alert("Keluar", "Apakah Anda yakin ingin keluar?", [
         {
-          text: t("common.cancel"),
+          text: "Batal",
           style: "cancel",
         },
         {
-          text: t("profile.logout"),
+          text: "Keluar",
           style: "destructive",
           onPress: async () => {
             try {
               await logout();
               // Navigate back to main screen after logout
-              navigation.goBack();
+              safeGoBack(navigation, 'Main');
               // Show success message
               Alert.alert(
-                t("alert.logoutSuccess"),
-                t("alert.logoutSuccessMessage")
+                "Keluar Berhasil",
+                "Anda telah berhasil keluar."
               );
             } catch (error) {
               console.error("Logout error:", error);
-              Alert.alert(t("common.error"), t("alert.logoutErrorMessage"));
+              Alert.alert("Terjadi kesalahan", "Gagal keluar. Silakan coba lagi.");
             }
           },
         },
       ]);
-    } else if (item.action === "language") {
-      setShowLanguageSelector(true);
     } else if (item.screenName) {
-      navigation.navigate(item.screenName);
+      // Check if it's the medical history feature
+      if (item.screenName === "MedicalHistory") {
+        Alert.alert(
+          "Fitur dalam Pengembangan", 
+          "Menu Riwayat Medis masih dalam proses pengembangan. Fitur ini akan segera hadir dengan data riwayat medis yang lengkap dan terintegrasi dengan sistem kesehatan.",
+          [
+            { text: "OK" },
+          ]
+        );
+      } else {
+        navigation.navigate(item.screenName);
+      }
     } else {
       Alert.alert("Coming Soon", `${item.title} feature is coming soon!`, [
-        { text: t("common.ok") },
+        { text: "OK" },
       ]);
     }
   };
@@ -264,14 +262,14 @@ const ProfileScreen = ({ navigation }: any) => {
                 <Text style={styles.userName}>{userProfile.name}</Text>
                 <Text style={styles.userEmail}>{userProfile.email}</Text>
                 <Text style={styles.memberSince}>
-                  {t("profile.memberSince")} {userProfile.memberSince}
+                  Anggota sejak {userProfile.memberSince}
                 </Text>
               </View>
             </View>
 
             <View style={styles.pointsContainer}>
               <Icon name="star" size={18} color="#F59E0B" />
-              <Text style={styles.pointsText}>{userProfile.points} {t("profile.points")}</Text>
+              <Text style={styles.pointsText}>{userProfile.points} poin</Text>
             </View>
           </LinearGradient>
         </View>
@@ -285,7 +283,7 @@ const ProfileScreen = ({ navigation }: any) => {
             <Text style={styles.statValue}>
               {loading ? "..." : userStats.daysActive}
             </Text>
-            <Text style={styles.statLabel}>{t("profile.daysActive")}</Text>
+            <Text style={styles.statLabel}>Hari Aktif</Text>
           </View>
           <View style={styles.statCard}>
             <View style={[styles.statIcon, { backgroundColor: "#F59E0B20" }]}>
@@ -294,7 +292,7 @@ const ProfileScreen = ({ navigation }: any) => {
             <Text style={styles.statValue}>
               {loading ? "..." : userStats.achievements}
             </Text>
-            <Text style={styles.statLabel}>{t("profile.achievements")}</Text>
+            <Text style={styles.statLabel}>Pencapaian</Text>
           </View>
           <View style={styles.statCard}>
             <View style={[styles.statIcon, { backgroundColor: "#EF444420" }]}>
@@ -303,13 +301,13 @@ const ProfileScreen = ({ navigation }: any) => {
             <Text style={styles.statValue}>
               {loading ? "..." : `${userStats.healthScore}%`}
             </Text>
-            <Text style={styles.statLabel}>{t("profile.healthScore")}</Text>
+            <Text style={styles.statLabel}>Skor Kesehatan</Text>
           </View>
         </View>
 
         {/* Menu Items */}
         <View style={styles.menuContainer}>
-          <Text style={styles.sectionTitle}>{t("profile.settings")}</Text>
+          <Text style={styles.sectionTitle}>Pengaturan</Text>
           {profileMenuItems
             .filter((item) => {
               // Only show logout if user is authenticated
@@ -356,9 +354,9 @@ const ProfileScreen = ({ navigation }: any) => {
               </View>
               <View style={styles.menuContent}>
                 <View style={styles.menuTextContainer}>
-                  <Text style={styles.menuTitle}>{t("profile.login")}</Text>
+                  <Text style={styles.menuTitle}>Masuk</Text>
                   <Text style={styles.menuSubtitle}>
-                    {t("profile.loginSubtitle")}
+                    Masuk ke akun Anda
                   </Text>
                 </View>
                 <Icon name="chevron-right" size={20} color="#9CA3AF" />
@@ -369,15 +367,9 @@ const ProfileScreen = ({ navigation }: any) => {
 
         {/* App Version */}
         <View style={styles.versionContainer}>
-          <Text style={styles.versionText}>{t("profile.version")}</Text>
+          <Text style={styles.versionText}>Versi 0.0.1</Text>
         </View>
       </ScrollView>
-
-      {/* Language Selector Modal */}
-      <LanguageSelector
-        visible={showLanguageSelector}
-        onClose={() => setShowLanguageSelector(false)}
-      />
     </SafeAreaView>
   );
 };

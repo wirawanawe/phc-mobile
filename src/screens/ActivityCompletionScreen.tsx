@@ -14,6 +14,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useAuth } from '../contexts/AuthContext';
 import api from '../services/api';
+import { safeGoBack } from "../utils/safeNavigation";
 
 interface ActivityCompletionData {
   activity_id: number;
@@ -142,7 +143,7 @@ const ActivityCompletionScreen = ({ route, navigation }: ActivityCompletionScree
             {
               text: 'Continue',
               onPress: () => {
-                navigation.goBack();
+                safeGoBack(navigation, 'Main');
               }
             }
           ]
@@ -374,7 +375,7 @@ const ActivityCompletionScreen = ({ route, navigation }: ActivityCompletionScree
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity
-          onPress={() => navigation.goBack()}
+          onPress={() => safeGoBack(navigation, 'Main')}
           style={styles.backButton}
         >
           <Icon name="arrow-left" size={24} color="#1F2937" />

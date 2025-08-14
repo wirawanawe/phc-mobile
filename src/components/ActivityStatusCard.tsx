@@ -5,7 +5,7 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { CustomTheme } from '../theme/theme';
 import ActivityDetectionService, { ActivityData } from '../services/ActivityDetectionService';
-import api from '../services/api';
+import apiService from '../services/api';
 import { handleAuthError } from '../utils/errorHandler';
 
 interface ActivityStatusCardProps {
@@ -62,7 +62,7 @@ const ActivityStatusCard: React.FC<ActivityStatusCardProps> = ({ onPress }) => {
       setLoading(true);
       
       // Get fitness data from database
-      const fitnessResponse = await api.getTodayFitness();
+      const fitnessResponse = await apiService.getTodayFitness();
       if (fitnessResponse.success) {
         const fitnessData = fitnessResponse.data;
         setTodayData(prev => ({

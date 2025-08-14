@@ -23,11 +23,14 @@ import ProgressRing from "../components/ProgressRing";
 import MissionPromptCard from "../components/MissionPromptCard";
 import ActivityDetectionService from "../services/ActivityDetectionService";
 import { useAuth } from "../contexts/AuthContext";
-import { useLanguage } from "../contexts/LanguageContext";
+
 import { useFocusEffect } from "@react-navigation/native";
 import apiService from "../services/api";
 import DailyMissionScreen from "./DailyMissionScreen";
 import TodaySummaryCard from "../components/TodaySummaryCard";
+import ActivityGraphScreen from "./ActivityGraphScreen";
+import ActivityScreen from "./ActivityScreen";
+import { safeGoBack } from "../utils/safeNavigation";
 
 const { width } = Dimensions.get("window");
 const Tab = createBottomTabNavigator();
@@ -220,7 +223,7 @@ const OnboardingScreen = ({ navigation, onProfileSaved }: any) => {
         <ScrollView contentContainerStyle={styles.onboardingContainer}>
           <TouchableOpacity
             style={styles.backButton}
-            onPress={() => navigation.goBack()}
+            onPress={() => safeGoBack(navigation, 'Main')}
           >
             <Icon name="arrow-left" size={24} color="#FFFFFF" />
           </TouchableOpacity>
@@ -680,6 +683,19 @@ const DashboardTab = ({ navigation }: any) => {
       }
     } catch (error) {
       console.error("Error loading weekly progress:", error);
+      
+      // Check if this is an authentication error
+      const errorMessage = error.message || error.toString();
+      if (errorMessage.includes('Authentication failed') || 
+          errorMessage.includes('401') ||
+          errorMessage.includes('token expired') ||
+          errorMessage.includes('not authorized')) {
+        
+        console.log('🔐 Authentication error detected in weekly progress loading');
+        // Don't show multiple alerts - let the API service handle this
+        // Just set default progress and let the auth system handle the error
+      }
+      
       // Set default progress if API fails
       setWeeklyProgress([0, 0, 0, 0, 0, 0, 0]);
     } finally {
@@ -785,7 +801,7 @@ const DashboardTab = ({ navigation }: any) => {
     <SafeAreaView style={styles.safeArea}>
       <ScrollView
         style={styles.container}
-        contentContainerStyle={styles.contentContainer}
+        contentContainerStyle={{ paddingBottom: 80 }}
         refreshControl={
           <RefreshControl 
             refreshing={loading || summaryLoading} 
@@ -796,10 +812,10 @@ const DashboardTab = ({ navigation }: any) => {
         }
       >
         {/* Modern Header */}
-        <View style={styles.header}>
+        <View style={styles.dashboardHeader}>
           <TouchableOpacity
             style={styles.backButton}
-            onPress={() => navigation.goBack()}
+            onPress={() => safeGoBack(navigation, 'Main')}
           >
             <Icon name="arrow-left" size={24} color="#1F2937" />
           </TouchableOpacity>
@@ -1169,6 +1185,201 @@ const MissionTab = ({ navigation }: any) => {
   return <DailyMissionScreen navigation={navigation} />;
 };
 
+// Doctor Tab Component
+const DoctorTab = ({ navigation }: any) => {
+  const { isAuthenticated } = useAuth();
+  const [doctors, setDoctors] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  // Fetch doctors data from API
+  const fetchDoctors = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      // Get consultation doctors (doctors available for online consultation)
+      const response = await apiService.getConsultationDoctors();
+      
+      if (response.success && response.data) {
+        // Transform the data to match the UI format
+        const transformedDoctors = response.data.map((doctor: any, index: number) => {
+          // Generate avatar emoji based on doctor name or use default
+          const avatar = doctor.name?.includes('Sarah') || doctor.name?.includes('Lisa') || doctor.name?.includes('Maya') ? "👩‍⚕️" : "👨‍⚕️";
+          
+          // Generate status based on consultation schedule or random
+          const now = new Date();
+          const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+          const dayOfWeek = dayNames[now.getDay()];
+          const schedule = doctor.consultation_schedule?.[dayOfWeek];
+          let status = "offline";
+          
+          if (schedule?.available) {
+            const currentHour = now.getHours();
+            const availableHours = schedule.hours || [];
+            const isAvailableNow = availableHours.some((hour: string) => {
+              const hourNum = parseInt(hour.split(':')[0]);
+              return Math.abs(currentHour - hourNum) <= 1; // Available if within 1 hour
+            });
+            status = isAvailableNow ? "online" : "busy";
+          }
+          
+          // Generate color based on specialization
+          const colors = ["#E22345", "#38A169", "#3182CE", "#9F7AEA", "#ED8936", "#06B6D4"];
+          const color = colors[index % colors.length];
+          const bgColor = color + "20";
+          
+          return {
+            id: (doctor.id || 0).toString(),
+            name: doctor.name,
+            specialty: doctor.specialization,
+            experience: `${doctor.experience_years || 5} tahun`,
+            rating: parseFloat(doctor.rating) || 4.5,
+            reviews: doctor.total_reviews || 0,
+            avatar: avatar,
+            status: status,
+            hospital: "RS PHC", // Default hospital name
+            price: `Rp ${(doctor.price_per_consultation || 150000).toLocaleString()}`,
+            color: color,
+            bgColor: bgColor,
+            // Add original data for detail screen
+            originalData: doctor
+          };
+        });
+        
+        setDoctors(transformedDoctors);
+      } else {
+        setError("Failed to fetch doctors data");
+      }
+    } catch (err) {
+      console.error("Error fetching doctors:", err);
+      setError("Failed to load doctors. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  // Load doctors data on component mount
+  useEffect(() => {
+    fetchDoctors();
+  }, [fetchDoctors]);
+
+  const renderDoctor = ({ item }: any) => (
+    <TouchableOpacity 
+      style={styles.doctorCard}
+      onPress={() => {
+        if (isAuthenticated) {
+          navigation.navigate("DetailDoctor", { doctor: item });
+        } else {
+          navigation.navigate("Login");
+        }
+      }}
+    >
+      <View style={styles.doctorCardHeader}>
+        <View style={styles.doctorAvatarContainer}>
+          <View style={[styles.doctorAvatar, { backgroundColor: item.bgColor }]}>
+            <Text style={styles.doctorAvatarText}>{item.avatar}</Text>
+          </View>
+          <View style={styles.doctorStatusContainer}>
+            <View style={[
+              styles.doctorStatus,
+              { backgroundColor: item.status === "online" ? "#10B981" : item.status === "busy" ? "#F59E0B" : "#6B7280" }
+            ]} />
+          </View>
+        </View>
+        <View style={styles.doctorInfo}>
+          <Text style={styles.doctorName}>{item.name}</Text>
+          <Text style={styles.doctorSpecialty}>{item.specialty}</Text>
+          <View style={styles.doctorRatingContainer}>
+            <Icon name="star" size={14} color="#F59E0B" />
+            <Text style={styles.doctorRating}>{item.rating}</Text>
+            <Text style={styles.doctorReviews}>({item.reviews} ulasan)</Text>
+          </View>
+        </View>
+        <View style={styles.doctorPriceContainer}>
+          <Text style={styles.doctorPrice}>{item.price}</Text>
+          <Text style={styles.doctorExperience}>{item.experience}</Text>
+        </View>
+      </View>
+    </TouchableOpacity>
+  );
+
+  if (!isAuthenticated) {
+    return (
+      <LinearGradient colors={["#FAFBFC", "#F7FAFC"]} style={styles.container}>
+        <StatusBar barStyle="dark-content" backgroundColor="#FAFBFC" />
+        <View style={styles.authPrompt}>
+          <Icon name="doctor" size={64} color="#E22345" />
+          <Text style={styles.authPromptTitle}>Konsultasi dengan Dokter</Text>
+          <Text style={styles.authPromptSubtitle}>
+            Login untuk melihat daftar dokter dan booking konsultasi
+          </Text>
+          <TouchableOpacity
+            style={styles.loginButton}
+            onPress={() => navigation.navigate("Login")}
+          >
+            <Text style={styles.loginButtonText}>Login</Text>
+          </TouchableOpacity>
+        </View>
+      </LinearGradient>
+    );
+  }
+
+  return (
+    <LinearGradient colors={["#FAFBFC", "#F7FAFC"]} style={styles.container}>
+      <StatusBar barStyle="dark-content" backgroundColor="#FAFBFC" />
+      <View style={styles.header}>
+        <View style={styles.headerLeft}>
+          <Text style={styles.headerTitle}>Dokter</Text>
+          <Text style={styles.headerSubtitle}>Pilih dokter untuk konsultasi</Text>
+        </View>
+      </View>
+      
+      <ScrollView style={styles.content} showsVerticalScrollIndicator={false} nestedScrollEnabled={true}>
+        {loading ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color="#E22345" />
+            <Text style={styles.loadingText}>Memuat daftar dokter...</Text>
+          </View>
+        ) : error ? (
+          <View style={styles.errorContainer}>
+            <Icon name="alert-circle" size={48} color="#E22345" />
+            <Text style={styles.errorText}>{error}</Text>
+            <TouchableOpacity style={styles.retryButton} onPress={fetchDoctors}>
+              <Text style={styles.retryButtonText}>Coba Lagi</Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <FlatList
+            data={doctors}
+            renderItem={renderDoctor}
+            keyExtractor={(item) => item.id}
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={styles.doctorsList}
+          />
+        )}
+      </ScrollView>
+    </LinearGradient>
+  );
+};
+
+// Home Tab Component
+const HomeTab = ({ navigation }: any) => {
+  return <DashboardTab navigation={navigation} />;
+};
+
+// Activity Tab Component
+const ActivityTab = ({ navigation }: any) => {
+  return <MissionTab navigation={navigation} />;
+};
+
+// Wellness Activity Tab Component
+const WellnessActivityTab = ({ navigation }: any) => {
+  return <ActivityScreen navigation={navigation} />;
+};
+
+
+
 // Tracking Tab Component
 const TrackingTab = ({ navigation }: any) => {
   const theme = useTheme<CustomTheme>();
@@ -1234,13 +1445,13 @@ const TrackingTab = ({ navigation }: any) => {
     <SafeAreaView style={styles.safeArea}>
       <ScrollView
         style={styles.container}
-        contentContainerStyle={styles.contentContainer}
+        contentContainerStyle={{ paddingBottom: 80 }}
       >
         {/* Modern Header */}
-        <View style={styles.header}>
+        <View style={styles.dashboardHeader}>
           <TouchableOpacity
             style={styles.backButton}
-            onPress={() => navigation.goBack()}
+            onPress={() => safeGoBack(navigation, 'Main')}
           >
             <Icon name="arrow-left" size={24} color="#1F2937" />
           </TouchableOpacity>
@@ -1290,7 +1501,7 @@ const TrackingTab = ({ navigation }: any) => {
 const WellnessApp = ({ navigation }: any) => {
   const theme = useTheme<CustomTheme>();
   const { user, isAuthenticated, isLoading: authLoading } = useAuth();
-  const { t } = useLanguage();
+
   const [hasProfile, setHasProfile] = useState<boolean | null>(null);
   const [showOnboarding, setShowOnboarding] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
@@ -1378,7 +1589,7 @@ const WellnessApp = ({ navigation }: any) => {
     return (
       <SafeAreaView style={styles.safeArea}>
         <View style={styles.loadingContainer}>
-          <Text>{t("common.loading")} Wellness App...</Text>
+          <Text>Memuat Wellness App...</Text>
         </View>
       </SafeAreaView>
     );
@@ -1449,43 +1660,71 @@ const WellnessApp = ({ navigation }: any) => {
           tabBarIcon: ({ focused, color, size }) => {
             let iconName = "home";
 
-            if (route.name === "DASHBOARD") {
+            if (route.name === "HOME") {
               iconName = focused ? "home" : "home-outline";
+            } else if (route.name === "ACTIVITY") {
+              iconName = focused ? "run" : "run";
             } else if (route.name === "MISSION") {
-              iconName = focused ? "flag" : "flag-outline";
-            } else if (route.name === "TRACKING") {
+              iconName = focused ? "target" : "target";
+            } else if (route.name === "HEALTH") {
+              iconName = focused ? "chart-bar" : "chart-bar-stacked";
+            } else if (route.name === "CONSULTATION") {
               iconName = focused ? "chart-line" : "chart-line-variant";
+            } else if (route.name === "WELLNESS_MENU") {
+              iconName = focused ? "heart-pulse" : "heart-pulse";
             }
-
             return <Icon name={iconName} size={size} color={color} />;
           },
           tabBarActiveTintColor: "#E22345",
           tabBarInactiveTintColor: "#6B7280",
+          tabBarLabelStyle: {
+            fontSize: 11,
+            fontWeight: "600",
+            marginTop: 2,
+          },
+          tabBarIconStyle: {
+            marginTop: 4,
+          },
           tabBarStyle: {
             backgroundColor: "#FFFFFF",
             borderTopColor: "#E5E7EB",
             borderTopWidth: 1,
-            paddingBottom: 10,
-            paddingTop: 10,
-            height: 80,
+            paddingBottom: 8,
+            paddingTop: 8,
+            height: 70,
             elevation: 0,
             shadowOpacity: 0,
+            position: 'absolute',
+            bottom: 0,
+            left: 0,
+            right: 0,
           },
           headerShown: false,
         })}
       >
         <Tab.Screen
-          name="DASHBOARD"
-          component={DashboardTab}
-          options={{ tabBarLabel: "Dashboard" }}
+          name="HOME"
+          component={HomeTab}
+          options={{ tabBarLabel: "Beranda" }}
+        />
+        <Tab.Screen
+          name="ACTIVITY"
+          component={WellnessActivityTab}
+          options={{ tabBarLabel: "Wellness" }}
         />
         <Tab.Screen
           name="MISSION"
-          component={MissionTab}
-          options={{ tabBarLabel: "Missions" }}
+          component={ActivityTab}
+          options={{ tabBarLabel: "Mission" }}
+        />
+
+        <Tab.Screen
+          name="HEALTH"
+          component={ActivityGraphScreen}
+          options={{ tabBarLabel: "Graph" }}
         />
         <Tab.Screen
-          name="TRACKING"
+          name="CONSULTATION"
           component={TrackingTab}
           options={{ tabBarLabel: "Tracking" }}
         />
@@ -1517,7 +1756,7 @@ const TestWellnessApp = ({ navigation }: any) => {
         
         <TouchableOpacity 
           style={{ padding: 15, backgroundColor: '#3182CE', borderRadius: 8 }}
-          onPress={() => navigation.goBack()}
+          onPress={() => safeGoBack(navigation, 'Main')}
         >
           <Text style={{ color: 'white', textAlign: 'center', fontWeight: 'bold' }}>Go Back</Text>
         </TouchableOpacity>
@@ -1536,14 +1775,192 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  contentContainer: {
-    paddingBottom: 60, // Increased from 40 to 60 to prevent cutoff
+  // Doctor Tab Styles
+  header: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    marginBottom: 10,
+  },
+  headerLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    flex: 1,
+  },
+  headerTitle: {
+    fontSize: 24,
+    fontWeight: "700",
+    color: "#1F2937",
+    marginBottom: 4,
+    letterSpacing: -0.5,
+  },
+  headerSubtitle: {
+    fontSize: 14,
+    color: "#64748B",
+    fontWeight: "500",
+  },
+  content: {
+    flex: 1,
+    paddingHorizontal: 20,
   },
   loadingContainer: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
+    paddingVertical: 32,
   },
+  loadingText: {
+    fontSize: 16,
+    color: "#64748B",
+    marginTop: 16,
+    fontWeight: "500",
+  },
+  errorContainer: {
+    alignItems: 'center',
+    paddingVertical: 32,
+  },
+  errorText: {
+    fontSize: 16,
+    color: '#E53E3E',
+    textAlign: 'center',
+    marginBottom: 16,
+    fontWeight: '500',
+  },
+  retryButton: {
+    backgroundColor: '#E22345',
+    borderRadius: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+  },
+  retryButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#FFFFFF',
+  },
+  doctorsList: {
+    paddingBottom: 20,
+  },
+  doctorCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 16,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  doctorCardHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 12,
+  },
+  doctorAvatarContainer: {
+    position: "relative",
+    marginRight: 12,
+  },
+  doctorAvatar: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  doctorAvatarText: {
+    fontSize: 24,
+  },
+  doctorStatusContainer: {
+    position: "absolute",
+    bottom: 0,
+    right: 0,
+  },
+  doctorStatus: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    borderWidth: 2,
+    borderColor: "#FFFFFF",
+  },
+  doctorInfo: {
+    flex: 1,
+  },
+  doctorName: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#1F2937",
+    marginBottom: 4,
+  },
+  doctorSpecialty: {
+    fontSize: 14,
+    color: "#64748B",
+    marginBottom: 4,
+  },
+  doctorRatingContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  doctorRating: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#1F2937",
+    marginLeft: 4,
+  },
+  doctorReviews: {
+    fontSize: 12,
+    color: "#64748B",
+    marginLeft: 4,
+  },
+  doctorPriceContainer: {
+    alignItems: "flex-end",
+  },
+  doctorPrice: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#E53E3E",
+    marginBottom: 4,
+  },
+  doctorExperience: {
+    fontSize: 12,
+    color: "#64748B",
+    fontWeight: "500",
+  },
+  authPrompt: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 32,
+    paddingVertical: 64,
+  },
+  authPromptTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#1F2937',
+    marginTop: 16,
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  authPromptSubtitle: {
+    fontSize: 14,
+    color: '#6B7280',
+    textAlign: 'center',
+    marginBottom: 32,
+    lineHeight: 20,
+  },
+  loginButton: {
+    backgroundColor: '#E22345',
+    borderRadius: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 32,
+  },
+  loginButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#FFFFFF',
+  },
+
   gradientBackground: {
     flex: 1,
   },
@@ -1983,7 +2400,7 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: "#64748B",
   },
-  header: {
+  dashboardHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
@@ -1995,11 +2412,7 @@ const styles = StyleSheet.create({
     padding: 8,
     marginRight: 12,
   },
-  headerLeft: {
-    flexDirection: "row",
-    alignItems: "center",
-    flex: 1,
-  },
+
   avatar: {
     width: 44,
     height: 44,
@@ -2809,13 +3222,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#E5E7EB",
     marginBottom: 10,
   },
-  loadingText: {
-    width: 40,
-    height: 24,
-    backgroundColor: "#E5E7EB",
-    borderRadius: 4,
-    marginBottom: 6,
-  },
+
   loadingLabel: {
     width: 30,
     height: 12,

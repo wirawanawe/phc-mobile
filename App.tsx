@@ -41,9 +41,10 @@ import MealLoggingScreen from "./src/screens/MealLoggingScreen";
 import FitnessTrackingScreen from "./src/screens/FitnessTrackingScreen";
 import RealtimeFitnessScreen from "./src/screens/RealtimeFitnessScreen";
 import ExerciseHistoryScreen from "./src/screens/ExerciseHistoryScreen";
-import ClinicBookingScreen from "./src/screens/ClinicBookingScreen";
-import BookingConfirmationScreen from "./src/screens/BookingConfirmationScreen";
-import BookingSuccessScreen from "./src/screens/BookingSuccessScreen";
+// Clinic-related imports - temporarily commented out
+// import ClinicBookingScreen from "./src/screens/ClinicBookingScreen";
+// import BookingConfirmationScreen from "./src/screens/BookingConfirmationScreen";
+// import BookingSuccessScreen from "./src/screens/BookingSuccessScreen";
 import AdminDashboardScreen from "./src/screens/AdminDashboardScreen";
 import BookingDetailScreen from "./src/screens/BookingDetailScreen";
 import ConsultationBookingScreen from "./src/screens/ConsultationBookingScreen";
@@ -53,7 +54,7 @@ import ConsultationHistoryScreen from "./src/screens/ConsultationHistoryScreen";
 
 // Import new separated apps
 import WellnessApp, { TestWellnessApp } from "./src/screens/WellnessApp";
-import ClinicsApp from "./src/screens/ClinicsApp";
+// import ClinicsApp from "./src/screens/ClinicsApp"; // Temporarily commented out
 import ActivityScreen from "./src/screens/ActivityScreen";
 import WellnessActivityDetailScreen from "./src/screens/WellnessActivityDetailScreen";
 
@@ -64,13 +65,15 @@ import MedicalHistoryScreen from "./src/screens/MedicalHistoryScreen";
 import PrivacySettingsScreen from "./src/screens/PrivacySettingsScreen";
 import HelpSupportScreen from "./src/screens/HelpSupportScreen";
 import AboutAppScreen from "./src/screens/AboutAppScreen";
+import DebugScreen from "./src/screens/DebugScreen";
 
 // Import theme and context
 import { theme } from "./src/theme/theme";
 import { AuthProvider, useAuth } from "./src/contexts/AuthContext";
-import { LanguageProvider } from "./src/contexts/LanguageContext";
+import { RootStackParamList } from "./src/types/navigation";
 
-const Stack = createStackNavigator();
+
+const Stack = createStackNavigator<RootStackParamList>();
 
 function AppContent() {
   const { isLoading, isAuthenticated } = useAuth();
@@ -377,6 +380,11 @@ function AppContent() {
                 options={{ title: "About App" }}
               />
               <Stack.Screen
+                name="Debug"
+                component={DebugScreen}
+                options={{ title: "Debug Tools" }}
+              />
+              <Stack.Screen
                 name="PersonalInformation"
                 component={PersonalInformationScreen}
                 options={{ title: "Personal Information" }}
@@ -386,7 +394,8 @@ function AppContent() {
                 component={MissionDetailScreen}
                 options={{ title: "Mission Details" }}
               />
-              <Stack.Screen
+              {/* Clinic-related screens - temporarily commented out */}
+              {/* <Stack.Screen
                 name="ClinicBooking"
                 component={ClinicBookingScreen}
                 options={{ title: "Booking Klinik" }}
@@ -405,7 +414,7 @@ function AppContent() {
                 name="BookingDetail"
                 component={BookingDetailScreen}
                 options={{ headerShown: false }}
-              />
+              /> */}
               <Stack.Screen
                 name="AdminDashboard"
                 component={AdminDashboardScreen}
@@ -440,13 +449,13 @@ function AppContent() {
                 component={WellnessApp}
                 options={{ headerShown: false }}
               />
-              <Stack.Screen
+              {/* ClinicsApp and related screens - temporarily commented out */}
+              {/* <Stack.Screen
                 name="ClinicsApp"
                 component={ClinicsApp}
                 options={{ headerShown: false }}
               />
               
-              {/* Clinics App Screens */}
               <Stack.Screen
                 name="ClinicDetail"
                 component={ClinicBookingScreen}
@@ -456,7 +465,7 @@ function AppContent() {
                 name="BookingHistory"
                 component={ClinicBookingScreen}
                 options={{ title: "Riwayat Booking" }}
-              />
+              /> */}
             </>
           )}
         </Stack.Navigator>
@@ -467,10 +476,8 @@ function AppContent() {
 
 export default function App() {
   return (
-    <LanguageProvider>
-      <AuthProvider>
-        <AppContent />
-      </AuthProvider>
-    </LanguageProvider>
+    <AuthProvider>
+      <AppContent />
+    </AuthProvider>
   );
 }

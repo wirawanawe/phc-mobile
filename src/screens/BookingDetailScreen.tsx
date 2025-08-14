@@ -11,6 +11,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import Icon from "react-native-vector-icons/MaterialCommunityIcons";
 import { LinearGradient } from "expo-linear-gradient";
 import apiService from "../services/api";
+import { safeGoBack } from "../utils/safeNavigation";
 
 const BookingDetailScreen = ({ navigation, route }: any) => {
   const { bookingData } = route.params;
@@ -27,7 +28,7 @@ const BookingDetailScreen = ({ navigation, route }: any) => {
       if (response.success) {
         Alert.alert("Success", "Booking berhasil dibatalkan");
         handleBookingAction(); // Trigger refresh
-        navigation.goBack();
+        safeGoBack(navigation, 'Main');
       }
     } catch (error: any) {
       console.error("Error canceling booking:", error);
@@ -44,7 +45,7 @@ const BookingDetailScreen = ({ navigation, route }: any) => {
         <View style={styles.header}>
           <TouchableOpacity
             style={styles.backButton}
-            onPress={() => navigation.goBack()}
+            onPress={() => safeGoBack(navigation, 'Main')}
           >
             <Icon name="arrow-left" size={24} color="#FFFFFF" />
           </TouchableOpacity>

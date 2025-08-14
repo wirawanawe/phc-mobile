@@ -10,6 +10,7 @@ import {
   Dimensions,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+import { safeGoBack } from "../utils/safeNavigation";
 
 interface VideoCallScreenProps {
   navigation: any;
@@ -86,7 +87,7 @@ const VideoCallScreen: React.FC<VideoCallScreenProps> = ({
         [
           {
             text: 'OK',
-            onPress: () => navigation.goBack(),
+            onPress: () => safeGoBack(navigation, 'Main'),
           },
         ]
       );

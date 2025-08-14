@@ -18,6 +18,7 @@ import { CustomTheme } from "../theme/theme";
 import apiService from "../services/api";
 import { useAuth } from "../contexts/AuthContext";
 import eventEmitter from "../utils/eventEmitter";
+import { safeGoBack } from "../utils/safeNavigation";
 
 const { width } = Dimensions.get("window");
 
@@ -936,7 +937,7 @@ const MealLoggingScreen = ({ navigation }: any) => {
         <View style={styles.header}>
           <TouchableOpacity
             style={styles.backButton}
-            onPress={() => navigation.goBack()}
+            onPress={() => safeGoBack(navigation, 'Main')}
           >
             <Icon name="arrow-left" size={24} color="#FFFFFF" />
           </TouchableOpacity>

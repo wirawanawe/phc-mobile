@@ -18,6 +18,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { CustomTheme } from "../theme/theme";
 import ProgressRing from "../components/ProgressRing";
 import api from "../services/api";
+import { safeGoBack } from "../utils/safeNavigation";
 
 const { width } = Dimensions.get("window");
 
@@ -653,16 +654,16 @@ const WellnessDetailsScreen = ({ navigation }: any) => {
       <StatusBar barStyle="light-content" />
       <SafeAreaView style={styles.safeArea}>
         {/* Header */}
-        <View style={styles.header}>
+        {/* <View style={styles.header}>
           <TouchableOpacity
             style={styles.backButton}
-            onPress={() => navigation.goBack()}
+            onPress={() => safeGoBack(navigation, 'Main')}
           >
             <Icon name="arrow-left" size={24} color="#FFFFFF" />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Wellness Dashboard</Text>
           <View style={styles.headerSpacer} />
-        </View>
+        </View> */}
 
         <ScrollView
           style={styles.content}

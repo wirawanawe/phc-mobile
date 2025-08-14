@@ -16,9 +16,26 @@ const { width } = Dimensions.get("window");
 
 const DetailDoctor = ({ navigation, route }: any) => {
   const theme = useTheme<CustomTheme>();
-  const { doctor } = route.params;
+  const { doctor } = route.params || {};
   const [selectedTimeSlot, setSelectedTimeSlot] = useState("");
   const [isBooking, setIsBooking] = useState(false);
+
+  // Safety check for doctor data
+  if (!doctor) {
+    return (
+      <View style={styles.container}>
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+          <Text>Data dokter tidak ditemukan</Text>
+          <TouchableOpacity 
+            style={{ marginTop: 16, padding: 12, backgroundColor: '#E22345', borderRadius: 8 }}
+            onPress={() => navigation.goBack()}
+          >
+            <Text style={{ color: 'white' }}>Kembali</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
 
   // Handle booking consultation
   const handleBookConsultation = () => {
@@ -135,35 +152,35 @@ const DetailDoctor = ({ navigation, route }: any) => {
         {/* Doctor Profile Card */}
         <View style={styles.profileContainer}>
           <LinearGradient
-            colors={[doctor.color, doctor.color + "80"]}
+            colors={[doctor.color || "#E22345", (doctor.color || "#E22345") + "80"]}
             style={styles.profileGradient}
           >
             <View style={styles.profileContent}>
               <View style={styles.doctorAvatarLarge}>
-                <Text style={styles.doctorAvatarTextLarge}>{doctor.avatar}</Text>
+                <Text style={styles.doctorAvatarTextLarge}>{doctor.avatar || "👨‍⚕️"}</Text>
                 <View style={[styles.statusIndicator, { backgroundColor: getStatusColor(doctor.status) }]} />
               </View>
               <View style={styles.doctorMainInfo}>
-                <Text style={styles.doctorNameLarge}>{doctor.name}</Text>
-                <Text style={styles.doctorSpecialtyLarge}>{doctor.specialty}</Text>
-                <Text style={styles.doctorHospitalLarge}>{doctor.hospital}</Text>
+                <Text style={styles.doctorNameLarge}>{doctor.name || "Dokter"}</Text>
+                <Text style={styles.doctorSpecialtyLarge}>{doctor.specialty || "Dokter Umum"}</Text>
+                <Text style={styles.doctorHospitalLarge}>{doctor.hospital || "RS PHC"}</Text>
                 
-                <View style={styles.doctorStats}>
-                  <View style={styles.statItem}>
-                    <Icon name="star" size={16} color="#FCD34D" />
-                    <Text style={styles.statText}>{doctor.rating}</Text>
+                                  <View style={styles.doctorStats}>
+                    <View style={styles.statItem}>
+                      <Icon name="star" size={16} color="#FCD34D" />
+                      <Text style={styles.statText}>{doctor.rating || "4.5"}</Text>
+                    </View>
+                    <View style={styles.statDivider} />
+                    <View style={styles.statItem}>
+                      <Icon name="account-group" size={16} color="#FFFFFF" />
+                      <Text style={styles.statText}>{doctor.reviews || 0} ulasan</Text>
+                    </View>
+                    <View style={styles.statDivider} />
+                    <View style={styles.statItem}>
+                      <Icon name="clock" size={16} color="#FFFFFF" />
+                      <Text style={styles.statText}>{doctor.experience || "5 tahun"}</Text>
+                    </View>
                   </View>
-                  <View style={styles.statDivider} />
-                  <View style={styles.statItem}>
-                    <Icon name="account-group" size={16} color="#FFFFFF" />
-                    <Text style={styles.statText}>{doctor.reviews} ulasan</Text>
-                  </View>
-                  <View style={styles.statDivider} />
-                  <View style={styles.statItem}>
-                    <Icon name="clock" size={16} color="#FFFFFF" />
-                    <Text style={styles.statText}>{doctor.experience}</Text>
-                  </View>
-                </View>
               </View>
             </View>
           </LinearGradient>
@@ -177,7 +194,7 @@ const DetailDoctor = ({ navigation, route }: any) => {
           </View>
           <View style={styles.priceCard}>
             <Text style={styles.priceLabel}>Biaya Konsultasi</Text>
-            <Text style={styles.priceValue}>{doctor.price}</Text>
+            <Text style={styles.priceValue}>{doctor.price || "Rp 150.000"}</Text>
           </View>
         </View>
 
@@ -187,7 +204,7 @@ const DetailDoctor = ({ navigation, route }: any) => {
           <Card style={styles.aboutCard}>
             <Card.Content>
               <Text style={styles.aboutText}>
-                {doctor.name} adalah seorang {doctor.specialty.toLowerCase()} berpengalaman {doctor.experience} 
+                {doctor.name} adalah seorang {doctor.specialty?.toLowerCase() || 'dokter'} berpengalaman {doctor.experience} 
                 di {doctor.hospital}. Beliau memiliki keahlian khusus dalam menangani program wellness 
                 dan memberikan konsultasi kesehatan yang komprehensif.
               </Text>
@@ -304,7 +321,7 @@ const DetailDoctor = ({ navigation, route }: any) => {
           onPress={handleBookConsultation}
           disabled={isBooking}
         >
-          <LinearGradient colors={[doctor.color, doctor.color + "CC"]} style={styles.bookButtonGradient}>
+          <LinearGradient colors={[doctor.color || "#E22345", (doctor.color || "#E22345") + "CC"]} style={styles.bookButtonGradient}>
             {isBooking ? (
               <Text style={styles.bookButtonText}>Memproses...</Text>
             ) : (

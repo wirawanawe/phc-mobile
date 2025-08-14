@@ -12,7 +12,12 @@
     "build-icons": "npm run generate-icons && npm run convert-icons",
     "update-api-ip": "node scripts/update-api-ip.js",
     "test-network": "node scripts/test-network-interfaces.js test-all",
-    "update-network-config": "node scripts/update-network-config.js"
+    "update-network-config": "node scripts/update-network-config.js",
+    "screenshot": "node scripts/screenshot-helper.js",
+    "screenshot:auto": "node scripts/screenshot-helper.js --auto 5",
+    "screenshot:android": "node scripts/take-screenshots-android.js",
+    "screenshot:list": "node scripts/screenshot-helper.js --list",
+    "screenshot:clear": "node scripts/screenshot-helper.js --clear"
   },
   "dependencies": {
     "@expo/metro-runtime": "~5.0.4",
@@ -31,6 +36,7 @@
     "expo-crypto": "^14.1.5",
     "expo-dev-client": "~5.2.4",
     "expo-device": "^7.1.4",
+    "expo-image-picker": "^16.1.4",
     "expo-linear-gradient": "^14.1.5",
     "expo-location": "~18.1.6",
     "expo-notifications": "^0.31.4",

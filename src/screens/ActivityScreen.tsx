@@ -14,9 +14,9 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useAuth } from '../contexts/AuthContext';
-import { useLanguage } from '../contexts/LanguageContext';
+
 import api from '../services/api';
-import { handleAuthError } from '../utils/errorHandler';
+import { handleAuthError, handleError } from '../utils/errorHandler';
 
 interface WellnessActivity {
   id: number;
@@ -39,17 +39,19 @@ interface UserWellnessActivity {
   notes?: string;
   points_earned: number;
   completed_at: string;
-  activity_title: string;
-  activity_description: string;
-  activity_category: string;
-  activity_difficulty: string;
-  activity_points: number;
-  activity_calories_burn?: number;
+  // API returns these field names
+  title: string;
+  description: string;
+  category: string;
+  difficulty: string;
+  points: number;
+  activity_duration: number;
+  is_active: boolean;
 }
 
 const ActivityScreen = ({ navigation }: any) => {
   const { isAuthenticated, user } = useAuth();
-  const { t } = useLanguage();
+
   const [wellnessActivities, setWellnessActivities] = useState<WellnessActivity[]>([]);
   const [userActivities, setUserActivities] = useState<UserWellnessActivity[]>([]);
   const [isLoadingWellness, setIsLoadingWellness] = useState(false);
@@ -59,7 +61,15 @@ const ActivityScreen = ({ navigation }: any) => {
   // Add missing state variables
   const [showCompletionModal, setShowCompletionModal] = useState(false);
   const [selectedActivity, setSelectedActivity] = useState<WellnessActivity | null>(null);
-  const [completionData, setCompletionData] = useState({
+  const [completionData, setCompletionData] = useState<{
+    duration: number;
+    notes: string;
+    activity_type: string;
+    mood_before: string;
+    mood_after: string;
+    stress_level_before: string;
+    stress_level_after: string;
+  }>({
     duration: 30,
     notes: '',
     activity_type: 'normal',
@@ -70,10 +80,25 @@ const ActivityScreen = ({ navigation }: any) => {
   });
   const [calculatedPoints, setCalculatedPoints] = useState(0);
 
-  const activityTypes = {
-    normal: { name: t("activity.types.normal"), multiplier: 1 },
-    intense: { name: t("activity.types.intense"), multiplier: 1.5 },
-    relaxed: { name: t("activity.types.relaxed"), multiplier: 0.8 }
+  const activityTypes: Record<string, { name: string; multiplier: number }> = {
+    normal: { name: "Normal", multiplier: 1 },
+    intense: { name: "Intensif", multiplier: 1.5 },
+    relaxed: { name: "Santai", multiplier: 0.8 }
+  };
+
+  const getDifficultyColor = (difficulty: string | undefined) => {
+    if (!difficulty) return '#6B7280';
+    
+    switch (difficulty.toLowerCase()) {
+      case 'beginner':
+        return '#10B981';
+      case 'intermediate':
+        return '#F59E0B';
+      case 'advanced':
+        return '#EF4444';
+      default:
+        return '#6B7280';
+    }
   };
 
   // Load wellness activities
@@ -93,6 +118,10 @@ const ActivityScreen = ({ navigation }: any) => {
       }
     } catch (error) {
       console.error('Error loading wellness activities:', error);
+      handleError(error, {
+        title: 'Error Loading Activities',
+        showAlert: false
+      });
     } finally {
       setIsLoadingWellness(false);
     }
@@ -107,6 +136,10 @@ const ActivityScreen = ({ navigation }: any) => {
       }
     } catch (error) {
       console.error('Error loading user activity history:', error);
+      handleError(error, {
+        title: 'Error Loading History',
+        showAlert: false
+      });
     } finally {
       setIsLoadingHistory(false);
     }
@@ -114,8 +147,9 @@ const ActivityScreen = ({ navigation }: any) => {
 
   const handleWellnessActivitySelect = (activity: WellnessActivity) => {
     setSelectedActivity(activity);
+    const activityDuration = activity.duration_minutes || 30;
     setCompletionData({
-      duration: activity.duration_minutes,
+      duration: activityDuration,
       notes: '',
       activity_type: 'normal',
       mood_before: 'neutral',
@@ -123,9 +157,31 @@ const ActivityScreen = ({ navigation }: any) => {
       stress_level_before: 'low',
       stress_level_after: 'low'
     });
-    setCalculatedPoints(activity.points);
+    // Set initial points based on activity
+    const basePoints = activity.points || 0;
+    setCalculatedPoints(basePoints);
     setShowCompletionModal(true);
   };
+
+  // Update calculated points when activity type or duration changes
+  useEffect(() => {
+    if (selectedActivity) {
+      const activityType = activityTypes[completionData.activity_type];
+      const basePoints = selectedActivity.points || 0;
+      const activityDuration = selectedActivity.duration_minutes || 30;
+      const userDuration = completionData.duration || activityDuration;
+      
+      // Calculate duration multiplier (max 2x)
+      const durationMultiplier = Math.min(userDuration / activityDuration, 2);
+      
+      // Get type multiplier
+      const typeMultiplier = activityType ? activityType.multiplier : 1;
+      
+      // Calculate final points
+      const calculated = Math.round(basePoints * durationMultiplier * typeMultiplier);
+      setCalculatedPoints(calculated);
+    }
+  }, [selectedActivity, completionData.activity_type, completionData.duration]);
 
   const handleCompleteActivity = async () => {
     if (!selectedActivity) return;
@@ -170,7 +226,10 @@ const ActivityScreen = ({ navigation }: any) => {
       }
     } catch (error) {
       console.error('Error completing activity:', error);
-      Alert.alert('Error', 'Failed to complete activity. Please try again.');
+      handleError(error, {
+        title: 'Error Completing Activity',
+        showAlert: true
+      });
     }
   };
 
@@ -184,20 +243,14 @@ const ActivityScreen = ({ navigation }: any) => {
         <Icon name="heart-pulse" size={24} color="#10B981" />
       </View>
       <View style={styles.wellnessActivityInfo}>
-        <Text style={styles.wellnessActivityTitle}>{item.title}</Text>
-        <Text style={styles.wellnessActivityDescription}>{item.description}</Text>
+        <Text style={styles.wellnessActivityTitle}>{item.title || ''}</Text>
+        <Text style={styles.wellnessActivityDescription}>{item.description || ''}</Text>
         <View style={styles.wellnessActivityStats}>
-          <Text style={styles.wellnessActivityStat}>{item.duration_minutes} min</Text>
+          <Text style={styles.wellnessActivityStat}>{item.duration_minutes || 0} min</Text>
           <Text style={styles.wellnessActivityStat}>•</Text>
-          <Text style={styles.wellnessActivityStat}>{item.points} points</Text>
+          <Text style={styles.wellnessActivityStat}>{item.points || 0} points</Text>
           <Text style={styles.wellnessActivityStat}>•</Text>
-          <Text style={styles.wellnessActivityStat}>{item.difficulty}</Text>
-          {item.calories_burn && (
-            <>
-              <Text style={styles.wellnessActivityStat}>•</Text>
-              <Text style={styles.wellnessActivityStat}>{item.calories_burn} cal</Text>
-            </>
-          )}
+          <Text style={styles.wellnessActivityStat}>{item.difficulty || ''}</Text>
         </View>
       </View>
       <Icon name="chevron-right" size={20} color="#9CA3AF" />
@@ -206,24 +259,68 @@ const ActivityScreen = ({ navigation }: any) => {
 
   const renderUserActivity = ({ item }: { item: UserWellnessActivity }) => (
     <View style={styles.userActivityCard}>
+      {/* Header with Title, Date, and Points */}
       <View style={styles.userActivityHeader}>
-        <Icon name="check-circle" size={20} color="#10B981" />
-        <Text style={styles.userActivityTitle}>{item.activity_title}</Text>
-        <Text style={styles.userActivityDate}>
-          {new Date(item.completed_at).toLocaleDateString()}
-        </Text>
+        <View style={styles.userActivityIconContainer}>
+          <Icon name="check-circle" size={20} color="#10B981" />
+        </View>
+        <View style={styles.userActivityInfo}>
+          <Text style={styles.userActivityTitle}>{item.title || ''}</Text>
+          <Text style={styles.userActivityDate}>
+            {new Date(item.completed_at).toLocaleDateString('id-ID', {
+              weekday: 'long',
+              year: 'numeric',
+              month: 'long',
+              day: 'numeric',
+              hour: '2-digit',
+              minute: '2-digit'
+            })}
+          </Text>
+        </View>
+        <View style={styles.userActivityPoints}>
+          <Icon name="star" size={16} color="#FFFFFF" />
+          <Text style={styles.userActivityPointsText}>+{item.points_earned || 0}</Text>
+          <Text style={styles.userActivityPointsLabel}>points</Text>
+        </View>
       </View>
+
+      {/* Activity Level Badge */}
+      {item.difficulty && (
+        <View style={styles.userActivityLevelContainer}>
+          <View style={[
+            styles.userActivityLevelBadge,
+            { backgroundColor: getDifficultyColor(item.difficulty) }
+          ]}>
+            <Icon name="star" size={12} color="#FFFFFF" />
+            <Text style={styles.userActivityLevelText}>
+              Level {item.difficulty}
+            </Text>
+          </View>
+        </View>
+      )}
+
+      {/* Activity Details */}
       <View style={styles.userActivityDetails}>
-        <Text style={styles.userActivityDescription}>{item.activity_description}</Text>
+        <Text style={styles.userActivityDescription}>{item.description || ''}</Text>
         <View style={styles.userActivityStats}>
-          <Text style={styles.userActivityStat}>{item.duration_minutes} min</Text>
-          <Text style={styles.userActivityStat}>•</Text>
-          <Text style={styles.userActivityStat}>{item.points_earned} points earned</Text>
-          <Text style={styles.userActivityStat}>•</Text>
-          <Text style={styles.userActivityStat}>{item.activity_difficulty}</Text>
+          {item.activity_duration && (
+            <View style={styles.userActivityStatItem}>
+              <Icon name="clock-outline" size={14} color="#6B7280" />
+              <Text style={styles.userActivityStat}>{item.activity_duration || 0} min</Text>
+            </View>
+          )}
+          {item.points && (
+            <View style={styles.userActivityStatItem}>
+              <Icon name="fire" size={14} color="#6B7280" />
+              <Text style={styles.userActivityStat}>{item.points || 0} base points</Text>
+            </View>
+          )}
         </View>
         {item.notes && (
-          <Text style={styles.userActivityNotes}>Notes: {item.notes}</Text>
+          <View style={styles.userActivityNotesContainer}>
+            <Icon name="note-text" size={14} color="#6B7280" />
+            <Text style={styles.userActivityNotes}>{item.notes || ''}</Text>
+          </View>
         )}
       </View>
     </View>
@@ -239,7 +336,10 @@ const ActivityScreen = ({ navigation }: any) => {
       <View style={styles.modalOverlay}>
         <View style={styles.modalContent}>
           <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>Complete Activity</Text>
+            <View style={styles.modalHeaderContent}>
+              <Icon name="heart-pulse" size={24} color="#10B981" />
+              <Text style={styles.modalTitle}>Selesaikan Aktivitas</Text>
+            </View>
             <TouchableOpacity
               onPress={() => setShowCompletionModal(false)}
               style={styles.closeButton}
@@ -248,25 +348,66 @@ const ActivityScreen = ({ navigation }: any) => {
             </TouchableOpacity>
           </View>
 
-          <ScrollView style={styles.modalBody}>
-            <View style={styles.activityInfo}>
-              <Text style={styles.activityName}>{selectedActivity?.title}</Text>
-              <Text style={styles.activityDescription}>{selectedActivity?.description}</Text>
-            </View>
-
-            <View style={styles.pointsCalculation}>
-              <Text style={styles.pointsTitle}>Points Calculation</Text>
-              <View style={styles.pointsInfo}>
-                <Text style={styles.pointsText}>Duration: {completionData.duration} min</Text>
-                <Text style={styles.pointsText}>Calculated Points: {calculatedPoints}</Text>
+          <ScrollView style={styles.modalBody} showsVerticalScrollIndicator={false}>
+            {/* Activity Info Card */}
+            <View style={styles.activityInfoCard}>
+              <View style={styles.activityInfoHeader}>
+                <Icon name="heart-pulse" size={32} color="#10B981" />
+                <View style={styles.activityInfoText}>
+                  <Text style={styles.activityName}>{selectedActivity?.title || ''}</Text>
+                  <Text style={styles.activityDescription}>{selectedActivity?.description || ''}</Text>
+                </View>
+              </View>
+              <View style={styles.activityInfoStats}>
+                <View style={styles.activityInfoStat}>
+                  <Icon name="clock-outline" size={16} color="#6B7280" />
+                  <Text style={styles.activityInfoStatText}>{selectedActivity?.duration_minutes || 0} min</Text>
+                </View>
+                <View style={styles.activityInfoStat}>
+                  <Icon name="star" size={16} color="#6B7280" />
+                  <Text style={styles.activityInfoStatText}>{selectedActivity?.difficulty || ''}</Text>
+                </View>
+                <View style={styles.activityInfoStat}>
+                  <Icon name="fire" size={16} color="#6B7280" />
+                  <Text style={styles.activityInfoStatText}>{selectedActivity?.points || 0} points</Text>
+                </View>
               </View>
             </View>
 
+            {/* Points Calculation Card */}
+            <View style={styles.pointsCalculationCard}>
+              <View style={styles.pointsCalculationHeader}>
+                <Icon name="calculator" size={20} color="#92400E" />
+                <Text style={styles.pointsCalculationTitle}>Perhitungan Poin</Text>
+              </View>
+              <View style={styles.pointsCalculationContent}>
+                <View style={styles.pointsCalculationRow}>
+                  <Text style={styles.pointsCalculationLabel}>Durasi:</Text>
+                  <Text style={styles.pointsCalculationValue}>{completionData.duration} menit</Text>
+                </View>
+                <View style={styles.pointsCalculationRow}>
+                  <Text style={styles.pointsCalculationLabel}>Tipe Aktivitas:</Text>
+                  <Text style={styles.pointsCalculationValue}>
+                    {activityTypes[completionData.activity_type]?.name} (x{activityTypes[completionData.activity_type]?.multiplier})
+                  </Text>
+                </View>
+                <View style={styles.pointsCalculationDivider} />
+                <View style={styles.pointsCalculationRow}>
+                  <Text style={styles.pointsCalculationTotalLabel}>Total Poin:</Text>
+                  <Text style={styles.pointsCalculationTotalValue}>{calculatedPoints}</Text>
+                </View>
+              </View>
+            </View>
+
+            {/* Activity Details Form */}
             <View style={styles.formSection}>
-              <Text style={styles.sectionTitle}>Activity Details</Text>
+              <View style={styles.sectionHeader}>
+                <Icon name="clipboard-text" size={20} color="#374151" />
+                <Text style={styles.modalSectionTitle}>Detail Aktivitas</Text>
+              </View>
               
               <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>Activity Type</Text>
+                <Text style={styles.inputLabel}>Tipe Aktivitas</Text>
                 <View style={styles.pickerContainer}>
                   {Object.entries(activityTypes).map(([key, type]) => (
                     <TouchableOpacity
@@ -277,11 +418,16 @@ const ActivityScreen = ({ navigation }: any) => {
                       ]}
                       onPress={() => setCompletionData(prev => ({ ...prev, activity_type: key }))}
                     >
+                      <Icon 
+                        name={key === 'intense' ? 'fire' : key === 'relaxed' ? 'leaf' : 'heart'} 
+                        size={16} 
+                        color={completionData.activity_type === key ? '#FFFFFF' : '#6B7280'} 
+                      />
                       <Text style={[
                         styles.pickerOptionText,
                         completionData.activity_type === key && styles.pickerOptionTextSelected
                       ]}>
-                        {type.name} (x{type.multiplier})
+                        {type.name}
                       </Text>
                     </TouchableOpacity>
                   ))}
@@ -289,78 +435,170 @@ const ActivityScreen = ({ navigation }: any) => {
               </View>
 
               <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>{t("activity.duration")}</Text>
-                <TextInput
-                  style={styles.textInput}
-                  value={completionData.duration.toString()}
-                  onChangeText={(text) => setCompletionData(prev => ({ 
-                    ...prev, 
-                    duration: parseInt(text) || 0 
-                  }))}
-                  keyboardType="numeric"
-                  placeholder="30"
-                />
+                <Text style={styles.inputLabel}>Durasi (menit)</Text>
+                <View style={styles.durationInputContainer}>
+                  <Icon name="clock-outline" size={20} color="#6B7280" />
+                  <TextInput
+                    style={styles.durationInput}
+                    value={String(completionData.duration)}
+                    onChangeText={(text) => setCompletionData(prev => ({ 
+                      ...prev, 
+                      duration: parseInt(text) || 0 
+                    }))}
+                    keyboardType="numeric"
+                    placeholder="30"
+                  />
+                </View>
               </View>
 
               <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>{t("activity.notes")}</Text>
-                <TextInput
-                  style={[styles.textInput, styles.textArea]}
-                  value={completionData.notes}
-                  onChangeText={(text) => setCompletionData(prev => ({ ...prev, notes: text }))}
-                  placeholder={t("activity.notesPlaceholder")}
-                  multiline
-                  numberOfLines={3}
-                />
+                <Text style={styles.inputLabel}>Catatan</Text>
+                <View style={styles.notesInputContainer}>
+                  <Icon name="note-text" size={20} color="#6B7280" />
+                  <TextInput
+                    style={styles.notesInput}
+                    value={completionData.notes}
+                    onChangeText={(text) => setCompletionData(prev => ({ ...prev, notes: text }))}
+                    placeholder="Tambahkan catatan tentang aktivitas Anda..."
+                    multiline
+                    numberOfLines={3}
+                  />
+                </View>
               </View>
             </View>
 
+            {/* Mood & Stress Tracking Form */}
             <View style={styles.formSection}>
-              <Text style={styles.sectionTitle}>{t("activity.moodStressTracking")}</Text>
+              <View style={styles.sectionHeader}>
+                <Icon name="emoticon" size={20} color="#374151" />
+                <Text style={styles.modalSectionTitle}>Pelacakan Mood & Stres</Text>
+              </View>
               
-              <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>{t("activity.moodBefore")}</Text>
-                <View style={styles.pickerContainer}>
-                  {['very_happy', 'happy', 'neutral', 'sad', 'very_sad'].map((mood) => (
-                    <TouchableOpacity
-                      key={mood}
-                      style={[
-                        styles.pickerOption,
-                        completionData.mood_before === mood && styles.pickerOptionSelected
-                      ]}
-                      onPress={() => setCompletionData(prev => ({ ...prev, mood_before: mood }))}
-                    >
-                      <Text style={[
-                        styles.pickerOptionText,
-                        completionData.mood_before === mood && styles.pickerOptionTextSelected
-                      ]}>
-                        {mood.replace('_', ' ').toUpperCase()}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
+              <View style={styles.moodStressContainer}>
+                <View style={styles.moodStressColumn}>
+                  <Text style={styles.moodStressLabel}>Mood Sebelum</Text>
+                  <View style={styles.moodStressOptions}>
+                    {['very_happy', 'happy', 'neutral', 'sad', 'very_sad'].map((mood) => (
+                      <TouchableOpacity
+                        key={mood}
+                        style={[
+                          styles.moodStressOption,
+                          completionData.mood_before === mood && styles.moodStressOptionSelected
+                        ]}
+                        onPress={() => setCompletionData(prev => ({ ...prev, mood_before: mood }))}
+                      >
+                        <Icon 
+                          name={mood === 'very_happy' ? 'emoticon-excited' : 
+                               mood === 'happy' ? 'emoticon-happy' : 
+                               mood === 'neutral' ? 'emoticon-neutral' : 
+                               mood === 'sad' ? 'emoticon-sad' : 'emoticon-cry'} 
+                          size={16} 
+                          color={completionData.mood_before === mood ? '#FFFFFF' : '#6B7280'} 
+                        />
+                        <Text style={[
+                          styles.moodStressOptionText,
+                          completionData.mood_before === mood && styles.moodStressOptionTextSelected
+                        ]}>
+                          {mood.replace('_', ' ').toUpperCase()}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </View>
+
+                <View style={styles.moodStressColumn}>
+                  <Text style={styles.moodStressLabel}>Mood Sesudah</Text>
+                  <View style={styles.moodStressOptions}>
+                    {['very_happy', 'happy', 'neutral', 'sad', 'very_sad'].map((mood) => (
+                      <TouchableOpacity
+                        key={mood}
+                        style={[
+                          styles.moodStressOption,
+                          completionData.mood_after === mood && styles.moodStressOptionSelected
+                        ]}
+                        onPress={() => setCompletionData(prev => ({ ...prev, mood_after: mood }))}
+                      >
+                        <Icon 
+                          name={mood === 'very_happy' ? 'emoticon-excited' : 
+                               mood === 'happy' ? 'emoticon-happy' : 
+                               mood === 'neutral' ? 'emoticon-neutral' : 
+                               mood === 'sad' ? 'emoticon-sad' : 'emoticon-cry'} 
+                          size={16} 
+                          color={completionData.mood_after === mood ? '#FFFFFF' : '#6B7280'} 
+                        />
+                        <Text style={[
+                          styles.moodStressOptionText,
+                          completionData.mood_after === mood && styles.moodStressOptionTextSelected
+                        ]}>
+                          {mood.replace('_', ' ').toUpperCase()}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
                 </View>
               </View>
 
-              <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>{t("activity.moodAfter")}</Text>
-                <View style={styles.pickerContainer}>
-                  {['very_happy', 'happy', 'neutral', 'sad', 'very_sad'].map((mood) => (
-                    <TouchableOpacity
-                      key={mood}
-                      style={[
-                        styles.pickerOption,
-                        completionData.mood_after === mood && styles.pickerOptionSelected
-                      ]}
-                      onPress={() => setCompletionData(prev => ({ ...prev, mood_after: mood }))}
-                    >
-                      <Text style={[
-                        styles.pickerOptionText,
-                        completionData.mood_after === mood && styles.pickerOptionTextSelected
-                      ]}>
-                        {mood.replace('_', ' ').toUpperCase()}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
+              <View style={styles.moodStressContainer}>
+                <View style={styles.moodStressColumn}>
+                  <Text style={styles.moodStressLabel}>Stres Sebelum</Text>
+                  <View style={styles.moodStressOptions}>
+                    {['very_low', 'low', 'medium', 'high', 'very_high'].map((stress) => (
+                      <TouchableOpacity
+                        key={stress}
+                        style={[
+                          styles.moodStressOption,
+                          completionData.stress_level_before === stress && styles.moodStressOptionSelected
+                        ]}
+                        onPress={() => setCompletionData(prev => ({ ...prev, stress_level_before: stress }))}
+                      >
+                        <Icon 
+                          name={stress === 'very_low' ? 'heart' : 
+                               stress === 'low' ? 'heart-outline' : 
+                               stress === 'medium' ? 'heart-half' : 
+                               stress === 'high' ? 'heart-broken' : 'heart-broken-outline'} 
+                          size={16} 
+                          color={completionData.stress_level_before === stress ? '#FFFFFF' : '#6B7280'} 
+                        />
+                        <Text style={[
+                          styles.moodStressOptionText,
+                          completionData.stress_level_before === stress && styles.moodStressOptionTextSelected
+                        ]}>
+                          {stress.replace('_', ' ').toUpperCase()}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </View>
+
+                <View style={styles.moodStressColumn}>
+                  <Text style={styles.moodStressLabel}>Stres Sesudah</Text>
+                  <View style={styles.moodStressOptions}>
+                    {['very_low', 'low', 'medium', 'high', 'very_high'].map((stress) => (
+                      <TouchableOpacity
+                        key={stress}
+                        style={[
+                          styles.moodStressOption,
+                          completionData.stress_level_after === stress && styles.moodStressOptionSelected
+                        ]}
+                        onPress={() => setCompletionData(prev => ({ ...prev, stress_level_after: stress }))}
+                      >
+                        <Icon 
+                          name={stress === 'very_low' ? 'heart' : 
+                               stress === 'low' ? 'heart-outline' : 
+                               stress === 'medium' ? 'heart-half' : 
+                               stress === 'high' ? 'heart-broken' : 'heart-broken-outline'} 
+                          size={16} 
+                          color={completionData.stress_level_after === stress ? '#FFFFFF' : '#6B7280'} 
+                        />
+                        <Text style={[
+                          styles.moodStressOptionText,
+                          completionData.stress_level_after === stress && styles.moodStressOptionTextSelected
+                        ]}>
+                          {stress.replace('_', ' ').toUpperCase()}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
                 </View>
               </View>
             </View>
@@ -371,13 +609,14 @@ const ActivityScreen = ({ navigation }: any) => {
               style={styles.cancelButton}
               onPress={() => setShowCompletionModal(false)}
             >
-              <Text style={styles.cancelButtonText}>{t("common.cancel")}</Text>
+              <Text style={styles.cancelButtonText}>Batal</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.completeButton}
               onPress={handleCompleteActivity}
             >
-              <Text style={styles.completeButtonText}>{t("activity.completeActivity")}</Text>
+              <Icon name="check" size={20} color="#FFFFFF" />
+              <Text style={styles.completeButtonText}>Selesaikan</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -396,9 +635,9 @@ const ActivityScreen = ({ navigation }: any) => {
             <Icon name="heart-pulse" size={28} color="#10B981" />
           </View>
           <View style={styles.headerText}>
-            <Text style={styles.greetingText}>{t("activity.title")}</Text>
+            <Text style={styles.greetingText}>Aktivitas Wellness</Text>
             <Text style={styles.subtitleText}>
-              {isAuthenticated ? t("activity.subtitle.authenticated") : t("activity.subtitle.unauthenticated")}
+              {isAuthenticated ? "Lacak aktivitas wellness Anda dan raih poin!" : "Masuk untuk melacak aktivitas wellness Anda"}
             </Text>
           </View>
         </View>
@@ -412,7 +651,7 @@ const ActivityScreen = ({ navigation }: any) => {
             onPress={() => setActiveTab('activities')}
           >
             <Text style={[styles.tabButtonText, activeTab === 'activities' && styles.activeTabButtonText]}>
-              {t("activity.tabs.activities")}
+              Aktivitas
             </Text>
           </TouchableOpacity>
           <TouchableOpacity
@@ -420,7 +659,7 @@ const ActivityScreen = ({ navigation }: any) => {
             onPress={() => setActiveTab('history')}
           >
             <Text style={[styles.tabButtonText, activeTab === 'history' && styles.activeTabButtonText]}>
-              {t("activity.tabs.history")}
+              Riwayat
             </Text>
           </TouchableOpacity>
         </View>
@@ -433,17 +672,20 @@ const ActivityScreen = ({ navigation }: any) => {
         {activeTab === 'activities' ? (
           <>
             {/* Wellness Activities List */}
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>{t("activity.selectWellness")}</Text>
+              <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Pilih Aktivitas Wellness</Text>
               {isLoadingWellness ? (
-                <View style={styles.loadingContainer}>
-                  <Text style={styles.loadingText}>{t("activity.loadingWellness")}</Text>
+                              <View style={styles.loadingContainer}>
+                <View style={styles.loadingIconContainer}>
+                  <Icon name="loading" size={32} color="#10B981" />
                 </View>
+                <Text style={styles.loadingText}>Memuat aktivitas wellness...</Text>
+              </View>
               ) : (
                 <FlatList
                   data={wellnessActivities}
                   renderItem={renderWellnessActivity}
-                  keyExtractor={(item) => item.id.toString()}
+                  keyExtractor={(item, index) => `wellness-${item?.id || index}`}
                   scrollEnabled={false}
                   showsVerticalScrollIndicator={false}
                 />
@@ -460,7 +702,7 @@ const ActivityScreen = ({ navigation }: any) => {
                   colors={["#10B981", "#059669"]}
                   style={styles.loginGradient}
                 >
-                  <Text style={styles.loginButtonText}>{t("activity.loginToStart")}</Text>
+                  <Text style={styles.loginButtonText}>Masuk untuk Memulai</Text>
                 </LinearGradient>
               </TouchableOpacity>
             )}
@@ -468,24 +710,57 @@ const ActivityScreen = ({ navigation }: any) => {
         ) : (
           /* History Tab */
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>{t("activity.history.title")}</Text>
+            <Text style={styles.sectionTitle}>Riwayat Aktivitas</Text>
+            
+            {/* History Summary */}
+            {userActivities.length > 0 && (
+              <View style={styles.historySummaryContainer}>
+                <View style={styles.historySummaryCard}>
+                  <Icon name="star" size={24} color="#10B981" />
+                  <View style={styles.historySummaryInfo}>
+                    <Text style={styles.historySummaryTitle}>
+                      {userActivities.reduce((total, activity) => total + activity.points_earned, 0)}
+                    </Text>
+                    <Text style={styles.historySummarySubtitle}>Total Poin</Text>
+                  </View>
+                </View>
+                <View style={styles.historySummaryCard}>
+                  <Icon name="calendar-check" size={24} color="#F59E0B" />
+                  <View style={styles.historySummaryInfo}>
+                    <Text style={styles.historySummaryTitle}>{userActivities.length}</Text>
+                    <Text style={styles.historySummarySubtitle}>Aktivitas</Text>
+                  </View>
+                </View>
+              </View>
+            )}
             {isLoadingHistory ? (
               <View style={styles.loadingContainer}>
-                <Text style={styles.loadingText}>{t("activity.loadingHistory")}</Text>
+                <View style={styles.loadingIconContainer}>
+                  <Icon name="loading" size={32} color="#10B981" />
+                </View>
+                <Text style={styles.loadingText}>Memuat riwayat...</Text>
               </View>
             ) : userActivities.length > 0 ? (
               <FlatList
                 data={userActivities}
                 renderItem={renderUserActivity}
-                keyExtractor={(item) => item.id.toString()}
+                keyExtractor={(item, index) => `user-activity-${item?.id || item?.activity_id || index}`}
                 scrollEnabled={false}
                 showsVerticalScrollIndicator={false}
               />
             ) : (
               <View style={styles.emptyHistoryContainer}>
-                <Icon name="history" size={48} color="#9CA3AF" />
-                <Text style={styles.emptyHistoryText}>{t("activity.history.empty")}</Text>
-                <Text style={styles.emptyHistorySubtext}>{t("activity.history.emptySubtext")}</Text>
+                <View style={styles.emptyHistoryIconContainer}>
+                  <Icon name="history" size={48} color="#9CA3AF" />
+                </View>
+                <Text style={styles.emptyHistoryText}>Belum ada riwayat aktivitas</Text>
+                <Text style={styles.emptyHistorySubtext}>Mulai lakukan aktivitas wellness untuk melihat riwayat Anda</Text>
+                <TouchableOpacity
+                  style={styles.emptyHistoryButton}
+                  onPress={() => setActiveTab('activities')}
+                >
+                  <Text style={styles.emptyHistoryButtonText}>Mulai Aktivitas</Text>
+                </TouchableOpacity>
               </View>
             )}
           </View>
@@ -549,13 +824,18 @@ const styles = StyleSheet.create({
   tabContainer: {
     flexDirection: "row",
     justifyContent: "space-around",
-    backgroundColor: "#F9FAFB",
-    paddingVertical: 10,
+    backgroundColor: "#FFFFFF",
+    paddingVertical: 8,
     marginHorizontal: 20,
-    marginBottom: 10,
-    borderRadius: 12,
+    marginBottom: 16,
+    borderRadius: 16,
     borderWidth: 1,
     borderColor: "#E5E7EB",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
   },
   tabButton: {
     paddingVertical: 8,
@@ -583,6 +863,39 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: "#1F2937",
     marginBottom: 12,
+  },
+  historySummaryContainer: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 20,
+  },
+  historySummaryCard: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    padding: 16,
+    borderRadius: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+    gap: 12,
+  },
+  historySummaryInfo: {
+    flex: 1,
+  },
+  historySummaryTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#1F2937',
+    marginBottom: 2,
+  },
+  historySummarySubtitle: {
+    fontSize: 12,
+    color: '#6B7280',
+    fontWeight: '500',
   },
   loginButton: {
     marginHorizontal: 20,
@@ -654,30 +967,61 @@ const styles = StyleSheet.create({
   // User Activity Styles
   userActivityCard: {
     backgroundColor: "#FFFFFF",
-    borderRadius: 12,
+    borderRadius: 16,
     padding: 16,
-    marginBottom: 12,
+    marginBottom: 16,
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
   },
   userActivityHeader: {
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: 8,
+    marginBottom: 12,
+  },
+  userActivityIconContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "#E0F2F7",
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 12,
+  },
+  userActivityInfo: {
+    flex: 1,
   },
   userActivityTitle: {
     fontSize: 16,
     fontWeight: "600",
     color: "#1F2937",
-    marginLeft: 8,
-    flex: 1,
+    marginBottom: 2,
   },
   userActivityDate: {
     fontSize: 12,
     color: "#6B7280",
+    fontWeight: "500",
+  },
+  userActivityPoints: {
+    flexDirection: 'row',
+    alignItems: "center",
+    backgroundColor: "#10B981",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 12,
+    gap: 4,
+  },
+  userActivityPointsText: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#FFFFFF",
+  },
+  userActivityPointsLabel: {
+    fontSize: 10,
+    color: "#FFFFFF",
+    opacity: 0.8,
   },
   userActivityDetails: {
     marginTop: 8,
@@ -685,39 +1029,96 @@ const styles = StyleSheet.create({
   userActivityDescription: {
     fontSize: 14,
     color: "#6B7280",
-    marginBottom: 8,
+    marginBottom: 12,
+    lineHeight: 20,
   },
   userActivityStats: {
     flexDirection: "row",
     alignItems: "center",
     flexWrap: "wrap",
+    gap: 16,
+  },
+  userActivityStatItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
   },
   userActivityStat: {
     fontSize: 12,
     color: "#6B7280",
-    marginRight: 8,
+    fontWeight: "500",
+  },
+  userActivityNotesContainer: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    marginTop: 12,
+    padding: 12,
+    backgroundColor: "#F9FAFB",
+    borderRadius: 8,
+    gap: 8,
   },
   userActivityNotes: {
     fontSize: 14,
     color: "#6B7280",
-    marginTop: 8,
     fontStyle: "italic",
+    flex: 1,
+    lineHeight: 18,
+  },
+  userActivityLevelContainer: {
+    marginBottom: 12,
+  },
+  userActivityLevelBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    gap: 4,
+  },
+  userActivityLevelText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#FFFFFF',
+    textTransform: 'capitalize',
   },
   emptyHistoryContainer: {
     alignItems: "center",
     paddingVertical: 40,
   },
+  emptyHistoryIconContainer: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: "#F3F4F6",
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 16,
+  },
   emptyHistoryText: {
-    fontSize: 16,
+    fontSize: 18,
+    fontWeight: "600",
     color: "#6B7280",
-    marginTop: 10,
+    marginBottom: 8,
     textAlign: "center",
   },
   emptyHistorySubtext: {
     fontSize: 14,
     color: "#9CA3AF",
-    marginTop: 4,
+    marginBottom: 24,
     textAlign: "center",
+    lineHeight: 20,
+  },
+  emptyHistoryButton: {
+    backgroundColor: "#10B981",
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 12,
+  },
+  emptyHistoryButtonText: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#FFFFFF",
   },
   loadingContainer: {
     flex: 1,
@@ -725,27 +1126,37 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingVertical: 20,
   },
+  loadingIconContainer: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: "#F0FDF4",
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 12,
+  },
   loadingText: {
     fontSize: 16,
     color: "#6B7280",
+    fontWeight: "500",
   },
   // Modal Styles
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
     justifyContent: 'center',
     alignItems: 'center',
   },
   modalContent: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    width: '90%',
-    maxHeight: '80%',
+    borderRadius: 20,
+    width: '95%',
+    maxHeight: '90%',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 8,
-    elevation: 8,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.3,
+    shadowRadius: 16,
+    elevation: 12,
   },
   modalHeader: {
     flexDirection: 'row',
@@ -755,13 +1166,20 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#E5E7EB',
   },
+  modalHeaderContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
   modalTitle: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: '700',
     color: '#1F2937',
   },
   closeButton: {
-    padding: 4,
+    padding: 8,
+    borderRadius: 8,
+    backgroundColor: '#F3F4F6',
   },
   modalBody: {
     flex: 1,
@@ -773,44 +1191,115 @@ const styles = StyleSheet.create({
     padding: 20,
     borderTopWidth: 1,
     borderTopColor: '#E5E7EB',
+    gap: 12,
   },
-  activityInfo: {
+  activityInfoCard: {
+    backgroundColor: '#F8FAFC',
+    borderRadius: 12,
+    padding: 16,
     marginBottom: 20,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  activityInfoHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: 12,
+    gap: 12,
+  },
+  activityInfoText: {
+    flex: 1,
   },
   activityName: {
     fontSize: 18,
     fontWeight: '600',
     color: '#1F2937',
-    marginBottom: 8,
+    marginBottom: 4,
   },
   activityDescription: {
     fontSize: 14,
     color: '#6B7280',
     lineHeight: 20,
   },
-  pointsCalculation: {
+  activityInfoStats: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+  },
+  activityInfoStat: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  activityInfoStatText: {
+    fontSize: 12,
+    color: '#6B7280',
+    fontWeight: '500',
+  },
+  pointsCalculationCard: {
     backgroundColor: '#FEF3C7',
-    borderRadius: 8,
+    borderRadius: 12,
     padding: 16,
     marginBottom: 20,
+    borderWidth: 1,
+    borderColor: '#FDE68A',
   },
-  pointsTitle: {
+  pointsCalculationHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+    gap: 8,
+  },
+  pointsCalculationTitle: {
     fontSize: 16,
     fontWeight: '600',
     color: '#92400E',
-    marginBottom: 8,
   },
-  pointsInfo: {
+  pointsCalculationContent: {
+    gap: 8,
+  },
+  pointsCalculationRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    alignItems: 'center',
   },
-  pointsText: {
+  pointsCalculationLabel: {
     fontSize: 14,
     color: '#92400E',
     fontWeight: '500',
   },
+  pointsCalculationValue: {
+    fontSize: 14,
+    color: '#92400E',
+    fontWeight: '600',
+  },
+  pointsCalculationDivider: {
+    height: 1,
+    backgroundColor: '#FDE68A',
+    marginVertical: 4,
+  },
+  pointsCalculationTotalLabel: {
+    fontSize: 16,
+    color: '#92400E',
+    fontWeight: '600',
+  },
+  pointsCalculationTotalValue: {
+    fontSize: 18,
+    color: '#92400E',
+    fontWeight: '700',
+  },
   formSection: {
-    marginBottom: 20,
+    marginBottom: 24,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+    gap: 8,
+  },
+  modalSectionTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#374151',
   },
   inputGroup: {
     marginBottom: 16,
@@ -821,19 +1310,34 @@ const styles = StyleSheet.create({
     color: '#374151',
     marginBottom: 8,
   },
-  textInput: {
+  durationInputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
     borderWidth: 1,
     borderColor: '#D1D5DB',
-    borderRadius: 8,
+    borderRadius: 12,
     paddingHorizontal: 12,
-    paddingVertical: 8,
+    backgroundColor: '#FFFFFF',
+    gap: 8,
+  },
+  durationInput: {
+    flex: 1,
+    paddingVertical: 12,
     fontSize: 16,
     color: '#1F2937',
+  },
+  notesInputContainer: {
+    borderWidth: 1,
+    borderColor: '#D1D5DB',
+    borderRadius: 12,
     backgroundColor: '#FFFFFF',
   },
-  textArea: {
-    height: 80,
+  notesInput: {
+    padding: 12,
+    fontSize: 16,
+    color: '#1F2937',
     textAlignVertical: 'top',
+    minHeight: 80,
   },
   pickerContainer: {
     flexDirection: 'row',
@@ -841,12 +1345,15 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   pickerOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
     paddingHorizontal: 12,
     paddingVertical: 8,
-    borderRadius: 6,
+    borderRadius: 8,
     borderWidth: 1,
     borderColor: '#D1D5DB',
     backgroundColor: '#FFFFFF',
+    gap: 6,
   },
   pickerOptionSelected: {
     backgroundColor: '#10B981',
@@ -860,15 +1367,54 @@ const styles = StyleSheet.create({
   pickerOptionTextSelected: {
     color: '#FFFFFF',
   },
-  cancelButton: {
+  moodStressContainer: {
+    flexDirection: 'row',
+    gap: 16,
+    marginBottom: 16,
+  },
+  moodStressColumn: {
     flex: 1,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 8,
+  },
+  moodStressLabel: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#374151',
+    marginBottom: 8,
+  },
+  moodStressOptions: {
+    gap: 6,
+  },
+  moodStressOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    borderRadius: 6,
     borderWidth: 1,
     borderColor: '#D1D5DB',
     backgroundColor: '#FFFFFF',
-    marginRight: 8,
+    gap: 4,
+  },
+  moodStressOptionSelected: {
+    backgroundColor: '#10B981',
+    borderColor: '#10B981',
+  },
+  moodStressOptionText: {
+    fontSize: 10,
+    color: '#6B7280',
+    fontWeight: '500',
+  },
+  moodStressOptionTextSelected: {
+    color: '#FFFFFF',
+  },
+  cancelButton: {
+    flex: 1,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#D1D5DB',
+    backgroundColor: '#FFFFFF',
   },
   cancelButtonText: {
     fontSize: 16,
@@ -878,17 +1424,19 @@ const styles = StyleSheet.create({
   },
   completeButton: {
     flex: 1,
-    paddingVertical: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 14,
     paddingHorizontal: 16,
-    borderRadius: 8,
+    borderRadius: 12,
     backgroundColor: '#10B981',
-    marginLeft: 8,
+    gap: 8,
   },
   completeButtonText: {
     fontSize: 16,
     fontWeight: '600',
     color: '#FFFFFF',
-    textAlign: 'center',
   },
 });
 

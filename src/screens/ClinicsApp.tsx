@@ -18,9 +18,10 @@ import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import Icon from "react-native-vector-icons/MaterialCommunityIcons";
 import { LinearGradient } from "expo-linear-gradient";
 import { CustomTheme } from "../theme/theme";
-import { useLanguage } from "../contexts/LanguageContext";
+
 import apiService from "../services/api";
 import { handleError } from "../utils/errorHandler";
+import { safeGoBack } from "../utils/safeNavigation";
 
 const { width } = Dimensions.get("window");
 const Tab = createBottomTabNavigator();
@@ -28,7 +29,7 @@ const Tab = createBottomTabNavigator();
 // Home Tab Component
 const HomeTab = ({ navigation }: any) => {
   const theme = useTheme<CustomTheme>();
-  const { t } = useLanguage();
+
   const [clinics, setClinics] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -93,14 +94,14 @@ const HomeTab = ({ navigation }: any) => {
               textStyle={{ color: "#FFFFFF", fontSize: 12 }}
               style={{ backgroundColor: "#10B981" }}
             >
-              {t("language.language") === "en" ? "Open" : "Buka"}
+              Buka
             </Chip>
           </View>
         </View>
         
         <View style={styles.clinicServices}>
           <Text style={styles.servicesTitle}>
-            {t("language.language") === "en" ? "Available Services:" : "Layanan Tersedia:"}
+            Layanan Tersedia:
           </Text>
           <View style={styles.serviceChips}>
             {item.services?.slice(0, 3).map((service: any, index: number) => (
@@ -157,7 +158,7 @@ const HomeTab = ({ navigation }: any) => {
         <View style={styles.header}>
           <TouchableOpacity
             style={styles.backButton}
-            onPress={() => navigation.goBack()}
+            onPress={() => safeGoBack(navigation, 'Main')}
           >
             <Icon name="arrow-left" size={24} color="#FFFFFF" />
           </TouchableOpacity>
@@ -493,7 +494,7 @@ const HistoryTab = ({ navigation, route }: any) => {
         <View style={styles.header}>
           <TouchableOpacity
             style={styles.backButton}
-            onPress={() => navigation.goBack()}
+            onPress={() => safeGoBack(navigation, 'Main')}
           >
             <Icon name="arrow-left" size={24} color="#FFFFFF" />
           </TouchableOpacity>
@@ -528,7 +529,7 @@ const HistoryTab = ({ navigation, route }: any) => {
 // Main Clinics App Component
 const ClinicsApp = ({ navigation, route }: any) => {
   const theme = useTheme<CustomTheme>();
-  const { t } = useLanguage();
+
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -549,15 +550,27 @@ const ClinicsApp = ({ navigation, route }: any) => {
           },
           tabBarActiveTintColor: "#E22345",
           tabBarInactiveTintColor: "#6B7280",
+          tabBarLabelStyle: {
+            fontSize: 11,
+            fontWeight: "600",
+            marginTop: 2,
+          },
+          tabBarIconStyle: {
+            marginTop: 4,
+          },
           tabBarStyle: {
             backgroundColor: "#FFFFFF",
             borderTopColor: "#E5E7EB",
             borderTopWidth: 1,
-            paddingBottom: 10,
-            paddingTop: 10,
-            height: 80,
+            paddingBottom: 8,
+            paddingTop: 8,
+            height: 70,
             elevation: 0,
             shadowOpacity: 0,
+            position: 'absolute',
+            bottom: 0,
+            left: 0,
+            right: 0,
           },
           headerShown: false,
         })}
@@ -565,12 +578,12 @@ const ClinicsApp = ({ navigation, route }: any) => {
         <Tab.Screen
           name="HOME"
           component={HomeTab}
-          options={{ tabBarLabel: t("nav.home") }}
+          options={{ tabBarLabel: "Beranda" }}
         />
         <Tab.Screen
           name="HISTORY"
           component={HistoryTab}
-          options={{ tabBarLabel: t("nav.history") }}
+          options={{ tabBarLabel: "Riwayat" }}
           initialParams={route.params}
         />
       </Tab.Navigator>

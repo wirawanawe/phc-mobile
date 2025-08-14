@@ -11,8 +11,8 @@ ERROR  ❌ Error handled: {"message": "Koneksi gagal. Pastikan internet Anda ter
 ## Root Cause Analysis
 
 ### 1. Network Configuration Issues
-- The mobile app was configured to use `http://10.242.90.103:3000/api/mobile` as the primary IP address
-- For development, localhost should be prioritized
+- The mobile app was previously configured to use IP addresses like `http://10.242.90.103:3000/api/mobile`
+- For development, localhost is now prioritized for better reliability and simplicity
 
 ### 2. Backend Registration Endpoint Issues
 - The registration endpoint was failing with 500 errors due to undefined parameters
