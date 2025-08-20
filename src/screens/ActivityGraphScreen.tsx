@@ -9,6 +9,7 @@ import {
   Alert,
   Platform,
   ActivityIndicator,
+  RefreshControl,
 } from "react-native";
 import { Text, useTheme } from "react-native-paper";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -19,6 +20,7 @@ import { useAuth } from "../contexts/AuthContext";
 import { useFocusEffect } from "@react-navigation/native";
 import apiService from "../services/api";
 import { safeGoBack } from "../utils/safeNavigation";
+import eventEmitter from "../utils/eventEmitter";
 
 const { width } = Dimensions.get("window");
 const CHART_HEIGHT = 220;
@@ -50,6 +52,9 @@ const ActivityGraphScreen = ({ navigation }: any) => {
   
   const [weeklyData, setWeeklyData] = useState<WeeklyData[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [lastSyncTime, setLastSyncTime] = useState<Date | null>(null);
+  const [showSyncSuccess, setShowSyncSuccess] = useState(false);
   const [selectedChart, setSelectedChart] = useState<'steps' | 'water' | 'sleep' | 'mood' | 'exercise' | 'calories'>('steps');
   const [timeRange, setTimeRange] = useState<'week' | 'month'>('week');
 
@@ -76,9 +81,13 @@ const ActivityGraphScreen = ({ navigation }: any) => {
     return data;
   };
 
-  const loadWeeklyData = useCallback(async () => {
+  const loadWeeklyData = useCallback(async (isRefresh = false) => {
     try {
-      setLoading(true);
+      if (isRefresh) {
+        setRefreshing(true);
+      } else {
+        setLoading(true);
+      }
 
       // Prepare 7-day window
       const end = new Date();
@@ -112,7 +121,7 @@ const ActivityGraphScreen = ({ navigation }: any) => {
         const mood = breakdown.mood || [];
 
         fitness.forEach((row: any) => {
-          const dateKey = row.date;
+          const dateKey = new Date(row.date).toISOString().split('T')[0];
           fitnessByDate[dateKey] = {
             steps: Number(row.total_steps || 0),
             exercise_minutes: Number(row.total_exercise_minutes || 0),
@@ -120,20 +129,24 @@ const ActivityGraphScreen = ({ navigation }: any) => {
         });
 
         water.forEach((row: any) => {
-          waterByDate[row.date] = Number(row.total_ml || 0);
+          const dateKey = new Date(row.date).toISOString().split('T')[0];
+          waterByDate[dateKey] = Number(row.total_ml || 0);
         });
 
         sleep.forEach((row: any) => {
-          sleepByDate[row.date] = Number(row.total_hours || 0);
+          const dateKey = new Date(row.date).toISOString().split('T')[0];
+          sleepByDate[dateKey] = Number(row.total_hours || 0);
         });
 
         nutrition.forEach((row: any) => {
-          caloriesByDate[row.date] = Number(row.total_calories || 0);
+          const dateKey = new Date(row.date).toISOString().split('T')[0];
+          caloriesByDate[dateKey] = Number(row.total_calories || 0);
         });
         
         // Mood: average mood score per day from weekly summary
         mood.forEach((row: any) => {
-          moodByDate[row.date] = Number(row.avg_mood_score || 0);
+          const dateKey = new Date(row.date).toISOString().split('T')[0];
+          moodByDate[dateKey] = Number(row.avg_mood_score || 0);
         });
       }
 
@@ -154,6 +167,13 @@ const ActivityGraphScreen = ({ navigation }: any) => {
 
       // Always show DB-backed data (even if zeros). Only fallback on request errors.
       setWeeklyData(realData);
+      setLastSyncTime(new Date());
+      
+      // Show sync success message for refresh operations
+      if (isRefresh) {
+        setShowSyncSuccess(true);
+        setTimeout(() => setShowSyncSuccess(false), 3000);
+      }
     } catch (error) {
       console.error("Error loading weekly data:", error);
       // Do not use random sample data; show zeros to avoid misleading users
@@ -177,6 +197,7 @@ const ActivityGraphScreen = ({ navigation }: any) => {
       );
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   }, []);
 
@@ -186,13 +207,119 @@ const ActivityGraphScreen = ({ navigation }: any) => {
     }
   }, [isAuthenticated, loadWeeklyData]);
 
+  // Refresh data when screen comes into focus
   useFocusEffect(
     React.useCallback(() => {
       if (isAuthenticated) {
+        console.log('🔄 ActivityGraphScreen: Refreshing graph data on focus');
         loadWeeklyData();
       }
     }, [isAuthenticated, loadWeeklyData])
   );
+
+  // Listen for data refresh events
+  useEffect(() => {
+    // Only set up event listeners if eventEmitter is available and has required methods
+    if (!eventEmitter || typeof eventEmitter.on !== 'function') {
+      console.warn('ActivityGraphScreen - eventEmitter not available or invalid, skipping event listeners');
+      return;
+    }
+
+    const handleDataRefresh = () => {
+      console.log('ActivityGraphScreen - Data refresh event received, refreshing graph data...');
+      if (isAuthenticated) {
+        loadWeeklyData(true);
+      }
+    };
+
+    const handleMealLogged = () => {
+      console.log('ActivityGraphScreen - Meal logged event received, refreshing graph data...');
+      if (isAuthenticated) {
+        loadWeeklyData(true);
+      }
+    };
+
+    const handleWaterLogged = () => {
+      console.log('ActivityGraphScreen - Water logged event received, refreshing graph data...');
+      if (isAuthenticated) {
+        loadWeeklyData(true);
+      }
+    };
+
+    const handleFitnessLogged = () => {
+      console.log('ActivityGraphScreen - Fitness logged event received, refreshing graph data...');
+      if (isAuthenticated) {
+        loadWeeklyData(true);
+      }
+    };
+
+    const handleSleepLogged = () => {
+      console.log('ActivityGraphScreen - Sleep logged event received, refreshing graph data...');
+      if (isAuthenticated) {
+        loadWeeklyData(true);
+      }
+    };
+
+    const handleMoodLogged = () => {
+      console.log('ActivityGraphScreen - Mood logged event received, refreshing graph data...');
+      if (isAuthenticated) {
+        loadWeeklyData(true);
+      }
+    };
+
+    const handleWellnessActivityCompleted = () => {
+      console.log('ActivityGraphScreen - Wellness activity completed, refreshing graph data...');
+      if (isAuthenticated) {
+        loadWeeklyData(true);
+      }
+    };
+
+    const handleWellnessActivityUpdated = () => {
+      console.log('ActivityGraphScreen - Wellness activity updated, refreshing graph data...');
+      if (isAuthenticated) {
+        loadWeeklyData(true);
+      }
+    };
+
+    const handleWellnessActivityDeleted = () => {
+      console.log('ActivityGraphScreen - Wellness activity deleted, refreshing graph data...');
+      if (isAuthenticated) {
+        loadWeeklyData(true);
+      }
+    };
+
+    try {
+      // Add event listeners
+      eventEmitter.on('dataRefresh', handleDataRefresh);
+      eventEmitter.on('mealLogged', handleMealLogged);
+      eventEmitter.on('waterLogged', handleWaterLogged);
+      eventEmitter.on('fitnessLogged', handleFitnessLogged);
+      eventEmitter.on('sleepLogged', handleSleepLogged);
+      eventEmitter.on('moodLogged', handleMoodLogged);
+      eventEmitter.on('wellnessActivityCompleted', handleWellnessActivityCompleted);
+      eventEmitter.on('wellnessActivityUpdated', handleWellnessActivityUpdated);
+      eventEmitter.on('wellnessActivityDeleted', handleWellnessActivityDeleted);
+    } catch (error) {
+      console.error('ActivityGraphScreen - Error setting up event listeners:', error);
+    }
+
+    return () => {
+      try {
+              // Remove event listeners
+      eventEmitter.off('dataRefresh', handleDataRefresh);
+      eventEmitter.off('mealLogged', handleMealLogged);
+      eventEmitter.off('waterLogged', handleWaterLogged);
+      eventEmitter.off('fitnessLogged', handleFitnessLogged);
+      eventEmitter.off('sleepLogged', handleSleepLogged);
+      eventEmitter.off('moodLogged', handleMoodLogged);
+      eventEmitter.off('wellnessActivityCompleted', handleWellnessActivityCompleted);
+      eventEmitter.off('wellnessActivityUpdated', handleWellnessActivityUpdated);
+      eventEmitter.off('wellnessActivityDeleted', handleWellnessActivityDeleted);
+      } catch (error) {
+        console.error('ActivityGraphScreen - Error removing event listeners:', error);
+      }
+    };
+  }, [isAuthenticated, loadWeeklyData]);
 
   const getChartData = (): ChartData => {
     const labels = weeklyData.map(item => {
@@ -581,17 +708,27 @@ const ActivityGraphScreen = ({ navigation }: any) => {
         </TouchableOpacity>
         <View style={styles.headerContent}>
           <Text style={styles.headerTitle}>Activity Graphs</Text>
-          <Text style={styles.headerSubtitle}>Monitor aktivitas mingguan Anda</Text>
+          <Text style={styles.headerSubtitle}>
+            Monitor aktivitas mingguan Anda
+            {lastSyncTime && (
+              <Text style={styles.syncTime}>
+                {' • Terakhir sync: ' + lastSyncTime.toLocaleTimeString('id-ID', { 
+                  hour: '2-digit', 
+                  minute: '2-digit' 
+                })}
+              </Text>
+            )}
+          </Text>
         </View>
         <TouchableOpacity
           style={styles.refreshButton}
-          onPress={loadWeeklyData}
-          disabled={loading}
+          onPress={() => loadWeeklyData(true)}
+          disabled={loading || refreshing}
         >
           <Icon 
-            name={loading ? "loading" : "refresh"} 
+            name={loading || refreshing ? "loading" : "refresh"} 
             size={20} 
-            color={loading ? "#9CA3AF" : "#667eea"} 
+            color={loading || refreshing ? "#9CA3AF" : "#667eea"} 
           />
         </TouchableOpacity>
       </View>
@@ -600,6 +737,14 @@ const ActivityGraphScreen = ({ navigation }: any) => {
         style={styles.container}
         contentContainerStyle={styles.contentContainer}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={() => loadWeeklyData(true)}
+            colors={["#E22345"]}
+            tintColor="#E22345"
+          />
+        }
       >
         {/* Chart Type Selector */}
         {renderChartSelector()}
@@ -608,7 +753,12 @@ const ActivityGraphScreen = ({ navigation }: any) => {
         <View style={styles.chartHeader}>
           <View style={styles.chartTitleContainer}>
             <Text style={styles.chartTitle}>{getChartTitle(selectedChart)}</Text>
-            <Text style={styles.chartSubtitle}>7 hari terakhir</Text>
+            <Text style={styles.chartSubtitle}>
+              7 hari terakhir
+              {refreshing && (
+                <Text style={styles.syncIndicator}> • Sinkronisasi...</Text>
+              )}
+            </Text>
           </View>
           
           {/* Toggle Controls */}
@@ -649,6 +799,19 @@ const ActivityGraphScreen = ({ navigation }: any) => {
 
         {/* Stats Cards */}
         {renderStats()}
+
+        {/* Sync Success Message */}
+        {showSyncSuccess && (
+          <View style={styles.syncSuccessContainer}>
+            <LinearGradient
+              colors={["#10B981", "#059669"]}
+              style={styles.syncSuccessCard}
+            >
+              <Icon name="check-circle" size={20} color="#FFFFFF" />
+              <Text style={styles.syncSuccessText}>Data berhasil disinkronkan</Text>
+            </LinearGradient>
+          </View>
+        )}
 
         {/* Chart Container */}
         <View style={styles.chartWrapper}>
@@ -697,6 +860,18 @@ const ActivityGraphScreen = ({ navigation }: any) => {
               Menampilkan grafik bar untuk {getChartTitle(selectedChart).toLowerCase()}
             </Text>
           </View>
+
+          <View style={[styles.insightCard, { backgroundColor: "#F0FDF4", borderLeftColor: "#10B981" }]}>
+            <Icon name="database" size={20} color="#10B981" />
+            <Text style={[styles.insightText, { color: "#166534" }]}>
+              Data sinkronisasi langsung dari database • Auto-refresh saat ada aktivitas baru
+              {(!eventEmitter || typeof eventEmitter.on !== 'function') && (
+                <Text style={[styles.insightText, { color: "#DC2626", fontSize: 12 }]}>
+                  {'\n'}⚠️ Real-time updates tidak tersedia
+                </Text>
+              )}
+            </Text>
+          </View>
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -739,6 +914,37 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#64748B",
     fontWeight: "500",
+  },
+  syncTime: {
+    fontSize: 12,
+    color: "#10B981",
+    fontWeight: "600",
+  },
+  syncIndicator: {
+    fontSize: 12,
+    color: "#F59E0B",
+    fontWeight: "600",
+  },
+  syncSuccessContainer: {
+    paddingHorizontal: 20,
+    marginBottom: 16,
+  },
+  syncSuccessCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderRadius: 12,
+    padding: 16,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  syncSuccessText: {
+    fontSize: 14,
+    color: "#FFFFFF",
+    fontWeight: "600",
+    marginLeft: 8,
   },
   refreshButton: {
     padding: 8,

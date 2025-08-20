@@ -4,9 +4,9 @@
     "slug": "doctor-phc-indonesia",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png", // <- Ganti file ini dengan logo baru 512x512px
+    "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
-    "newArchEnabled": true,
+    "newArchEnabled": false,
     "splash": {
       "image": "./assets/logo-phc-putih.png",
       "resizeMode": "contain",
@@ -30,7 +30,7 @@
       "package": "com.phc.doctorapp",
       "versionCode": 1,
       "adaptiveIcon": {
-        "foregroundImage": "./assets/icon.png", // <- Ganti file ini dengan logo baru
+        "foregroundImage": "./assets/icon.png",
         "backgroundColor": "#D32F2F"
       },
       "edgeToEdgeEnabled": true,

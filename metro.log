@@ -1,0 +1,22 @@
+=================================================================================================
+From React Native 0.73, your project's Metro config should extend '@react-native/metro-config'
+or it will fail to build. Please copy the template at:
+https://github.com/react-native-community/template/blob/main/template/metro.config.js
+This warning will be removed in future (https://github.com/facebook/metro/issues/1018).
+=================================================================================================
+
+Welcome to React Native v0.79
+Starting dev server on http://localhost:8081
+
+error listen EADDRINUSE: address already in use :::8081.
+Error: listen EADDRINUSE: address already in use :::8081
+    at Server.setupListenHandle [as _listen2] (node:net:1940:16)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2102:7)
+    at /Users/wirawanawe/Project/phc-mobile/node_modules/metro/src/index.flow.js:358:14
+    at new Promise (<anonymous>)
+    at earlyPortCheck (/Users/wirawanawe/Project/phc-mobile/node_modules/metro/src/index.flow.js:354:11)
+    at exports.runServer (/Users/wirawanawe/Project/phc-mobile/node_modules/metro/src/index.flow.js:128:9)
+    at Object.runServer [as func] (/Users/wirawanawe/Project/phc-mobile/node_modules/@react-native/community-cli-plugin/dist/commands/start/runServer.js:147:47)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async Command.handleAction (/Users/wirawanawe/Project/phc-mobile/node_modules/@react-native-community/cli/build/index.js:139:9)

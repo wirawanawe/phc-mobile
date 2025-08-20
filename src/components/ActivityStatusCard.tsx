@@ -74,8 +74,18 @@ const ActivityStatusCard: React.FC<ActivityStatusCardProps> = ({ onPress }) => {
       }
     } catch (error) {
       console.error('Error loading today data:', error);
-      // Handle authentication errors silently - don't show alert for background data loading
-      handleAuthError(error);
+      
+      // Handle different types of errors appropriately
+      if (error.message && error.message.includes('timeout')) {
+        console.warn('Connection timeout detected in activity data loading, using cached data');
+        // Don't show alert for timeout errors in background loading
+      } else if (error.message && (error.message.includes('Authentication failed') || error.message.includes('401'))) {
+        // Handle authentication errors silently - don't show alert for background data loading
+        handleAuthError(error);
+      } else {
+        // For other errors, just log them without showing alerts
+        console.warn('Activity data loading error (non-critical):', error.message);
+      }
     } finally {
       setLoading(false);
     }

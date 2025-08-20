@@ -1,0 +1,1390 @@
+{
+  "info": {
+    "name": "PHC Mobile API Collection",
+    "description": "Complete API collection for PHC Mobile Application - All endpoints for testing in Postman",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_postman_id": "phc-mobile-api-collection"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:3000/api",
+      "type": "string"
+    },
+    {
+      "key": "token",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Auto-login if token is not available",
+          "if (!pm.environment.get(\"token\") || pm.environment.get(\"token\") === \"\") {",
+          "    pm.sendRequest({",
+          "        url: pm.environment.get(\"base_url\") + \"/mobile/auth/login\",",
+          "        method: \"POST\",",
+          "        header: {",
+          "            \"Content-Type\": \"application/json\"",
+          "        },",
+          "        body: {",
+          "            mode: \"raw\",",
+          "            raw: JSON.stringify({",
+          "                email: \"test@mobile.com\",",
+          "                password: \"password123\"",
+          "            })",
+          "        }",
+          "    }, function (err, response) {",
+          "        if (response.code === 200) {",
+          "            const data = response.json();",
+          "            pm.environment.set(\"token\", data.data.accessToken);",
+          "        }",
+          "    });",
+          "}"
+        ]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Basic response validation",
+          "pm.test(\"Status code is 200 or 201\", function () {",
+          "    pm.expect(pm.response.code).to.be.oneOf([200, 201]);",
+          "});",
+          "",
+          "pm.test(\"Response has success property\", function () {",
+          "    const response = pm.response.json();",
+          "    pm.expect(response).to.have.property('success');",
+          "});",
+          "",
+          "pm.test(\"Response time is less than 2000ms\", function () {",
+          "    pm.expect(pm.response.responseTime).to.be.below(2000);",
+          "});"
+        ]
+      }
+    }
+  ],
+  "item": [
+    {
+      "name": "🔐 Authentication",
+      "item": [
+        {
+          "name": "Mobile Login",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"test@mobile.com\",\n  \"password\": \"password123\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/mobile/auth/login",
+              "host": ["{{base_url}}"],
+              "path": ["mobile", "auth", "login"]
+            }
+          }
+        },
+        {
+          "name": "Mobile Register",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"John Doe\",\n  \"email\": \"john@example.com\",\n  \"password\": \"password123\",\n  \"phone\": \"081234567890\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/mobile/auth/register",
+              "host": ["{{base_url}}"],
+              "path": ["mobile", "auth", "register"]
+            }
+          }
+        },
+        {
+          "name": "Refresh Token",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{refresh_token}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/mobile/auth/refresh",
+              "host": ["{{base_url}}"],
+              "path": ["mobile", "auth", "refresh"]
+            }
+          }
+        },
+        {
+          "name": "Get Current User Profile",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/mobile/auth/me",
+              "host": ["{{base_url}}"],
+              "path": ["mobile", "auth", "me"]
+            }
+          }
+        },
+        {
+          "name": "Update User Profile",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Updated Name\",\n  \"phone\": \"081234567890\",\n  \"date_of_birth\": \"1990-01-01\",\n  \"gender\": \"male\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/mobile/auth/profile",
+              "host": ["{{base_url}}"],
+              "path": ["mobile", "auth", "profile"]
+            }
+          }
+        },
+        {
+          "name": "Dashboard Login",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"admin@example.com\",\n  \"password\": \"password123\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/login",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "login"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "👤 User Management",
+      "item": [
+        {
+          "name": "Get All Mobile Users",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/mobile/users",
+              "host": ["{{base_url}}"],
+              "path": ["mobile", "users"]
+            }
+          }
+        },
+        {
+          "name": "Get User by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/mobile/users/1",
+              "host": ["{{base_url}}"],
+              "path": ["mobile", "users", "1"]
+            }
+          }
+        },
+        {
+          "name": "Get User Statistics",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/mobile/users/stats",
+              "host": ["{{base_url}}"],
+              "path": ["mobile", "users", "stats"]
+            }
+          }
+        },
+        {
+          "name": "Create New Mobile User",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"New User\",\n  \"email\": \"newuser@example.com\",\n  \"password\": \"password123\",\n  \"phone\": \"081234567890\",\n  \"date_of_birth\": \"1990-01-01\",\n  \"gender\": \"male\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/mobile/users",
+              "host": ["{{base_url}}"],
+              "path": ["mobile", "users"]
+            }
+          }
+        },
+        {
+          "name": "Update User Weight",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"weight\": 75.5\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/mobile/users/update-weight",
+              "host": ["{{base_url}}"],
+              "path": ["mobile", "users", "update-weight"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "🏥 Clinic & Doctor",
+      "item": [
+        {
+          "name": "Get All Clinics",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/mobile/clinics",
+              "host": ["{{base_url}}"],
+              "path": ["mobile", "clinics"]
+            }
+          }
+        },
+        {
+          "name": "Get Consultation Doctors",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/mobile/clinics/consultation/doctors",
+              "host": ["{{base_url}}"],
+              "path": ["mobile", "clinics", "consultation", "doctors"]
+            }
+          }
+        },
+        {
+          "name": "Create New Clinic",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"New Clinic\",\n  \"address\": \"Jl. Example No. 123\",\n  \"phone\": \"021-1234567\",\n  \"polyclinic_id\": 1\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/mobile/clinics",
+              "host": ["{{base_url}}"],
+              "path": ["mobile", "clinics"]
+            }
+          }
+        },
+        {
+          "name": "Get All Doctors",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/doctors",
+              "host": ["{{base_url}}"],
+              "path": ["doctors"]
+            }
+          }
+        },
+        {
+          "name": "Get Doctor by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/doctors/1",
+              "host": ["{{base_url}}"],
+              "path": ["doctors", "1"]
+            }
+          }
+        },
+        {
+          "name": "Create New Doctor",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Dr. John Doe\",\n  \"specialization\": \"Cardiology\",\n  \"license_number\": \"12345\",\n  \"phone\": \"081234567890\",\n  \"email\": \"doctor@example.com\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/doctors",
+              "host": ["{{base_url}}"],
+              "path": ["doctors"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "📋 Patient & Visit",
+      "item": [
+        {
+          "name": "Get Mobile Visits",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/mobile/visits",
+              "host": ["{{base_url}}"],
+              "path": ["mobile", "visits"]
+            }
+          }
+        },
+        {
+          "name": "Create New Visit",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"patient_id\": 1,\n  \"doctor_id\": 1,\n  \"clinic_id\": 1,\n  \"visit_date\": \"2024-01-15\",\n  \"symptoms\": \"Headache and fever\",\n  \"diagnosis\": \"Common cold\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/mobile/visits",
+              "host": ["{{base_url}}"],
+              "path": ["mobile", "visits"]
+            }
+          }
+        },
+        {
+          "name": "Get All Visits (Dashboard)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/visits",
+              "host": ["{{base_url}}"],
+              "path": ["visits"]
+            }
+          }
+        },
+        {
+          "name": "Get Visit by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/visits/1",
+              "host": ["{{base_url}}"],
+              "path": ["visits", "1"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "💊 Medicine & Examination",
+      "item": [
+        {
+          "name": "Get All Medicines",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/medicine",
+              "host": ["{{base_url}}"],
+              "path": ["medicine"]
+            }
+          }
+        },
+        {
+          "name": "Get Medicine by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/medicine/1",
+              "host": ["{{base_url}}"],
+              "path": ["medicine", "1"]
+            }
+          }
+        },
+        {
+          "name": "Create New Medicine",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Paracetamol\",\n  \"generic_name\": \"Acetaminophen\",\n  \"dosage_form\": \"Tablet\",\n  \"strength\": \"500mg\",\n  \"manufacturer\": \"Pharma Corp\",\n  \"price\": 5000\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/medicine",
+              "host": ["{{base_url}}"],
+              "path": ["medicine"]
+            }
+          }
+        },
+        {
+          "name": "Get All Examinations",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/examinations",
+              "host": ["{{base_url}}"],
+              "path": ["examinations"]
+            }
+          }
+        },
+        {
+          "name": "Create New Examination",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"patient_id\": 1,\n  \"doctor_id\": 1,\n  \"examination_date\": \"2024-01-15\",\n  \"type\": \"Physical Examination\",\n  \"results\": \"Normal\",\n  \"notes\": \"Patient is healthy\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/examinations",
+              "host": ["{{base_url}}"],
+              "path": ["examinations"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "🎯 Mission & Activity",
+      "item": [
+        {
+          "name": "Get Mission by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/mobile/missions/1",
+              "host": ["{{base_url}}"],
+              "path": ["mobile", "missions", "1"]
+            }
+          }
+        },
+        {
+          "name": "Get User Missions",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/mobile/missions/my-missions",
+              "host": ["{{base_url}}"],
+              "path": ["mobile", "missions", "my-missions"]
+            }
+          }
+        },
+        {
+          "name": "Get Mission Statistics",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/mobile/missions/stats",
+              "host": ["{{base_url}}"],
+              "path": ["mobile", "missions", "stats"]
+            }
+          }
+        },
+        {
+          "name": "Accept Mission",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            },
+            "url": {
+              "raw": "{{base_url}}/mobile/missions/accept/1",
+              "host": ["{{base_url}}"],
+              "path": ["mobile", "missions", "accept", "1"]
+            }
+          }
+        },
+        {
+          "name": "Update Mission Progress",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"progress\": 50,\n  \"status\": \"in_progress\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/mobile/missions/progress/1",
+              "host": ["{{base_url}}"],
+              "path": ["mobile", "missions", "progress", "1"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "📊 Health & Wellness",
+      "item": [
+        {
+          "name": "Get Health Status",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/mobile/health",
+              "host": ["{{base_url}}"],
+              "path": ["mobile", "health"]
+            }
+          }
+        },
+        {
+          "name": "Get Health Data",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/mobile/health/data",
+              "host": ["{{base_url}}"],
+              "path": ["mobile", "health", "data"]
+            }
+          }
+        },
+        {
+          "name": "Create Health Data",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data_type\": \"weight\",\n  \"value\": 70.5,\n  \"unit\": \"kg\",\n  \"date\": \"2024-01-15\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/mobile/health/data",
+              "host": ["{{base_url}}"],
+              "path": ["mobile", "health", "data"]
+            }
+          }
+        },
+        {
+          "name": "Get Sleep Tracking",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/mobile/sleep_tracking",
+              "host": ["{{base_url}}"],
+              "path": ["mobile", "sleep_tracking"]
+            }
+          }
+        },
+        {
+          "name": "Create Sleep Tracking",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sleep_date\": \"2024-01-15\",\n  \"bedtime\": \"22:00\",\n  \"wake_time\": \"06:00\",\n  \"sleep_quality\": \"good\",\n  \"notes\": \"Slept well\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/mobile/sleep_tracking",
+              "host": ["{{base_url}}"],
+              "path": ["mobile", "sleep_tracking"]
+            }
+          }
+        },
+        {
+          "name": "Get Mood Tracking",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/mobile/mood_tracking",
+              "host": ["{{base_url}}"],
+              "path": ["mobile", "mood_tracking"]
+            }
+          }
+        },
+        {
+          "name": "Get Today's Mood",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/mobile/mood_tracking/today",
+              "host": ["{{base_url}}"],
+              "path": ["mobile", "mood_tracking", "today"]
+            }
+          }
+        },
+        {
+          "name": "Create Mood Tracking",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"mood_date\": \"2024-01-15\",\n  \"mood_level\": 8,\n  \"mood_type\": \"happy\",\n  \"notes\": \"Had a great day\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/mobile/mood_tracking",
+              "host": ["{{base_url}}"],
+              "path": ["mobile", "mood_tracking"]
+            }
+          }
+        },
+        {
+          "name": "Get Wellness Progress",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/mobile/wellness-progress",
+              "host": ["{{base_url}}"],
+              "path": ["mobile", "wellness-progress"]
+            }
+          }
+        },
+        {
+          "name": "Get Wellness Statistics",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/mobile/wellness/stats",
+              "host": ["{{base_url}}"],
+              "path": ["mobile", "wellness", "stats"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "📅 Booking & Consultation",
+      "item": [
+        {
+          "name": "Get All Bookings",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/mobile/bookings",
+              "host": ["{{base_url}}"],
+              "path": ["mobile", "bookings"]
+            }
+          }
+        },
+        {
+          "name": "Get User Bookings",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/mobile/bookings/my-bookings",
+              "host": ["{{base_url}}"],
+              "path": ["mobile", "bookings", "my-bookings"]
+            }
+          }
+        },
+        {
+          "name": "Create New Booking",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"doctor_id\": 1,\n  \"clinic_id\": 1,\n  \"booking_date\": \"2024-01-20\",\n  \"booking_time\": \"09:00\",\n  \"consultation_type\": \"regular\",\n  \"notes\": \"Regular checkup\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/mobile/bookings",
+              "host": ["{{base_url}}"],
+              "path": ["mobile", "bookings"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "💬 Chat",
+      "item": [
+        {
+          "name": "Get Chat by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/chat/1",
+              "host": ["{{base_url}}"],
+              "path": ["chat", "1"]
+            }
+          }
+        },
+        {
+          "name": "Send Message",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"message\": \"Hello doctor, I have a question\",\n  \"sender_id\": 1,\n  \"receiver_id\": 2\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/chat/1",
+              "host": ["{{base_url}}"],
+              "path": ["chat", "1"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "🔧 App & System",
+      "item": [
+        {
+          "name": "Get App Configuration",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/mobile/app/config",
+              "host": ["{{base_url}}"],
+              "path": ["mobile", "app", "config"]
+            }
+          }
+        },
+        {
+          "name": "Get App Version",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/mobile/app/version",
+              "host": ["{{base_url}}"],
+              "path": ["mobile", "app", "version"]
+            }
+          }
+        },
+        {
+          "name": "Get App Status",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/mobile/app/status",
+              "host": ["{{base_url}}"],
+              "path": ["mobile", "app", "status"]
+            }
+          }
+        },
+        {
+          "name": "Get App Analytics",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/mobile/app/analytics",
+              "host": ["{{base_url}}"],
+              "path": ["mobile", "app", "analytics"]
+            }
+          }
+        },
+        {
+          "name": "Get App Settings",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/mobile/settings",
+              "host": ["{{base_url}}"],
+              "path": ["mobile", "settings"]
+            }
+          }
+        },
+        {
+          "name": "Update App Settings",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"notifications_enabled\": true,\n  \"dark_mode\": false,\n  \"language\": \"id\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/mobile/settings",
+              "host": ["{{base_url}}"],
+              "path": ["mobile", "settings"]
+            }
+          }
+        },
+        {
+          "name": "Get Notifications",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/mobile/notifications",
+              "host": ["{{base_url}}"],
+              "path": ["mobile", "notifications"]
+            }
+          }
+        },
+        {
+          "name": "Mark All Notifications as Read",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            },
+            "url": {
+              "raw": "{{base_url}}/mobile/notifications/mark-all-read",
+              "host": ["{{base_url}}"],
+              "path": ["mobile", "notifications", "mark-all-read"]
+            }
+          }
+        },
+        {
+          "name": "Test Connection",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/mobile/test-connection",
+              "host": ["{{base_url}}"],
+              "path": ["mobile", "test-connection"]
+            }
+          }
+        },
+        {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/health",
+              "host": ["{{base_url}}"],
+              "path": ["health"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "🏢 Master Data",
+      "item": [
+        {
+          "name": "Get All Companies",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/master/companies",
+              "host": ["{{base_url}}"],
+              "path": ["master", "companies"]
+            }
+          }
+        },
+        {
+          "name": "Get Company by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/master/companies/1",
+              "host": ["{{base_url}}"],
+              "path": ["master", "companies", "1"]
+            }
+          }
+        },
+        {
+          "name": "Create New Company",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"New Company\",\n  \"address\": \"Jl. Company No. 123\",\n  \"phone\": \"021-1234567\",\n  \"email\": \"info@company.com\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/master/companies",
+              "host": ["{{base_url}}"],
+              "path": ["master", "companies"]
+            }
+          }
+        },
+        {
+          "name": "Get All Polyclinics",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/master/polyclinics",
+              "host": ["{{base_url}}"],
+              "path": ["master", "polyclinics"]
+            }
+          }
+        },
+        {
+          "name": "Get All Insurance",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/master/insurance",
+              "host": ["{{base_url}}"],
+              "path": ["master", "insurance"]
+            }
+          }
+        },
+        {
+          "name": "Get All Treatments",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/master/treatments",
+              "host": ["{{base_url}}"],
+              "path": ["master", "treatments"]
+            }
+          }
+        },
+        {
+          "name": "Get Provinces",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/regions/provinces",
+              "host": ["{{base_url}}"],
+              "path": ["regions", "provinces"]
+            }
+          }
+        },
+        {
+          "name": "Get Cities",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/regions/cities",
+              "host": ["{{base_url}}"],
+              "path": ["regions", "cities"]
+            }
+          }
+        },
+        {
+          "name": "Get Districts",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/regions/districts",
+              "host": ["{{base_url}}"],
+              "path": ["regions", "districts"]
+            }
+          }
+        },
+        {
+          "name": "Get Villages",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/regions/villages",
+              "host": ["{{base_url}}"],
+              "path": ["regions", "villages"]
+            }
+          }
+        },
+        {
+          "name": "Get Postal Codes",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/postal-codes",
+              "host": ["{{base_url}}"],
+              "path": ["postal-codes"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "⚙️ Settings",
+      "item": [
+        {
+          "name": "Get Settings Companies",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/settings/companies",
+              "host": ["{{base_url}}"],
+              "path": ["settings", "companies"]
+            }
+          }
+        },
+        {
+          "name": "Get Settings Polyclinics",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/settings/polyclinics",
+              "host": ["{{base_url}}"],
+              "path": ["settings", "polyclinics"]
+            }
+          }
+        },
+        {
+          "name": "Get Settings Insurance",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/settings/insurance",
+              "host": ["{{base_url}}"],
+              "path": ["settings", "insurance"]
+            }
+          }
+        },
+        {
+          "name": "Get Settings Treatments",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/settings/treatments",
+              "host": ["{{base_url}}"],
+              "path": ["settings", "treatments"]
+            }
+          }
+        },
+        {
+          "name": "Get ICD Codes",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/settings/icd",
+              "host": ["{{base_url}}"],
+              "path": ["settings", "icd"]
+            }
+          }
+        },
+        {
+          "name": "Create Settings Company",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Settings Company\",\n  \"address\": \"Jl. Settings No. 123\",\n  \"phone\": \"021-1234567\",\n  \"email\": \"settings@company.com\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/settings/companies",
+              "host": ["{{base_url}}"],
+              "path": ["settings", "companies"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "📊 Dashboard",
+      "item": [
+        {
+          "name": "Get Dashboard Statistics",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/dashboard/stats",
+              "host": ["{{base_url}}"],
+              "path": ["dashboard", "stats"]
+            }
+          }
+        },
+        {
+          "name": "Get Dashboard Rooms",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/dashboard/rooms",
+              "host": ["{{base_url}}"],
+              "path": ["dashboard", "rooms"]
+            }
+          }
+        },
+        {
+          "name": "Get Wellness Activities",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/dashboard/wellness-activities",
+              "host": ["{{base_url}}"],
+              "path": ["dashboard", "wellness-activities"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "🧪 Laboratory",
+      "item": [
+        {
+          "name": "Get Laboratory Results",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/laboratory/results",
+              "host": ["{{base_url}}"],
+              "path": ["laboratory", "results"]
+            }
+          }
+        },
+        {
+          "name": "Create Laboratory Result",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"patient_id\": 1,\n  \"test_name\": \"Blood Test\",\n  \"test_date\": \"2024-01-15\",\n  \"results\": \"Normal\",\n  \"notes\": \"All parameters within normal range\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/laboratory/results",
+              "host": ["{{base_url}}"],
+              "path": ["laboratory", "results"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "🔍 Test Endpoints",
+      "item": [
+        {
+          "name": "Test Database Connection",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/mobile/test-db",
+              "host": ["{{base_url}}"],
+              "path": ["mobile", "test-db"]
+            }
+          }
+        },
+        {
+          "name": "Test Database Tables",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/mobile/test-tables",
+              "host": ["{{base_url}}"],
+              "path": ["mobile", "test-tables"]
+            }
+          }
+        },
+        {
+          "name": "Test Wellness Features",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/mobile/test-wellness",
+              "host": ["{{base_url}}"],
+              "path": ["mobile", "test-wellness"]
+            }
+          }
+        },
+        {
+          "name": "Test Mobile API",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"test\": \"mobile_api\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/mobile/test",
+              "host": ["{{base_url}}"],
+              "path": ["mobile", "test"]
+            }
+          }
+        },
+        {
+          "name": "Setup Wellness",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"setup_type\": \"wellness\",\n  \"user_id\": 1\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/mobile/setup-wellness",
+              "host": ["{{base_url}}"],
+              "path": ["mobile", "setup-wellness"]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

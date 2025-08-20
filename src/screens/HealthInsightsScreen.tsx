@@ -15,6 +15,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { CustomTheme } from '../theme/theme';
 import ProgressRing from '../components/ProgressRing';
 import api from '../services/api';
+import eventEmitter from '../utils/eventEmitter';
 
 const { width } = Dimensions.get('window');
 
@@ -114,6 +115,20 @@ const HealthInsightsScreen = ({ navigation }: any) => {
 
   useEffect(() => {
     fetchDetailedMetrics();
+    
+    // Listen for mood logged events to refresh data immediately
+    const handleMoodLogged = () => {
+      console.log('HealthInsightsScreen - Mood logged event received, refreshing metrics...');
+      fetchDetailedMetrics();
+    };
+    
+    // Add event listeners
+    eventEmitter.on('moodLogged', handleMoodLogged);
+    
+    return () => {
+      // Remove event listeners
+      eventEmitter.off('moodLogged', handleMoodLogged);
+    };
   }, []);
 
   const fetchDetailedMetrics = async () => {

@@ -17,6 +17,7 @@ import { useAuth } from '../contexts/AuthContext';
 
 import api from '../services/api';
 import { handleAuthError, handleError } from '../utils/errorHandler';
+import eventEmitter from '../utils/eventEmitter';
 
 interface WellnessActivity {
   id: number;
@@ -58,33 +59,7 @@ const ActivityScreen = ({ navigation }: any) => {
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
   const [activeTab, setActiveTab] = useState<'activities' | 'history'>('activities');
 
-  // Add missing state variables
-  const [showCompletionModal, setShowCompletionModal] = useState(false);
-  const [selectedActivity, setSelectedActivity] = useState<WellnessActivity | null>(null);
-  const [completionData, setCompletionData] = useState<{
-    duration: number;
-    notes: string;
-    activity_type: string;
-    mood_before: string;
-    mood_after: string;
-    stress_level_before: string;
-    stress_level_after: string;
-  }>({
-    duration: 30,
-    notes: '',
-    activity_type: 'normal',
-    mood_before: 'neutral',
-    mood_after: 'neutral',
-    stress_level_before: 'low',
-    stress_level_after: 'low'
-  });
-  const [calculatedPoints, setCalculatedPoints] = useState(0);
 
-  const activityTypes: Record<string, { name: string; multiplier: number }> = {
-    normal: { name: "Normal", multiplier: 1 },
-    intense: { name: "Intensif", multiplier: 1.5 },
-    relaxed: { name: "Santai", multiplier: 0.8 }
-  };
 
   const getDifficultyColor = (difficulty: string | undefined) => {
     if (!difficulty) return '#6B7280';
@@ -109,19 +84,97 @@ const ActivityScreen = ({ navigation }: any) => {
     }
   }, [isAuthenticated]);
 
+  // Listen for wellness activity events
+  useEffect(() => {
+    const handleWellnessActivityCompleted = () => {
+      console.log('ActivityScreen - Wellness activity completed, refreshing data...');
+      loadWellnessActivities();
+      if (isAuthenticated) {
+        loadUserActivityHistory();
+      }
+    };
+
+    const handleWellnessActivityUpdated = () => {
+      console.log('ActivityScreen - Wellness activity updated, refreshing data...');
+      loadWellnessActivities();
+      if (isAuthenticated) {
+        loadUserActivityHistory();
+      }
+    };
+
+    const handleWellnessActivityDeleted = () => {
+      console.log('ActivityScreen - Wellness activity deleted, refreshing data...');
+      loadWellnessActivities();
+      if (isAuthenticated) {
+        loadUserActivityHistory();
+      }
+    };
+
+    const handleWellnessActivityReset = () => {
+      console.log('ActivityScreen - Wellness activity reset detected, refreshing data...');
+      loadWellnessActivities();
+      if (isAuthenticated) {
+        loadUserActivityHistory();
+      }
+    };
+
+    const handleDataRefresh = () => {
+      console.log('ActivityScreen - Data refresh event, refreshing data...');
+      loadWellnessActivities();
+      if (isAuthenticated) {
+        loadUserActivityHistory();
+      }
+    };
+
+    // Add event listeners
+    eventEmitter.on('wellnessActivityCompleted', handleWellnessActivityCompleted);
+    eventEmitter.on('wellnessActivityUpdated', handleWellnessActivityUpdated);
+    eventEmitter.on('wellnessActivityDeleted', handleWellnessActivityDeleted);
+    eventEmitter.on('wellnessActivityReset', handleWellnessActivityReset);
+    eventEmitter.on('dataRefresh', handleDataRefresh);
+
+    return () => {
+      // Remove event listeners
+      eventEmitter.off('wellnessActivityCompleted', handleWellnessActivityCompleted);
+      eventEmitter.off('wellnessActivityUpdated', handleWellnessActivityUpdated);
+      eventEmitter.off('wellnessActivityDeleted', handleWellnessActivityDeleted);
+      eventEmitter.off('wellnessActivityReset', handleWellnessActivityReset);
+      eventEmitter.off('dataRefresh', handleDataRefresh);
+    };
+  }, [isAuthenticated]);
+
+  // Remove automatic focus refresh - manual refresh only
+  // useEffect(() => {
+  //   const unsubscribe = navigation.addListener('focus', () => {
+  //     if (isAuthenticated) {
+  //       loadUserActivityHistory();
+  //     }
+  //   });
+
+  //   return unsubscribe;
+  // }, [navigation, isAuthenticated]);
+
   const loadWellnessActivities = async () => {
     try {
       setIsLoadingWellness(true);
+      console.log('🔄 Loading wellness activities...');
       const response = await api.getWellnessActivities();
+      console.log('📊 Wellness activities response:', response);
+      
       if (response.success) {
+        console.log('✅ Wellness activities loaded successfully:', response.data?.length || 0, 'activities');
         setWellnessActivities(response.data || []);
+      } else {
+        console.warn('❌ Wellness activities response not successful:', response.message);
+        setWellnessActivities([]);
       }
     } catch (error) {
-      console.error('Error loading wellness activities:', error);
+      console.error('❌ Error loading wellness activities:', error);
       handleError(error, {
         title: 'Error Loading Activities',
         showAlert: false
       });
+      setWellnessActivities([]);
     } finally {
       setIsLoadingWellness(false);
     }
@@ -146,120 +199,130 @@ const ActivityScreen = ({ navigation }: any) => {
   };
 
   const handleWellnessActivitySelect = (activity: WellnessActivity) => {
-    setSelectedActivity(activity);
-    const activityDuration = activity.duration_minutes || 30;
-    setCompletionData({
-      duration: activityDuration,
-      notes: '',
-      activity_type: 'normal',
-      mood_before: 'neutral',
-      mood_after: 'neutral',
-      stress_level_before: 'low',
-      stress_level_after: 'low'
-    });
-    // Set initial points based on activity
-    const basePoints = activity.points || 0;
-    setCalculatedPoints(basePoints);
-    setShowCompletionModal(true);
+    navigation.navigate('WellnessActivityCompletion', { activity });
   };
 
-  // Update calculated points when activity type or duration changes
-  useEffect(() => {
-    if (selectedActivity) {
-      const activityType = activityTypes[completionData.activity_type];
-      const basePoints = selectedActivity.points || 0;
-      const activityDuration = selectedActivity.duration_minutes || 30;
-      const userDuration = completionData.duration || activityDuration;
-      
-      // Calculate duration multiplier (max 2x)
-      const durationMultiplier = Math.min(userDuration / activityDuration, 2);
-      
-      // Get type multiplier
-      const typeMultiplier = activityType ? activityType.multiplier : 1;
-      
-      // Calculate final points
-      const calculated = Math.round(basePoints * durationMultiplier * typeMultiplier);
-      setCalculatedPoints(calculated);
-    }
-  }, [selectedActivity, completionData.activity_type, completionData.duration]);
-
-  const handleCompleteActivity = async () => {
-    if (!selectedActivity) return;
-
-    try {
-      const activityData = {
-        activity_id: selectedActivity.id,
-        activity_name: selectedActivity.title,
-        activity_type: completionData.activity_type,
-        activity_category: selectedActivity.category,
-        duration: completionData.duration,
-        points_earned: calculatedPoints,
-        notes: completionData.notes,
-        mood_before: completionData.mood_before,
-        mood_after: completionData.mood_after,
-        stress_level_before: completionData.stress_level_before,
-        stress_level_after: completionData.stress_level_after
-      };
-
-      const response = await api.completeWellnessActivity(activityData);
-      
-      if (response.success) {
-        Alert.alert(
-          'Success!',
-          `Activity completed successfully!\n\nYou earned ${calculatedPoints} points.`,
-          [
-            {
-              text: 'OK',
-              onPress: () => {
-                setShowCompletionModal(false);
-                setSelectedActivity(null);
-                // Reload user activity history
-                if (isAuthenticated) {
-                  loadUserActivityHistory();
-                }
+  const handleDeleteActivity = async (activityId: number) => {
+    Alert.alert(
+      'Hapus Aktivitas',
+      'Apakah Anda yakin ingin menghapus aktivitas ini dari riwayat?',
+      [
+        {
+          text: 'Batal',
+          style: 'cancel',
+        },
+        {
+          text: 'Hapus',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const response = await api.resetWellnessActivities(activityId);
+              if (response.success) {
+                // Emit event to refresh all related data
+                eventEmitter.emitWellnessActivityDeleted();
+                eventEmitter.emitDataRefresh();
+                
+                // Reload history after deletion
+                loadUserActivityHistory();
+                Alert.alert('Berhasil', 'Aktivitas berhasil dihapus dari riwayat');
+              } else {
+                Alert.alert('Error', response.message || 'Gagal menghapus aktivitas');
               }
+            } catch (error) {
+              console.error('Error deleting activity:', error);
+              Alert.alert('Error', 'Gagal menghapus aktivitas');
             }
-          ]
-        );
-      } else {
-        Alert.alert('Error', response.message || 'Failed to complete activity');
-      }
-    } catch (error) {
-      console.error('Error completing activity:', error);
-      handleError(error, {
-        title: 'Error Completing Activity',
-        showAlert: true
-      });
-    }
+          },
+        },
+      ]
+    );
   };
 
 
-  const renderWellnessActivity = ({ item }: { item: WellnessActivity }) => (
-    <TouchableOpacity
-      style={styles.wellnessActivityCard}
-      onPress={() => handleWellnessActivitySelect(item)}
-    >
-      <View style={styles.wellnessActivityIcon}>
-        <Icon name="heart-pulse" size={24} color="#10B981" />
-      </View>
-      <View style={styles.wellnessActivityInfo}>
-        <Text style={styles.wellnessActivityTitle}>{item.title || ''}</Text>
-        <Text style={styles.wellnessActivityDescription}>{item.description || ''}</Text>
-        <View style={styles.wellnessActivityStats}>
-          <Text style={styles.wellnessActivityStat}>{item.duration_minutes || 0} min</Text>
-          <Text style={styles.wellnessActivityStat}>•</Text>
-          <Text style={styles.wellnessActivityStat}>{item.points || 0} points</Text>
-          <Text style={styles.wellnessActivityStat}>•</Text>
-          <Text style={styles.wellnessActivityStat}>{item.difficulty || ''}</Text>
+
+
+  const renderWellnessActivity = ({ item }: { item: WellnessActivity }) => {
+    // Check if this activity is already completed today
+    const isCompletedToday = userActivities.some(
+      userActivity => userActivity.activity_id === item.id && 
+      new Date(userActivity.activity_date).toDateString() === new Date().toDateString()
+    );
+
+    return (
+      <TouchableOpacity
+        style={[
+          styles.wellnessActivityCard,
+          isCompletedToday && styles.wellnessActivityCardDisabled
+        ]}
+        onPress={() => !isCompletedToday && handleWellnessActivitySelect(item)}
+        disabled={isCompletedToday}
+      >
+        <View style={styles.wellnessActivityIcon}>
+          <Icon 
+            name={isCompletedToday ? "check-circle" : "heart-pulse"} 
+            size={24} 
+            color={isCompletedToday ? "#9CA3AF" : "#10B981"} 
+          />
         </View>
-      </View>
-      <Icon name="chevron-right" size={20} color="#9CA3AF" />
-    </TouchableOpacity>
-  );
+        <View style={styles.wellnessActivityInfo}>
+          <Text style={[
+            styles.wellnessActivityTitle,
+            isCompletedToday && styles.wellnessActivityTitleDisabled
+          ]}>
+            {item.title || ''}
+          </Text>
+          <Text style={[
+            styles.wellnessActivityDescription,
+            isCompletedToday && styles.wellnessActivityDescriptionDisabled
+          ]}>
+            {item.description || ''}
+          </Text>
+          <View style={styles.wellnessActivityStats}>
+            <Text style={[
+              styles.wellnessActivityStat,
+              isCompletedToday && styles.wellnessActivityStatDisabled
+            ]}>
+              {item.duration_minutes || 0} min
+            </Text>
+            <Text style={[
+              styles.wellnessActivityStat,
+              isCompletedToday && styles.wellnessActivityStatDisabled
+            ]}>•</Text>
+            <Text style={[
+              styles.wellnessActivityStat,
+              isCompletedToday && styles.wellnessActivityStatDisabled
+            ]}>
+              {item.points || 0} points
+            </Text>
+            <Text style={[
+              styles.wellnessActivityStat,
+              isCompletedToday && styles.wellnessActivityStatDisabled
+            ]}>•</Text>
+            <Text style={[
+              styles.wellnessActivityStat,
+              isCompletedToday && styles.wellnessActivityStatDisabled
+            ]}>
+              {item.difficulty || ''}
+            </Text>
+          </View>
+          {isCompletedToday && (
+            <View style={styles.completedBadge}>
+              <Text style={styles.completedBadgeText}>Selesai Hari Ini</Text>
+            </View>
+          )}
+        </View>
+        <Icon 
+          name={isCompletedToday ? "check" : "chevron-right"} 
+          size={20} 
+          color={isCompletedToday ? "#9CA3AF" : "#9CA3AF"} 
+        />
+      </TouchableOpacity>
+    );
+  };
 
   const renderUserActivity = ({ item }: { item: UserWellnessActivity }) => (
     <View style={styles.userActivityCard}>
-      {/* Header with Title, Date, and Points */}
+      {/* Header with Title, Date, Points, and Delete Button */}
       <View style={styles.userActivityHeader}>
         <View style={styles.userActivityIconContainer}>
           <Icon name="check-circle" size={20} color="#10B981" />
@@ -279,8 +342,16 @@ const ActivityScreen = ({ navigation }: any) => {
         </View>
         <View style={styles.userActivityPoints}>
           <Icon name="star" size={16} color="#FFFFFF" />
-          <Text style={styles.userActivityPointsText}>+{item.points_earned || 0}</Text>
+          <Text style={styles.userActivityPointsText}>+{parseInt(item.points_earned) || 0}</Text>
           <Text style={styles.userActivityPointsLabel}>points</Text>
+        </View>
+        <View style={styles.userActivityActions}>
+          <TouchableOpacity
+            style={styles.deleteButton}
+            onPress={() => handleDeleteActivity(item.id)}
+          >
+            <Icon name="delete" size={16} color="#EF4444" />
+          </TouchableOpacity>
         </View>
       </View>
 
@@ -326,303 +397,10 @@ const ActivityScreen = ({ navigation }: any) => {
     </View>
   );
 
-  const renderCompletionModal = () => (
-    <Modal
-      visible={showCompletionModal}
-      animationType="slide"
-      transparent={true}
-      onRequestClose={() => setShowCompletionModal(false)}
-    >
-      <View style={styles.modalOverlay}>
-        <View style={styles.modalContent}>
-          <View style={styles.modalHeader}>
-            <View style={styles.modalHeaderContent}>
-              <Icon name="heart-pulse" size={24} color="#10B981" />
-              <Text style={styles.modalTitle}>Selesaikan Aktivitas</Text>
-            </View>
-            <TouchableOpacity
-              onPress={() => setShowCompletionModal(false)}
-              style={styles.closeButton}
-            >
-              <Icon name="close" size={24} color="#6B7280" />
-            </TouchableOpacity>
-          </View>
 
-          <ScrollView style={styles.modalBody} showsVerticalScrollIndicator={false}>
-            {/* Activity Info Card */}
-            <View style={styles.activityInfoCard}>
-              <View style={styles.activityInfoHeader}>
-                <Icon name="heart-pulse" size={32} color="#10B981" />
-                <View style={styles.activityInfoText}>
-                  <Text style={styles.activityName}>{selectedActivity?.title || ''}</Text>
-                  <Text style={styles.activityDescription}>{selectedActivity?.description || ''}</Text>
-                </View>
-              </View>
-              <View style={styles.activityInfoStats}>
-                <View style={styles.activityInfoStat}>
-                  <Icon name="clock-outline" size={16} color="#6B7280" />
-                  <Text style={styles.activityInfoStatText}>{selectedActivity?.duration_minutes || 0} min</Text>
-                </View>
-                <View style={styles.activityInfoStat}>
-                  <Icon name="star" size={16} color="#6B7280" />
-                  <Text style={styles.activityInfoStatText}>{selectedActivity?.difficulty || ''}</Text>
-                </View>
-                <View style={styles.activityInfoStat}>
-                  <Icon name="fire" size={16} color="#6B7280" />
-                  <Text style={styles.activityInfoStatText}>{selectedActivity?.points || 0} points</Text>
-                </View>
-              </View>
-            </View>
 
-            {/* Points Calculation Card */}
-            <View style={styles.pointsCalculationCard}>
-              <View style={styles.pointsCalculationHeader}>
-                <Icon name="calculator" size={20} color="#92400E" />
-                <Text style={styles.pointsCalculationTitle}>Perhitungan Poin</Text>
-              </View>
-              <View style={styles.pointsCalculationContent}>
-                <View style={styles.pointsCalculationRow}>
-                  <Text style={styles.pointsCalculationLabel}>Durasi:</Text>
-                  <Text style={styles.pointsCalculationValue}>{completionData.duration} menit</Text>
-                </View>
-                <View style={styles.pointsCalculationRow}>
-                  <Text style={styles.pointsCalculationLabel}>Tipe Aktivitas:</Text>
-                  <Text style={styles.pointsCalculationValue}>
-                    {activityTypes[completionData.activity_type]?.name} (x{activityTypes[completionData.activity_type]?.multiplier})
-                  </Text>
-                </View>
-                <View style={styles.pointsCalculationDivider} />
-                <View style={styles.pointsCalculationRow}>
-                  <Text style={styles.pointsCalculationTotalLabel}>Total Poin:</Text>
-                  <Text style={styles.pointsCalculationTotalValue}>{calculatedPoints}</Text>
-                </View>
-              </View>
-            </View>
 
-            {/* Activity Details Form */}
-            <View style={styles.formSection}>
-              <View style={styles.sectionHeader}>
-                <Icon name="clipboard-text" size={20} color="#374151" />
-                <Text style={styles.modalSectionTitle}>Detail Aktivitas</Text>
-              </View>
-              
-              <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>Tipe Aktivitas</Text>
-                <View style={styles.pickerContainer}>
-                  {Object.entries(activityTypes).map(([key, type]) => (
-                    <TouchableOpacity
-                      key={key}
-                      style={[
-                        styles.pickerOption,
-                        completionData.activity_type === key && styles.pickerOptionSelected
-                      ]}
-                      onPress={() => setCompletionData(prev => ({ ...prev, activity_type: key }))}
-                    >
-                      <Icon 
-                        name={key === 'intense' ? 'fire' : key === 'relaxed' ? 'leaf' : 'heart'} 
-                        size={16} 
-                        color={completionData.activity_type === key ? '#FFFFFF' : '#6B7280'} 
-                      />
-                      <Text style={[
-                        styles.pickerOptionText,
-                        completionData.activity_type === key && styles.pickerOptionTextSelected
-                      ]}>
-                        {type.name}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              </View>
-
-              <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>Durasi (menit)</Text>
-                <View style={styles.durationInputContainer}>
-                  <Icon name="clock-outline" size={20} color="#6B7280" />
-                  <TextInput
-                    style={styles.durationInput}
-                    value={String(completionData.duration)}
-                    onChangeText={(text) => setCompletionData(prev => ({ 
-                      ...prev, 
-                      duration: parseInt(text) || 0 
-                    }))}
-                    keyboardType="numeric"
-                    placeholder="30"
-                  />
-                </View>
-              </View>
-
-              <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>Catatan</Text>
-                <View style={styles.notesInputContainer}>
-                  <Icon name="note-text" size={20} color="#6B7280" />
-                  <TextInput
-                    style={styles.notesInput}
-                    value={completionData.notes}
-                    onChangeText={(text) => setCompletionData(prev => ({ ...prev, notes: text }))}
-                    placeholder="Tambahkan catatan tentang aktivitas Anda..."
-                    multiline
-                    numberOfLines={3}
-                  />
-                </View>
-              </View>
-            </View>
-
-            {/* Mood & Stress Tracking Form */}
-            <View style={styles.formSection}>
-              <View style={styles.sectionHeader}>
-                <Icon name="emoticon" size={20} color="#374151" />
-                <Text style={styles.modalSectionTitle}>Pelacakan Mood & Stres</Text>
-              </View>
-              
-              <View style={styles.moodStressContainer}>
-                <View style={styles.moodStressColumn}>
-                  <Text style={styles.moodStressLabel}>Mood Sebelum</Text>
-                  <View style={styles.moodStressOptions}>
-                    {['very_happy', 'happy', 'neutral', 'sad', 'very_sad'].map((mood) => (
-                      <TouchableOpacity
-                        key={mood}
-                        style={[
-                          styles.moodStressOption,
-                          completionData.mood_before === mood && styles.moodStressOptionSelected
-                        ]}
-                        onPress={() => setCompletionData(prev => ({ ...prev, mood_before: mood }))}
-                      >
-                        <Icon 
-                          name={mood === 'very_happy' ? 'emoticon-excited' : 
-                               mood === 'happy' ? 'emoticon-happy' : 
-                               mood === 'neutral' ? 'emoticon-neutral' : 
-                               mood === 'sad' ? 'emoticon-sad' : 'emoticon-cry'} 
-                          size={16} 
-                          color={completionData.mood_before === mood ? '#FFFFFF' : '#6B7280'} 
-                        />
-                        <Text style={[
-                          styles.moodStressOptionText,
-                          completionData.mood_before === mood && styles.moodStressOptionTextSelected
-                        ]}>
-                          {mood.replace('_', ' ').toUpperCase()}
-                        </Text>
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-                </View>
-
-                <View style={styles.moodStressColumn}>
-                  <Text style={styles.moodStressLabel}>Mood Sesudah</Text>
-                  <View style={styles.moodStressOptions}>
-                    {['very_happy', 'happy', 'neutral', 'sad', 'very_sad'].map((mood) => (
-                      <TouchableOpacity
-                        key={mood}
-                        style={[
-                          styles.moodStressOption,
-                          completionData.mood_after === mood && styles.moodStressOptionSelected
-                        ]}
-                        onPress={() => setCompletionData(prev => ({ ...prev, mood_after: mood }))}
-                      >
-                        <Icon 
-                          name={mood === 'very_happy' ? 'emoticon-excited' : 
-                               mood === 'happy' ? 'emoticon-happy' : 
-                               mood === 'neutral' ? 'emoticon-neutral' : 
-                               mood === 'sad' ? 'emoticon-sad' : 'emoticon-cry'} 
-                          size={16} 
-                          color={completionData.mood_after === mood ? '#FFFFFF' : '#6B7280'} 
-                        />
-                        <Text style={[
-                          styles.moodStressOptionText,
-                          completionData.mood_after === mood && styles.moodStressOptionTextSelected
-                        ]}>
-                          {mood.replace('_', ' ').toUpperCase()}
-                        </Text>
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-                </View>
-              </View>
-
-              <View style={styles.moodStressContainer}>
-                <View style={styles.moodStressColumn}>
-                  <Text style={styles.moodStressLabel}>Stres Sebelum</Text>
-                  <View style={styles.moodStressOptions}>
-                    {['very_low', 'low', 'medium', 'high', 'very_high'].map((stress) => (
-                      <TouchableOpacity
-                        key={stress}
-                        style={[
-                          styles.moodStressOption,
-                          completionData.stress_level_before === stress && styles.moodStressOptionSelected
-                        ]}
-                        onPress={() => setCompletionData(prev => ({ ...prev, stress_level_before: stress }))}
-                      >
-                        <Icon 
-                          name={stress === 'very_low' ? 'heart' : 
-                               stress === 'low' ? 'heart-outline' : 
-                               stress === 'medium' ? 'heart-half' : 
-                               stress === 'high' ? 'heart-broken' : 'heart-broken-outline'} 
-                          size={16} 
-                          color={completionData.stress_level_before === stress ? '#FFFFFF' : '#6B7280'} 
-                        />
-                        <Text style={[
-                          styles.moodStressOptionText,
-                          completionData.stress_level_before === stress && styles.moodStressOptionTextSelected
-                        ]}>
-                          {stress.replace('_', ' ').toUpperCase()}
-                        </Text>
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-                </View>
-
-                <View style={styles.moodStressColumn}>
-                  <Text style={styles.moodStressLabel}>Stres Sesudah</Text>
-                  <View style={styles.moodStressOptions}>
-                    {['very_low', 'low', 'medium', 'high', 'very_high'].map((stress) => (
-                      <TouchableOpacity
-                        key={stress}
-                        style={[
-                          styles.moodStressOption,
-                          completionData.stress_level_after === stress && styles.moodStressOptionSelected
-                        ]}
-                        onPress={() => setCompletionData(prev => ({ ...prev, stress_level_after: stress }))}
-                      >
-                        <Icon 
-                          name={stress === 'very_low' ? 'heart' : 
-                               stress === 'low' ? 'heart-outline' : 
-                               stress === 'medium' ? 'heart-half' : 
-                               stress === 'high' ? 'heart-broken' : 'heart-broken-outline'} 
-                          size={16} 
-                          color={completionData.stress_level_after === stress ? '#FFFFFF' : '#6B7280'} 
-                        />
-                        <Text style={[
-                          styles.moodStressOptionText,
-                          completionData.stress_level_after === stress && styles.moodStressOptionTextSelected
-                        ]}>
-                          {stress.replace('_', ' ').toUpperCase()}
-                        </Text>
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-                </View>
-              </View>
-            </View>
-          </ScrollView>
-
-          <View style={styles.modalFooter}>
-            <TouchableOpacity
-              style={styles.cancelButton}
-              onPress={() => setShowCompletionModal(false)}
-            >
-              <Text style={styles.cancelButtonText}>Batal</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.completeButton}
-              onPress={handleCompleteActivity}
-            >
-              <Icon name="check" size={20} color="#FFFFFF" />
-              <Text style={styles.completeButtonText}>Selesaikan</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </View>
-    </Modal>
-  );
+    
 
   return (
     <LinearGradient colors={['#FAFBFC', '#F7FAFC']} style={styles.container}>
@@ -719,7 +497,7 @@ const ActivityScreen = ({ navigation }: any) => {
                   <Icon name="star" size={24} color="#10B981" />
                   <View style={styles.historySummaryInfo}>
                     <Text style={styles.historySummaryTitle}>
-                      {userActivities.reduce((total, activity) => total + activity.points_earned, 0)}
+                      {userActivities.reduce((total, activity) => total + (parseInt(activity.points_earned) || 0), 0)}
                     </Text>
                     <Text style={styles.historySummarySubtitle}>Total Poin</Text>
                   </View>
@@ -767,7 +545,7 @@ const ActivityScreen = ({ navigation }: any) => {
         )}
       </ScrollView>
 
-      {renderCompletionModal()}
+
 
     </LinearGradient>
   );
@@ -980,6 +758,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     marginBottom: 12,
+    gap: 8,
   },
   userActivityIconContainer: {
     width: 40,
@@ -1012,6 +791,7 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     borderRadius: 12,
     gap: 4,
+    marginLeft: 'auto',
   },
   userActivityPointsText: {
     fontSize: 14,
@@ -1140,304 +920,52 @@ const styles = StyleSheet.create({
     color: "#6B7280",
     fontWeight: "500",
   },
-  // Modal Styles
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.6)',
-    justifyContent: 'center',
-    alignItems: 'center',
+  // Disabled activity styles
+  wellnessActivityCardDisabled: {
+    opacity: 0.6,
+    backgroundColor: "#F9FAFB",
   },
-  modalContent: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 20,
-    width: '95%',
-    maxHeight: '90%',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.3,
-    shadowRadius: 16,
-    elevation: 12,
+  wellnessActivityTitleDisabled: {
+    color: "#9CA3AF",
   },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+  wellnessActivityDescriptionDisabled: {
+    color: "#D1D5DB",
   },
-  modalHeaderContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
+  wellnessActivityStatDisabled: {
+    color: "#D1D5DB",
   },
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#1F2937',
-  },
-  closeButton: {
-    padding: 8,
-    borderRadius: 8,
-    backgroundColor: '#F3F4F6',
-  },
-  modalBody: {
-    flex: 1,
-    padding: 20,
-  },
-  modalFooter: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    padding: 20,
-    borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
-    gap: 12,
-  },
-  activityInfoCard: {
-    backgroundColor: '#F8FAFC',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 20,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-  },
-  activityInfoHeader: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    marginBottom: 12,
-    gap: 12,
-  },
-  activityInfoText: {
-    flex: 1,
-  },
-  activityName: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#1F2937',
-    marginBottom: 4,
-  },
-  activityDescription: {
-    fontSize: 14,
-    color: '#6B7280',
-    lineHeight: 20,
-  },
-  activityInfoStats: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-  },
-  activityInfoStat: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  activityInfoStatText: {
-    fontSize: 12,
-    color: '#6B7280',
-    fontWeight: '500',
-  },
-  pointsCalculationCard: {
-    backgroundColor: '#FEF3C7',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 20,
-    borderWidth: 1,
-    borderColor: '#FDE68A',
-  },
-  pointsCalculationHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 12,
-    gap: 8,
-  },
-  pointsCalculationTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#92400E',
-  },
-  pointsCalculationContent: {
-    gap: 8,
-  },
-  pointsCalculationRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  pointsCalculationLabel: {
-    fontSize: 14,
-    color: '#92400E',
-    fontWeight: '500',
-  },
-  pointsCalculationValue: {
-    fontSize: 14,
-    color: '#92400E',
-    fontWeight: '600',
-  },
-  pointsCalculationDivider: {
-    height: 1,
-    backgroundColor: '#FDE68A',
-    marginVertical: 4,
-  },
-  pointsCalculationTotalLabel: {
-    fontSize: 16,
-    color: '#92400E',
-    fontWeight: '600',
-  },
-  pointsCalculationTotalValue: {
-    fontSize: 18,
-    color: '#92400E',
-    fontWeight: '700',
-  },
-  formSection: {
-    marginBottom: 24,
-  },
-  sectionHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 16,
-    gap: 8,
-  },
-  modalSectionTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#374151',
-  },
-  inputGroup: {
-    marginBottom: 16,
-  },
-  inputLabel: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#374151',
-    marginBottom: 8,
-  },
-  durationInputContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#D1D5DB',
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    backgroundColor: '#FFFFFF',
-    gap: 8,
-  },
-  durationInput: {
-    flex: 1,
-    paddingVertical: 12,
-    fontSize: 16,
-    color: '#1F2937',
-  },
-  notesInputContainer: {
-    borderWidth: 1,
-    borderColor: '#D1D5DB',
-    borderRadius: 12,
-    backgroundColor: '#FFFFFF',
-  },
-  notesInput: {
-    padding: 12,
-    fontSize: 16,
-    color: '#1F2937',
-    textAlignVertical: 'top',
-    minHeight: 80,
-  },
-  pickerContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  pickerOption: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#D1D5DB',
-    backgroundColor: '#FFFFFF',
-    gap: 6,
-  },
-  pickerOptionSelected: {
-    backgroundColor: '#10B981',
-    borderColor: '#10B981',
-  },
-  pickerOptionText: {
-    fontSize: 12,
-    color: '#6B7280',
-    fontWeight: '500',
-  },
-  pickerOptionTextSelected: {
-    color: '#FFFFFF',
-  },
-  moodStressContainer: {
-    flexDirection: 'row',
-    gap: 16,
-    marginBottom: 16,
-  },
-  moodStressColumn: {
-    flex: 1,
-  },
-  moodStressLabel: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#374151',
-    marginBottom: 8,
-  },
-  moodStressOptions: {
-    gap: 6,
-  },
-  moodStressOption: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  completedBadge: {
+    backgroundColor: "#10B981",
     paddingHorizontal: 8,
-    paddingVertical: 6,
-    borderRadius: 6,
-    borderWidth: 1,
-    borderColor: '#D1D5DB',
-    backgroundColor: '#FFFFFF',
-    gap: 4,
-  },
-  moodStressOptionSelected: {
-    backgroundColor: '#10B981',
-    borderColor: '#10B981',
-  },
-  moodStressOptionText: {
-    fontSize: 10,
-    color: '#6B7280',
-    fontWeight: '500',
-  },
-  moodStressOptionTextSelected: {
-    color: '#FFFFFF',
-  },
-  cancelButton: {
-    flex: 1,
-    paddingVertical: 14,
-    paddingHorizontal: 16,
+    paddingVertical: 4,
     borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#D1D5DB',
-    backgroundColor: '#FFFFFF',
+    alignSelf: 'flex-start',
+    marginTop: 8,
   },
-  cancelButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#6B7280',
-    textAlign: 'center',
+  completedBadgeText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#FFFFFF",
   },
-  completeButton: {
-    flex: 1,
+  // Delete button styles
+  userActivityActions: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    borderRadius: 12,
-    backgroundColor: '#10B981',
     gap: 8,
+    marginLeft: 8,
   },
-  completeButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#FFFFFF',
+  deleteButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: "#FEF2F2",
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#FECACA",
   },
+
+
 });
 
 export default ActivityScreen; 

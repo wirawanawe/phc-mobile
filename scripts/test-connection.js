@@ -1,34 +1,58 @@
-import fetch from 'node-fetch';
+#!/usr/bin/env node
 
-async function testMobileConnection() {
-  const baseUrls = [
-    'http://10.242.90.103:3000/api/mobile',
-    'http://localhost:3000/api/mobile',
-    'http://127.0.0.1:3000/api/mobile'
-  ];
+const http = require('http');
 
-  console.log('🔍 Testing mobile app connection...\n');
+const testUrls = [
+  'http://localhost:3000/api/health',
+  'http://192.168.18.30:3000/api/health',
+  'http://10.242.90.103:3000/api/health',
+  'http://192.168.193.150:3000/api/health'
+];
 
-  for (const baseUrl of baseUrls) {
-    try {
-      console.log(`Testing: ${baseUrl}`);
+async function testConnection(url) {
+  return new Promise((resolve) => {
+    const startTime = Date.now();
+    
+    const req = http.get(url, (res) => {
+      const endTime = Date.now();
+      const responseTime = endTime - startTime;
       
-      // Test health endpoint
-      const healthResponse = await fetch(`${baseUrl.replace('/api/mobile', '')}/api/health`);
-      const healthData = await healthResponse.json();
-      console.log(`✅ Health check: ${healthData.message}`);
-      
-      // Test mobile auth endpoint
-      const authResponse = await fetch(`${baseUrl}/auth/me`);
-      const authData = await authResponse.json();
-      console.log(`✅ Auth endpoint: ${authData.message}`);
-      
-      console.log(`✅ ${baseUrl} is accessible\n`);
-      
-    } catch (error) {
-      console.log(`❌ ${baseUrl} failed: ${error.message}\n`);
-    }
+      console.log(`✅ ${url}: HTTP ${res.statusCode} (${responseTime}ms)`);
+      resolve({ success: true, statusCode: res.statusCode, responseTime });
+    });
+    
+    req.on('error', (error) => {
+      console.log(`❌ ${url}: ${error.message}`);
+      resolve({ success: false, error: error.message });
+    });
+    
+    req.setTimeout(10000, () => {
+      console.log(`⏰ ${url}: Timeout`);
+      req.destroy();
+      resolve({ success: false, error: 'Timeout' });
+    });
+  });
+}
+
+async function runTests() {
+  console.log('🔍 Testing backend connectivity...\n');
+  
+  for (const url of testUrls) {
+    await testConnection(url);
+  }
+  
+  console.log('\n🔍 Testing mobile API endpoint...\n');
+  
+  const mobileUrl = 'http://localhost:3000/api/mobile/auth/login';
+  const result = await testConnection(mobileUrl);
+  
+  if (result.success && result.statusCode === 405) {
+    console.log('✅ Mobile API endpoint is accessible (405 is expected for GET on login endpoint)');
+  } else if (result.success) {
+    console.log('✅ Mobile API endpoint is accessible');
+  } else {
+    console.log('❌ Mobile API endpoint is not accessible');
   }
 }
 
-testMobileConnection();
+runTests().catch(console.error);

@@ -88,14 +88,14 @@ const DashboardScreen = ({ navigation }: any) => {
     }
   }, [isAuthenticated]);
 
-  // Refresh data when screen comes into focus
-  useFocusEffect(
-    React.useCallback(() => {
-      if (isAuthenticated) {
-        loadMissionData();
-      }
-    }, [isAuthenticated])
-  );
+  // Remove automatic focus refresh - manual refresh only
+  // useFocusEffect(
+  //   React.useCallback(() => {
+  //     if (isAuthenticated) {
+  //       loadMissionData();
+  //     }
+  //   }, [isAuthenticated])
+  // );
 
   const loadMissionData = async () => {
     try {

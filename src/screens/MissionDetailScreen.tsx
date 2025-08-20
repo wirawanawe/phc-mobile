@@ -41,17 +41,17 @@ const MissionDetailScreen = ({ navigation, route }: any) => {
   const [reactivateLoading, setReactivateLoading] = useState(false);
   const [cooldownTimer, setCooldownTimer] = useState(0);
 
-  // Refresh user mission data when screen comes into focus
-  useEffect(() => {
-    const unsubscribe = navigation.addListener('focus', () => {
-      // Only refresh if we don't have userMission data
-      if (!userMission) {
-        refreshUserMissionData();
-      }
-    });
+  // Remove automatic focus refresh - manual refresh only
+  // useEffect(() => {
+  //   const unsubscribe = navigation.addListener('focus', () => {
+  //     // Only refresh if we don't have userMission data
+  //     if (!userMission) {
+  //       refreshUserMissionData();
+  //     }
+  //   });
 
-    return unsubscribe;
-  }, [navigation, userMission]);
+  //   return unsubscribe;
+  // }, [navigation, userMission]);
 
   // Load user mission data on component mount
   useEffect(() => {
@@ -626,18 +626,7 @@ const MissionDetailScreen = ({ navigation, route }: any) => {
         </View>
       ) : (
         <ScrollView showsVerticalScrollIndicator={false}>
-        {/* Header */}
-        <View style={styles.header}>
-          <TouchableOpacity
-            onPress={() => safeGoBack(navigation, 'Main')}
-            style={styles.backButton}
-          >
-            <Icon name="arrow-left" size={24} color="#1F2937" />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>Mission Detail</Text>
-          <View style={styles.headerRight} />
-        </View>
-
+        
         {/* Mission Card - Available Style */}
         <View style={styles.missionCardContainer}>
           <View style={styles.missionCard}>

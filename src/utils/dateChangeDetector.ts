@@ -83,6 +83,7 @@ class DateChangeDetector {
       eventEmitter.emit('sleepReset');
       eventEmitter.emit('moodReset');
       eventEmitter.emit('mealReset');
+      eventEmitter.emit('wellnessActivityReset');
 
       // Clear any cached data
       await this.clearCachedData();
@@ -104,7 +105,8 @@ class DateChangeDetector {
         'todaySleepData',
         'todayMoodData',
         'todayMealData',
-        'todaySummaryData'
+        'todaySummaryData',
+        'todayWellnessActivities'
       ];
 
       for (const key of keysToRemove) {

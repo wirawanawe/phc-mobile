@@ -253,13 +253,19 @@ const ExerciseLogScreen = ({ navigation }: any) => {
     try {
       setIsSubmitting(true);
 
+      // Prepare notes with workout parameters as JSON
+      const notesData = {
+        userNotes: `Duration: ${duration} ${durationType}`,
+        workoutParameters: exerciseParams
+      };
+      
       const activityData = {
         workout_type: selectedExercise.name,
         exercise_minutes: durationType === 'minutes' ? durationValue : durationValue * 5,
         calories_burned: calculatedCalories,
         distance_km: exerciseParams.distance || 0,
         steps: 0,
-        notes: `Duration: ${duration} ${durationType}`,
+        notes: JSON.stringify(notesData),
         tracking_date: new Date().toISOString().split('T')[0],
       };
 

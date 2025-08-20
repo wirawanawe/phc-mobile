@@ -3,6 +3,7 @@ import { RouteProp } from '@react-navigation/native';
 
 export type RootStackParamList = {
   Welcome: undefined;
+  Onboarding: undefined;
   Terms: undefined;
   Main: undefined;
   Assessment: undefined;
@@ -25,10 +26,10 @@ export type RootStackParamList = {
   MissionDetail: { missionId: string };
   Notification: undefined;
   ChatAssistant: undefined;
-  ChatDetail: undefined;
   Login: undefined;
   Register: undefined;
   MoodTracking: undefined;
+  MoodInput: { isEditMode?: boolean; existingMood?: any };
   HealthInsights: undefined;
   WaterTracking: undefined;
   SleepTracking: undefined;
@@ -44,16 +45,20 @@ export type RootStackParamList = {
   ConsultationHistory: undefined;
   WellnessApp: undefined;
   TestWellnessApp: undefined;
+  WellnessDebug: undefined;
   Activity: undefined;
   WellnessActivityDetail: { activity: any };
+  WellnessActivityCompletion: { activity: any };
   HealthGoals: undefined;
   MedicalHistory: undefined;
+  WellnessHistory: undefined;
   PrivacySettings: undefined;
   HelpSupport: undefined;
   AboutApp: undefined;
   Debug: undefined;
   ChatDetail: { chatId: string };
   PaymentProof: { consultationId: string };
+  Anthropometry: undefined;
 };
 
 export type RootStackNavigationProp = StackNavigationProp<RootStackParamList>;
@@ -61,6 +66,11 @@ export type RootStackNavigationProp = StackNavigationProp<RootStackParamList>;
 export type WellnessActivityDetailScreenProps = {
   navigation: RootStackNavigationProp;
   route: RouteProp<RootStackParamList, 'WellnessActivityDetail'>;
+};
+
+export type WellnessActivityCompletionScreenProps = {
+  navigation: RootStackNavigationProp;
+  route: RouteProp<RootStackParamList, 'WellnessActivityCompletion'>;
 };
 
 export type ConsultationPaymentScreenProps = {

@@ -82,6 +82,56 @@ class AppEventEmitter {
   public emitDataRefresh(): void {
     this.emit('dataRefresh');
   }
+
+  // Emit wellness activity completed event
+  public emitWellnessActivityCompleted(): void {
+    this.emit('wellnessActivityCompleted');
+  }
+
+  // Emit wellness activity updated event
+  public emitWellnessActivityUpdated(): void {
+    this.emit('wellnessActivityUpdated');
+  }
+
+  // Emit wellness activity deleted event
+  public emitWellnessActivityDeleted(): void {
+    this.emit('wellnessActivityDeleted');
+  }
+
+  // Emit wellness activity reset event
+  public emitWellnessActivityReset(): void {
+    this.emit('wellnessActivityReset');
+  }
+
+  // Emit mission completed event
+  public emitMissionCompleted(): void {
+    this.emit('missionCompleted');
+  }
+
+  // Emit mission updated event
+  public emitMissionUpdated(): void {
+    this.emit('missionUpdated');
+  }
+
+  // Emit mission deleted event
+  public emitMissionDeleted(): void {
+    this.emit('missionDeleted');
+  }
+
+  // Emit user profile updated event
+  public emitUserProfileUpdated(): void {
+    this.emit('userProfileUpdated');
+  }
+
+  // Emit health data updated event
+  public emitHealthDataUpdated(): void {
+    this.emit('healthDataUpdated');
+  }
+
+  // Emit health data deleted event
+  public emitHealthDataDeleted(): void {
+    this.emit('healthDataDeleted');
+  }
 }
 
 export default AppEventEmitter.getInstance(); 

@@ -28,6 +28,7 @@ import { useFocusEffect } from "@react-navigation/native";
 import apiService from "../services/api";
 import DailyMissionScreen from "./DailyMissionScreen";
 import TodaySummaryCard from "../components/TodaySummaryCard";
+import WellnessActivityCard from "../components/WellnessActivityCard";
 import ActivityGraphScreen from "./ActivityGraphScreen";
 import ActivityScreen from "./ActivityScreen";
 import { safeGoBack } from "../utils/safeNavigation";
@@ -138,6 +139,7 @@ const OnboardingScreen = ({ navigation, onProfileSaved }: any) => {
     gender: "",
     activity_level: "",
     fitness_goal: "weight_loss",
+    program_duration: 30, // Default 30 days
   });
   const [userAge, setUserAge] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
@@ -177,7 +179,7 @@ const OnboardingScreen = ({ navigation, onProfileSaved }: any) => {
   }, []);
 
   const handleSaveProfile = async () => {
-    if (!formData.weight || !formData.height || !formData.gender || !formData.activity_level || !formData.fitness_goal) {
+    if (!formData.weight || !formData.height || !formData.gender || !formData.activity_level || !formData.fitness_goal || !formData.program_duration) {
       Alert.alert("Error", "Mohon lengkapi semua data");
       return;
     }
@@ -199,6 +201,7 @@ const OnboardingScreen = ({ navigation, onProfileSaved }: any) => {
         gender: formData.gender,
         activity_level: activityLevelMap[formData.activity_level as keyof typeof activityLevelMap] || 'moderately_active',
         fitness_goal: formData.fitness_goal,
+        program_duration: parseInt(formData.program_duration.toString()),
       };
 
       const response = await apiService.setupWellness(wellnessData);
@@ -404,6 +407,26 @@ const OnboardingScreen = ({ navigation, onProfileSaved }: any) => {
               </View>
             </View>
 
+            <View style={styles.selectionGroup}>
+              <Text style={styles.selectionLabel}>Durasi Program (Hari)</Text>
+              <View style={styles.durationContainer}>
+                <TextInput
+                  value={formData.program_duration.toString()}
+                  onChangeText={(text) => {
+                    const value = parseInt(text) || 0;
+                    if (value >= 7 && value <= 365) {
+                      setFormData({ ...formData, program_duration: value });
+                    }
+                  }}
+                  keyboardType="numeric"
+                  style={styles.durationInput}
+                  placeholder="30"
+                  placeholderTextColor="#9CA3AF"
+                />
+                <Text style={styles.durationHint}>Min: 7 hari, Max: 365 hari</Text>
+              </View>
+            </View>
+
             <TouchableOpacity
               style={styles.modernSubmitButton}
               onPress={handleSaveProfile}
@@ -424,7 +447,7 @@ const OnboardingScreen = ({ navigation, onProfileSaved }: any) => {
 };
 
 // Dashboard Tab Component
-const DashboardTab = ({ navigation }: any) => {
+const DashboardTab = ({ navigation, offlineMode = false }: any) => {
   const theme = useTheme<CustomTheme>();
   const { user, isAuthenticated } = useAuth();
   const [missionStats, setMissionStats] = useState<MissionStats>({
@@ -443,7 +466,7 @@ const DashboardTab = ({ navigation }: any) => {
   });
   const [summaryLoading, setSummaryLoading] = useState(false);
   const [activityData, setActivityData] = useState({ steps: 0, distance: 0 });
-  const [weeklyProgress, setWeeklyProgress] = useState<number[]>([0, 0, 0, 0, 0, 0, 0]);
+  const [weeklyProgress, setWeeklyProgress] = useState<number[]>(Array(7).fill(0));
   const [selectedDate, setSelectedDate] = useState(() => {
     const today = new Date();
     return today.toISOString().split('T')[0];
@@ -470,26 +493,41 @@ const DashboardTab = ({ navigation }: any) => {
     try {
       setLoading(true);
 
-      const response = await apiService.getMissionStats({ date: new Date().toISOString().split('T')[0] });
-      if (response.success) {
-        // Map API response to frontend expected format
-        const mappedStats = {
-          totalMissions: response.data.total_missions || 0,
-          completedMissions: response.data.completed_missions || 0,
-          totalPoints: response.data.total_points_earned || 0,
-        };
-        setMissionStats(mappedStats);
-        console.log('Mission stats loaded:', mappedStats);
-      } else {
-        console.warn("Failed to load mission stats:", response.message);
+      // Try to load mission stats with timeout handling
+      try {
+        const response = await apiService.getMissionStats({ date: new Date().toISOString().split('T')[0] });
+        if (response.success) {
+          // Map API response to frontend expected format
+          const mappedStats = {
+            totalMissions: response.data.total_missions || 0,
+            completedMissions: response.data.completed_missions || 0,
+            totalPoints: response.data.total_points_earned || 0,
+          };
+          setMissionStats(mappedStats);
+          console.log('Mission stats loaded:', mappedStats);
+        } else {
+          console.warn("Failed to load mission stats:", response.message);
+          // Set default stats for offline mode
+          setMissionStats({ totalMissions: 0, completedMissions: 0, totalPoints: 0 });
+        }
+      } catch (statsError: any) {
+        console.warn("Mission stats API failed, using offline mode:", statsError.message);
+        setMissionStats({ totalMissions: 0, completedMissions: 0, totalPoints: 0 });
       }
 
-      const missionsResponse = await apiService.getMyMissions();
-      if (missionsResponse.success) {
-        setUserMissions(missionsResponse.data);
-        console.log('User missions loaded:', missionsResponse.data.length);
-      } else {
-        console.warn("Failed to load missions:", missionsResponse.message);
+      // Try to load missions with timeout handling
+      try {
+        const missionsResponse = await apiService.getMyMissions();
+        if (missionsResponse.success) {
+          setUserMissions(missionsResponse.data);
+          console.log('User missions loaded:', missionsResponse.data.length);
+        } else {
+          console.warn("Failed to load missions:", missionsResponse.message);
+          setUserMissions([]);
+        }
+      } catch (missionsError: any) {
+        console.warn("Missions API failed, using offline mode:", missionsError.message);
+        setUserMissions([]);
       }
 
       // Load today's summary data
@@ -562,7 +600,9 @@ const DashboardTab = ({ navigation }: any) => {
       // Get wellness progress data from the API
       const wellnessProgressResponse = await apiService.getWellnessProgress();
       
-      if (wellnessProgressResponse.success) {
+      console.log('Wellness progress response:', wellnessProgressResponse);
+      
+      if (wellnessProgressResponse.success && wellnessProgressResponse.progress) {
         const progress = wellnessProgressResponse.progress;
         
         // Extract weekly progress from the wellness data
@@ -570,7 +610,7 @@ const DashboardTab = ({ navigation }: any) => {
         const trackingData = progress.trackingData || {};
         
         // Initialize weekly progress array
-        const progressData = new Array<number>(7).fill(0);
+        const progressData = [...Array(7)].map(() => 0);
         
         // Calculate weekly progress based on available data
         const waterData = trackingData.waterData || [];
@@ -622,7 +662,7 @@ const DashboardTab = ({ navigation }: any) => {
         }
         
         // Only show weekly progress if user has wellness activities or tracking data
-        const hasWellnessActivities = progress.totalActivities > 0;
+        const hasWellnessActivities = progress?.totalActivities > 0;
         const hasTrackingData = waterData.length > 0 || moodData.length > 0 || sleepData.length > 0;
         const hasAnyData = hasWellnessActivities || hasTrackingData;
         
@@ -635,8 +675,8 @@ const DashboardTab = ({ navigation }: any) => {
         
         // If no tracking data available but user has wellness activities, try to get sample data
         if (progressData.every(score => score === 0) && hasWellnessActivities) {
-          try {
-            const sampleProgressResponse = await apiService.getWellnessProgress(5);
+                      try {
+              const sampleProgressResponse = await apiService.getWellnessProgress();
             if (sampleProgressResponse.success) {
               const sampleProgress = sampleProgressResponse.progress;
               const sampleTrackingData = sampleProgress.trackingData || {};
@@ -647,29 +687,29 @@ const DashboardTab = ({ navigation }: any) => {
                 if (i <= today) {
                   if (sampleWaterData[i]) {
                     const waterScore = Math.min((sampleWaterData[i].value / 2000) * 100, 100);
-                    progressData[i] = Math.round(waterScore);
+                    (progressData as any)[i] = Math.round(waterScore);
                   } else {
                     // Use wellness score as fallback
-                    progressData[i] = Math.round(sampleProgress.wellnessScore || 37);
+                    (progressData as any)[i] = Math.round(sampleProgress.wellnessScore || 37);
                   }
                 }
               }
             } else {
               // Use wellness score as final fallback
-              const wellnessScore = progress.wellnessScore || 37;
+              const wellnessScore = progress?.wellnessScore || 37;
               for (let i = 0; i < 7; i++) {
                 if (i <= today) {
-                  progressData[i] = Math.round(wellnessScore);
+                  (progressData as any)[i] = Math.round(wellnessScore);
                 }
               }
             }
-          } catch (error) {
+          } catch (error: any) {
             console.error("Error loading sample progress data:", error);
             // Use wellness score as final fallback
-            const wellnessScore = progress.wellnessScore || 37;
+            const wellnessScore = progress?.wellnessScore || 37;
             for (let i = 0; i < 7; i++) {
               if (i <= today) {
-                progressData[i] = Math.round(wellnessScore);
+                (progressData as any)[i] = Math.round(wellnessScore);
               }
             }
           }
@@ -677,11 +717,15 @@ const DashboardTab = ({ navigation }: any) => {
         
         setWeeklyProgress(progressData);
       } else {
-        console.warn("Failed to load wellness progress data");
-        // Set default progress if API fails
-        setWeeklyProgress([0, 0, 0, 0, 0, 0, 0]);
+        console.warn("Failed to load wellness progress data or progress is undefined", {
+          success: wellnessProgressResponse.success,
+          hasProgress: !!wellnessProgressResponse.progress,
+          response: wellnessProgressResponse
+        });
+        // Set default progress if API fails or progress is undefined
+        setWeeklyProgress(Array(7).fill(0));
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error loading weekly progress:", error);
       
       // Check if this is an authentication error
@@ -697,7 +741,7 @@ const DashboardTab = ({ navigation }: any) => {
       }
       
       // Set default progress if API fails
-      setWeeklyProgress([0, 0, 0, 0, 0, 0, 0]);
+      setWeeklyProgress(Array(7).fill(0));
     } finally {
       setSummaryLoading(false);
     }
@@ -728,14 +772,14 @@ const DashboardTab = ({ navigation }: any) => {
     return () => clearInterval(interval);
   }, [isAuthenticated]);
 
-  // Add focus listener to refresh data when screen comes into focus
-  useFocusEffect(
-    React.useCallback(() => {
-      if (isAuthenticated && loadMissionDataRef.current) {
-        loadMissionDataRef.current();
-      }
-    }, [isAuthenticated])
-  );
+  // Remove automatic focus refresh - manual refresh only
+  // useFocusEffect(
+  //   React.useCallback(() => {
+  //     if (isAuthenticated && loadMissionDataRef.current) {
+  //       loadMissionDataRef.current();
+  //     }
+  //   }, [isAuthenticated])
+  // );
 
   const getInitials = (name: string) => {
     return name
@@ -754,7 +798,7 @@ const DashboardTab = ({ navigation }: any) => {
     const loadQuickActions = async () => {
       try {
         const response = await apiService.getQuickActions();
-        if (response.success) {
+        if (response.success && response.data && Array.isArray(response.data)) {
           // Transform API data to match frontend expected format
           const transformedActions = response.data.map((action: any) => ({
             id: action.id,
@@ -840,6 +884,12 @@ const DashboardTab = ({ navigation }: any) => {
                 <Text style={styles.wellnessStatusText}>
                   Wellness Program Aktif
                 </Text>
+                {offlineMode && (
+                  <View style={styles.offlineBadge}>
+                    <Icon name="wifi-off" size={12} color="#F59E0B" />
+                    <Text style={styles.offlineBadgeText}>Offline</Text>
+                  </View>
+                )}
               </View>
             </View>
           </View>
@@ -973,6 +1023,14 @@ const DashboardTab = ({ navigation }: any) => {
             </View>
           )}
         </View>
+
+        {/* Wellness Activities Section */}
+        <WellnessActivityCard 
+          onActivityPress={() => {
+            // Navigate to wellness activities screen
+            navigation.navigate("Activity");
+          }}
+        />
 
         {/* Weekly Progress Chart */}
         <View style={styles.chartSection}>
@@ -1364,8 +1422,8 @@ const DoctorTab = ({ navigation }: any) => {
 };
 
 // Home Tab Component
-const HomeTab = ({ navigation }: any) => {
-  return <DashboardTab navigation={navigation} />;
+const HomeTab = ({ navigation, offlineMode = false }: any) => {
+  return <DashboardTab navigation={navigation} offlineMode={offlineMode} />;
 };
 
 // Activity Tab Component
@@ -1412,17 +1470,9 @@ const TrackingTab = ({ navigation }: any) => {
       backgroundColor: "#F0F9FF",
       onPress: () => navigation.navigate("FitnessTracking"),
     },
+
     {
       id: 4,
-      title: "Auto Fitness",
-      subtitle: "Deteksi aktivitas otomatis",
-      icon: "heart-pulse",
-      color: "#96CEB4",
-      backgroundColor: "#F0FDF4",
-      onPress: () => navigation.navigate("RealtimeFitness"),
-    },
-    {
-      id: 5,
       title: "Mood Check",
       subtitle: "Monitor suasana hati",
       icon: "emoticon",
@@ -1431,7 +1481,7 @@ const TrackingTab = ({ navigation }: any) => {
       onPress: () => navigation.navigate("MoodTracking"),
     },
     {
-      id: 6,
+      id: 5,
       title: "Sleep Track",
       subtitle: "Lacak pola tidur",
       icon: "sleep",
@@ -1439,13 +1489,25 @@ const TrackingTab = ({ navigation }: any) => {
       backgroundColor: "#FAF5FF",
       onPress: () => navigation.navigate("SleepTracking"),
     },
+    {
+      id: 6,
+      title: "Antropometri",
+      subtitle: "Ukur BB, TB, dan BMI",
+      icon: "ruler",
+      color: "#8B5CF6",
+      backgroundColor: "#F3F4F6",
+      onPress: () => navigation.navigate("Anthropometry"),
+    },
   ];
 
   return (
     <SafeAreaView style={styles.safeArea}>
       <ScrollView
         style={styles.container}
-        contentContainerStyle={{ paddingBottom: 80 }}
+        contentContainerStyle={{ 
+          paddingBottom: 120,
+          flexGrow: 1 
+        }}
       >
         {/* Modern Header */}
         <View style={styles.dashboardHeader}>
@@ -1506,6 +1568,7 @@ const WellnessApp = ({ navigation }: any) => {
   const [showOnboarding, setShowOnboarding] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [offlineMode, setOfflineMode] = useState(false);
 
   useEffect(() => {
     console.log("WellnessApp: Component mounted");
@@ -1533,24 +1596,54 @@ const WellnessApp = ({ navigation }: any) => {
       console.log("WellnessApp: Checking user profile...");
       setIsLoading(true);
       
-      // Initialize API service first
-      await apiService.initialize();
+      // Initialize API service first with timeout handling
+      try {
+        await apiService.initialize();
+        console.log("WellnessApp: API service initialized successfully");
+      } catch (initError) {
+        console.warn("WellnessApp: API initialization failed, proceeding with cached data");
+      }
       
-      const [profileResponse, missionsResponse] = await Promise.all([
-        apiService.getUserProfile(),
-        apiService.getMyMissions()
-      ]);
+      // Try to get profile and missions with timeout handling
+      let profileResponse = null;
+      let missionsResponse = null;
       
-      console.log("WellnessApp: Profile response:", profileResponse);
-      console.log("WellnessApp: Missions response:", missionsResponse);
+      try {
+        // Set a shorter timeout for profile check
+        const profilePromise = apiService.getUserProfile();
+        const missionsPromise = apiService.getMyMissions();
+        
+        // Use Promise.allSettled to handle partial failures
+        const [profileResult, missionsResult] = await Promise.allSettled([
+          profilePromise,
+          missionsPromise
+        ]);
+        
+        profileResponse = profileResult.status === 'fulfilled' ? profileResult.value : null;
+        missionsResponse = missionsResult.status === 'fulfilled' ? missionsResult.value : null;
+        
+        console.log("WellnessApp: Profile response:", profileResponse);
+        console.log("WellnessApp: Missions response:", missionsResponse);
+        
+      } catch (apiError: any) {
+        console.warn("WellnessApp: API calls failed, checking for cached data:", apiError.message);
+        
+        // If API fails, try to proceed with user data from AuthContext
+        if (user && user.id) {
+          console.log("WellnessApp: Using AuthContext user data as fallback");
+          profileResponse = { success: true, data: user };
+        }
+      }
       
-      if (profileResponse.success && profileResponse.data) {
+      // Check if we have any profile data
+      if (profileResponse && profileResponse.success && profileResponse.data) {
         const profile = profileResponse.data;
         
-        // Cek apakah user sudah memiliki mission (sudah terdaftar dalam program wellness)
-        const hasMissions = missionsResponse.success && missionsResponse.data && missionsResponse.data.length > 0;
+        // Check if user has missions (already registered in wellness program)
+        const hasMissions = missionsResponse && missionsResponse.success && 
+                           missionsResponse.data && missionsResponse.data.length > 0;
         
-        // Cek apakah user sudah join program wellness atau sudah memiliki mission
+        // Check if user has joined wellness program or has missions
         if (profile.wellness_program_joined || hasMissions) {
           console.log("WellnessApp: User has profile, showing main app");
           setHasProfile(true);
@@ -1561,15 +1654,45 @@ const WellnessApp = ({ navigation }: any) => {
           setShowOnboarding(true);
         }
       } else {
-        console.log("WellnessApp: No profile data, showing onboarding");
+        // If no profile data available, but user is authenticated, show onboarding
+        console.log("WellnessApp: No profile data available, showing onboarding");
         setHasProfile(false);
         setShowOnboarding(true);
       }
+      
+      // Clear any previous errors if we reach this point
+      setError(null);
+      
     } catch (error) {
       console.error("WellnessApp: Error checking profile:", error);
-      setError(error instanceof Error ? error.message : 'Unknown error occurred');
-      setHasProfile(false);
-      setShowOnboarding(true);
+      
+      // Handle timeout errors more gracefully
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+      
+      if (errorMessage.includes('timeout') || 
+          errorMessage.includes('network') || 
+          errorMessage.includes('connection') ||
+          errorMessage.includes('Max retries reached') ||
+          errorMessage.includes('fetch')) {
+        console.log("WellnessApp: Network/timeout error detected, enabling offline mode");
+        
+        // For network issues, allow access to wellness app with user data from AuthContext
+        if (user && user.id) {
+          console.log("WellnessApp: Using AuthContext user data for offline access");
+          setHasProfile(true);
+          setShowOnboarding(false);
+          setError(null);
+        } else {
+          // If no user data available, show onboarding
+          setHasProfile(false);
+          setShowOnboarding(true);
+          setError(null);
+        }
+      } else {
+        setError(errorMessage);
+        setHasProfile(false);
+        setShowOnboarding(true);
+      }
     } finally {
       setIsLoading(false);
     }
@@ -1620,17 +1743,45 @@ const WellnessApp = ({ navigation }: any) => {
     return (
       <SafeAreaView style={styles.safeArea}>
         <View style={styles.loadingContainer}>
-          <Text style={{ fontSize: 18, fontWeight: 'bold', marginBottom: 10 }}>Error Loading Wellness App</Text>
-          <Text style={{ color: 'red', marginTop: 10, textAlign: 'center' }}>{error}</Text>
-          <TouchableOpacity 
-            style={{ marginTop: 20, padding: 10, backgroundColor: '#E22345', borderRadius: 8 }}
-            onPress={() => {
-              setError(null);
-              checkUserProfile();
-            }}
-          >
-            <Text style={{ color: 'white', textAlign: 'center' }}>Retry</Text>
-          </TouchableOpacity>
+          <Icon name="wifi-off" size={48} color="#EF4444" style={{ marginBottom: 16 }} />
+          <Text style={{ fontSize: 18, fontWeight: 'bold', marginBottom: 10 }}>Network Connection Issue</Text>
+          <Text style={{ color: '#6B7280', marginTop: 10, textAlign: 'center', marginBottom: 20 }}>
+            {error}
+          </Text>
+          
+          <View style={{ width: '100%', gap: 12 }}>
+            <TouchableOpacity 
+              style={{ padding: 15, backgroundColor: '#10B981', borderRadius: 8 }}
+              onPress={() => {
+                setError(null);
+                checkUserProfile();
+              }}
+            >
+              <Text style={{ color: 'white', textAlign: 'center', fontWeight: 'bold' }}>Retry Connection</Text>
+            </TouchableOpacity>
+            
+            {user && user.id && (
+              <TouchableOpacity 
+                style={{ padding: 15, backgroundColor: '#F59E0B', borderRadius: 8 }}
+                onPress={() => {
+                  console.log("WellnessApp: User forced offline mode");
+                  setOfflineMode(true);
+                  setHasProfile(true);
+                  setShowOnboarding(false);
+                  setError(null);
+                }}
+              >
+                <Text style={{ color: 'white', textAlign: 'center', fontWeight: 'bold' }}>Continue Offline</Text>
+              </TouchableOpacity>
+            )}
+            
+            <TouchableOpacity 
+              style={{ padding: 15, backgroundColor: '#6B7280', borderRadius: 8 }}
+              onPress={() => navigation.navigate('WellnessDebug')}
+            >
+              <Text style={{ color: 'white', textAlign: 'center', fontWeight: 'bold' }}>Debug Connection</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </SafeAreaView>
     );
@@ -1704,9 +1855,10 @@ const WellnessApp = ({ navigation }: any) => {
       >
         <Tab.Screen
           name="HOME"
-          component={HomeTab}
           options={{ tabBarLabel: "Beranda" }}
-        />
+        >
+          {(props) => <HomeTab {...props} offlineMode={offlineMode} />}
+        </Tab.Screen>
         <Tab.Screen
           name="ACTIVITY"
           component={WellnessActivityTab}
@@ -1779,27 +1931,32 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "center",
+    alignItems: "flex-start",
     paddingHorizontal: 20,
     paddingVertical: 16,
     marginBottom: 10,
   },
   headerLeft: {
-    flexDirection: "row",
-    alignItems: "center",
+    flexDirection: "column",
+    alignItems: "flex-start",
     flex: 1,
+    paddingRight: 20,
   },
   headerTitle: {
     fontSize: 24,
     fontWeight: "700",
     color: "#1F2937",
-    marginBottom: 4,
+    marginBottom: 6,
     letterSpacing: -0.5,
+    lineHeight: 28,
   },
   headerSubtitle: {
     fontSize: 14,
     color: "#64748B",
     fontWeight: "500",
+    flex: 1,
+    flexWrap: "wrap",
+    lineHeight: 20,
   },
   content: {
     flex: 1,
@@ -2234,6 +2391,30 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   
+  // Duration Input Styles
+  durationContainer: {
+    marginTop: 8,
+  },
+  durationInput: {
+    backgroundColor: "#F9FAFB",
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    fontSize: 16,
+    color: "#1F2937",
+    textAlign: "center",
+    fontWeight: "500",
+  },
+  durationHint: {
+    fontSize: 12,
+    color: "#6B7280",
+    textAlign: "center",
+    marginTop: 8,
+    fontStyle: "italic",
+  },
+  
   // Modern Submit Button Styles
   modernSubmitButton: {
     marginTop: 32,
@@ -2488,6 +2669,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     letterSpacing: -0.5,
   },
+
   missionSection: {
     marginBottom: 32,
   },
@@ -2871,6 +3053,21 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     marginLeft: 4,
   },
+  offlineBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#FEF3C7",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    marginLeft: 8,
+  },
+  offlineBadgeText: {
+    fontSize: 10,
+    color: "#D97706",
+    fontWeight: "600",
+    marginLeft: 4,
+  },
   startMissionCard: {
     backgroundColor: "#FFFFFF",
     borderRadius: 16,
@@ -2971,19 +3168,21 @@ const styles = StyleSheet.create({
   trackingSection: {
     marginBottom: 32,
     marginHorizontal: 20,
+    flex: 1, // Ensure it takes available space
   },
   trackingWrapper: {
     marginLeft: -20,
   },
   trackingList: {
     paddingHorizontal: 20,
-    paddingBottom: 20,
+    paddingBottom: 40, // Increased padding to prevent cutoff
   },
   modernTrackingCard: {
     width: "100%",
     marginBottom: 16,
     borderRadius: 20,
     padding: 20,
+    minHeight: 80, // Ensure minimum height for better touch targets
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.15,
@@ -3009,19 +3208,21 @@ const styles = StyleSheet.create({
   },
   modernTrackingContent: {
     flex: 1,
+    justifyContent: "center",
   },
   modernTrackingTitle: {
     fontSize: 16,
     fontWeight: "700",
     color: "#1F2937",
-    marginBottom: 8,
+    marginBottom: 6,
     textAlign: "left",
   },
   modernTrackingSubtitle: {
-    fontSize: 12,
+    fontSize: 13,
     color: "#64748B",
-    lineHeight: 16,
+    lineHeight: 18,
     textAlign: "left",
+    fontWeight: "400",
   },
 
   statsSection: {

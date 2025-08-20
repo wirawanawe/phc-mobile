@@ -14,7 +14,7 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { CustomTheme } from '../theme/theme';
 import { useAuth } from '../contexts/AuthContext';
 import FitnessIntegrationService, { FitnessData, DeviceConnection } from '../services/FitnessIntegrationService';
-import ActivityStatusCard from '../components/ActivityStatusCard';
+// import ActivityStatusCard from '../components/ActivityStatusCard';
 import { safeGoBack } from "../utils/safeNavigation";
 
 const { width } = Dimensions.get('window');
@@ -126,8 +126,8 @@ const RealtimeFitnessScreen = ({ navigation }: any) => {
             <View style={styles.placeholder} />
           </View> */}
 
-          {/* Auto Activity Detection */}
-          <ActivityStatusCard />
+          {/* Auto Activity Detection - Hidden */}
+          {/* <ActivityStatusCard /> */}
 
           {/* Activity Selection */}
           <Card style={styles.activityCard}>

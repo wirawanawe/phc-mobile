@@ -121,6 +121,11 @@ android {
         jniLibs {
             useLegacyPackaging (findProperty('expo.useLegacyPackaging')?.toBoolean() ?: false)
         }
+        pickFirsts += [
+            '**/libc++_shared.so',
+            '**/libjsc.so',
+            '**/libreactnativejni.so'
+        ]
     }
     androidResources {
         ignoreAssetsPattern '!.svn:!.git:!.ds_store:!*.scc:!CVS:!thumbs.db:!picasa.ini:!*~'

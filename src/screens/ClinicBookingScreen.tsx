@@ -76,25 +76,25 @@ const ClinicBookingScreen = ({ navigation, route }: any) => {
     }
   }, [route.params?.clinic]);
 
-  // Handle navigation focus to refresh booking history
-  useEffect(() => {
-    const unsubscribe = navigation.addListener("focus", () => {
-      // Check if we need to refresh history (e.g., after payment confirmation)
-      if (route.params?.refreshHistory) {
-        fetchBookingHistory();
-        // Clear the parameter
-        navigation.setParams({ refreshHistory: undefined });
-      }
-    });
+  // Remove automatic focus refresh - manual refresh only
+  // useEffect(() => {
+  //   const unsubscribe = navigation.addListener("focus", () => {
+  //     // Check if we need to refresh history (e.g., after payment confirmation)
+  //     if (route.params?.refreshHistory) {
+  //       fetchBookingHistory();
+  //       // Clear the parameter
+  //       navigation.setParams({ refreshHistory: undefined });
+  //     }
+  //   });
 
-    return unsubscribe;
-  }, [navigation, route.params?.refreshHistory]);
+  //   return unsubscribe;
+  // }, [navigation, route.params?.refreshHistory]);
 
   const fetchClinics = async () => {
     try {
       setLoading(true);
       const response = await apiService.getClinics();
-      if (response.success) {
+      if (response.success && response.data && Array.isArray(response.data)) {
         // Transform clinic data to match the expected format
         const transformedClinics = response.data.map((clinic: any) => ({
           ...clinic,
@@ -107,7 +107,8 @@ const ClinicBookingScreen = ({ navigation, route }: any) => {
 
         // Transform services data
         const servicesData: any = {};
-        response.data.forEach((clinic: any) => {
+        if (Array.isArray(response.data)) {
+          response.data.forEach((clinic: any) => {
           if (clinic.services && clinic.services.length > 0) {
             servicesData[clinic.id] = clinic.services.map((service: any) => ({
               ...service,
@@ -122,6 +123,7 @@ const ClinicBookingScreen = ({ navigation, route }: any) => {
             }));
           }
         });
+        }
         setServicesByClinic(servicesData);
       }
     } catch (error) {

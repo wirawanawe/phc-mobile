@@ -128,10 +128,9 @@ const HomeTab = ({ navigation }: any) => {
     
     loadArticlesWithDelay();
     
-    // Update activity data every 30 seconds
-    const activityInterval = setInterval(loadActivityData, 30000);
+    // Remove automatic intervals - manual refresh only
     
-    // Update greeting every minute to ensure it stays current
+    // Update greeting every minute to ensure it stays current (keep this as it's UI-related)
     const greetingInterval = setInterval(() => {
       setCurrentGreeting(getTimeBasedGreeting());
     }, 60000);
@@ -184,6 +183,30 @@ const HomeTab = ({ navigation }: any) => {
         checkWellnessProgramStatus();
       }
     };
+
+    const handleWellnessActivityCompleted = () => {
+      console.log('MainScreen - Wellness activity completed, refreshing mission data...');
+      if (isAuthenticated) {
+        loadMissionData();
+        checkWellnessProgramStatus();
+      }
+    };
+
+    const handleWellnessActivityUpdated = () => {
+      console.log('MainScreen - Wellness activity updated, refreshing mission data...');
+      if (isAuthenticated) {
+        loadMissionData();
+        checkWellnessProgramStatus();
+      }
+    };
+
+    const handleWellnessActivityDeleted = () => {
+      console.log('MainScreen - Wellness activity deleted, refreshing mission data...');
+      if (isAuthenticated) {
+        loadMissionData();
+        checkWellnessProgramStatus();
+      }
+    };
     
     // Listen for daily reset events
     const handleDailyReset = () => {
@@ -209,10 +232,12 @@ const HomeTab = ({ navigation }: any) => {
     eventEmitter.on('fitnessLogged', handleFitnessLogged);
     eventEmitter.on('sleepLogged', handleSleepLogged);
     eventEmitter.on('moodLogged', handleMoodLogged);
+    eventEmitter.on('wellnessActivityCompleted', handleWellnessActivityCompleted);
+    eventEmitter.on('wellnessActivityUpdated', handleWellnessActivityUpdated);
+    eventEmitter.on('wellnessActivityDeleted', handleWellnessActivityDeleted);
     eventEmitter.on('dailyReset', handleDailyReset);
     
     return () => {
-      clearInterval(activityInterval);
       clearInterval(greetingInterval);
       // Remove event listeners
       eventEmitter.off('dataRefresh', handleDataRefresh);
@@ -221,19 +246,22 @@ const HomeTab = ({ navigation }: any) => {
       eventEmitter.off('fitnessLogged', handleFitnessLogged);
       eventEmitter.off('sleepLogged', handleSleepLogged);
       eventEmitter.off('moodLogged', handleMoodLogged);
+      eventEmitter.off('wellnessActivityCompleted', handleWellnessActivityCompleted);
+      eventEmitter.off('wellnessActivityUpdated', handleWellnessActivityUpdated);
+      eventEmitter.off('wellnessActivityDeleted', handleWellnessActivityDeleted);
       eventEmitter.off('dailyReset', handleDailyReset);
     };
   }, [isAuthenticated]);
 
-  // Refresh data when screen comes into focus
-  useFocusEffect(
-    useCallback(() => {
-      if (isAuthenticated) {
-        loadMissionData();
-        checkWellnessProgramStatus();
-      }
-    }, [isAuthenticated])
-  );
+  // Remove automatic focus refresh - manual refresh only
+  // useFocusEffect(
+  //   useCallback(() => {
+  //     if (isAuthenticated) {
+  //       loadMissionData();
+  //       checkWellnessProgramStatus();
+  //     }
+  //   }, [isAuthenticated])
+  // );
 
   const loadMissionData = async () => {
     // Only load data if user is authenticated
@@ -245,11 +273,11 @@ const HomeTab = ({ navigation }: any) => {
       setLoading(true);
       setSummaryLoading(true);
       
-      // Use withRetry for better error handling
+      // Use withRetry for better error handling with longer delays for mobile networks
       const [statsResponse, userMissionsResponse, todaySummaryResponse] = await Promise.all([
-        withRetry(() => api.getMissionStats({ date: new Date().toISOString().split('T')[0] }), 3, 2000),
-        withRetry(() => api.getMyMissions(), 3, 2000),
-        withRetry(() => api.getTodaySummary(), 3, 2000),
+        withRetry(() => api.getMissionStats({ date: new Date().toISOString().split('T')[0] }), 3, 3000),
+        withRetry(() => api.getMyMissions(), 3, 3000),
+        withRetry(() => api.getTodaySummary(), 3, 3000),
       ]);
 
       if (statsResponse.success) {
@@ -282,6 +310,18 @@ const HomeTab = ({ navigation }: any) => {
       }
     } catch (error) {
       console.error("Error loading mission data:", error);
+      
+      // Handle different types of errors appropriately
+      if (error && typeof error === 'string' && error.includes('timeout')) {
+        console.warn('Connection timeout detected in mission data loading, using default values');
+        // Don't show alert for timeout errors in background loading
+      } else if (error && typeof error === 'string' && (error.includes('Authentication failed') || error.includes('401'))) {
+        console.warn('Authentication error in mission data loading');
+        // Handle authentication errors silently
+      } else {
+        console.warn('Data loading error (non-critical):', error);
+      }
+      
       // Set default values instead of showing errors for background data loading
       setMissionStats({
         totalMissions: 0,
@@ -462,21 +502,6 @@ const HomeTab = ({ navigation }: any) => {
   const quickActions = [
     {
       id: "1",
-      title: "Auto Fitness",
-      icon: "radar",
-      color: "#38A169",
-      bgColor: "#F0FDF4",
-      action: () => {
-        try {
-          navigation.navigate("RealtimeFitness");
-        } catch (error) {
-          console.warn("RealtimeFitness screen not found, navigating to Fitness instead");
-          navigation.navigate("Fitness");
-        }
-      },
-    },
-    {
-      id: "2",
       title: "Log Meal",
       icon: "food-apple",
       color: "#FF6B8A",
@@ -495,7 +520,7 @@ const HomeTab = ({ navigation }: any) => {
       },
     },
     {
-      id: "3",
+      id: "2",
       title: "Track Water",
       icon: "water",
       color: "#3182CE",
@@ -514,7 +539,7 @@ const HomeTab = ({ navigation }: any) => {
       },
     },
     {
-      id: "4",
+      id: "3",
       title: "Log Exercise",
       icon: "dumbbell",
       color: "#E53E3E",
@@ -533,7 +558,7 @@ const HomeTab = ({ navigation }: any) => {
       },
     },
     {
-      id: "5",
+      id: "4",
       title: "Mood Check",
       icon: "emoticon",
       color: "#D69E2E",
@@ -552,7 +577,7 @@ const HomeTab = ({ navigation }: any) => {
       },
     },
     {
-      id: "6",
+      id: "5",
       title: "Sleep Track",
       icon: "sleep",
       color: "#9F7AEA",
@@ -723,40 +748,15 @@ const HomeTab = ({ navigation }: any) => {
         {/* Header */}
         <View style={styles.header}>
           <View style={styles.headerLeft}>
-            {isAuthenticated ? (
-              <TouchableOpacity
-                style={styles.profileThumbnail}
-                onPress={() => navigation.navigate("Profile")}
-              >
-                <LinearGradient
-                  colors={["#E53E3E", "#C53030"]}
-                  style={styles.avatar}
-                >
-                  <Text style={styles.avatarText}>
-                    {getInitials(user?.name || "")}
-                  </Text>
-                </LinearGradient>
-              </TouchableOpacity>
-            ) : (
-              <View style={styles.logoContainer}>
-                <Icon name="heart-pulse" size={32} color="#E53E3E" />
-              </View>
-            )}
-            <View style={styles.headerText}>
+                        <View style={styles.headerText}>
               {isAuthenticated ? (
                 <>
                   <Text style={styles.greetingText}>
                     Hi, {user?.name || "User"}
                   </Text>
-                  <LinearGradient
-                    colors={["#E53E3E", "#C53030"]}
-                    style={styles.badgeContainer}
-                  >
-                    <Icon name="star" size={12} color="#FFFFFF" />
-                    <Text style={styles.badgeText}>
-                      {user?.points ?? missionStats.totalPoints}
-                    </Text>
-                  </LinearGradient>
+                  <Text style={styles.subtitleText}>
+                    Selamat Datang di PHC
+                  </Text>
                 </>
               ) : (
                 <>
@@ -777,6 +777,26 @@ const HomeTab = ({ navigation }: any) => {
             >
               <Icon name="bell-outline" size={24} color="#6B7280" />
             </TouchableOpacity>
+            {isAuthenticated && (
+              <TouchableOpacity
+                style={styles.profileThumbnail}
+                onPress={() => navigation.navigate("Profile")}
+              >
+                <LinearGradient
+                  colors={["#E53E3E", "#C53030"]}
+                  style={styles.avatar}
+                >
+                  <Text style={styles.avatarText}>
+                    {getInitials(user?.name || "")}
+                  </Text>
+                </LinearGradient>
+              </TouchableOpacity>
+            )}
+            {!isAuthenticated && (
+              <View style={styles.logoContainer}>
+                <Icon name="heart-pulse" size={32} color="#E53E3E" />
+              </View>
+            )}
           </View>
         </View>
 
@@ -843,7 +863,7 @@ const HomeTab = ({ navigation }: any) => {
                   <View style={styles.wellnessTextContainer}>
                     <Text style={styles.wellnessCardTitle}>Wellness Program</Text>
                     <Text style={styles.wellnessCardSubtitle}>
-                      Mission, Auto Fitness, Log meal, Track Water, Log Exercise
+                      Mission, Log meal, Track Water, Log Exercise
                     </Text>
                   </View>
                 </View>
@@ -1051,7 +1071,7 @@ const DoctorTab = ({ navigation }: any) => {
       // Get consultation doctors (doctors available for online consultation)
       const response = await api.getConsultationDoctors();
       
-      if (response.success && response.data) {
+      if (response.success && response.data && Array.isArray(response.data)) {
         // Transform the data to match the UI format
         const transformedDoctors = response.data.map((doctor: any, index: number) => {
           // Generate avatar emoji based on doctor name or use default
@@ -1336,17 +1356,9 @@ const TrackingTab = ({ navigation }: any) => {
       backgroundColor: "#F0F9FF",
       onPress: () => navigation.navigate("FitnessTracking"),
     },
+
     {
       id: 4,
-      title: "Auto Fitness",
-      subtitle: "Deteksi aktivitas otomatis",
-      icon: "heart-pulse",
-      color: "#96CEB4",
-      backgroundColor: "#F0FDF4",
-      onPress: () => navigation.navigate("RealtimeFitness"),
-    },
-    {
-      id: 5,
       title: "Mood Check",
       subtitle: "Monitor suasana hati",
       icon: "emoticon",
@@ -1355,13 +1367,22 @@ const TrackingTab = ({ navigation }: any) => {
       onPress: () => navigation.navigate("MoodTracking"),
     },
     {
-      id: 6,
+      id: 5,
       title: "Sleep Track",
       subtitle: "Lacak pola tidur",
       icon: "sleep",
       color: "#9F7AEA",
       backgroundColor: "#FAF5FF",
       onPress: () => navigation.navigate("SleepTracking"),
+    },
+    {
+      id: 6,
+      title: "Antropometri",
+      subtitle: "Ukur BB, TB, dan BMI",
+      icon: "ruler",
+      color: "#8B5CF6",
+      backgroundColor: "#F3F4F6",
+      onPress: () => navigation.navigate("Anthropometry"),
     },
   ];
 
@@ -1390,7 +1411,11 @@ const TrackingTab = ({ navigation }: any) => {
     <LinearGradient colors={["#FAFBFC", "#F7FAFC"]} style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#FAFBFC" />
       
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView 
+        style={styles.content} 
+        contentContainerStyle={styles.trackingContentContainer}
+        showsVerticalScrollIndicator={false}
+      >
         {/* Header */}
         <View style={styles.header}>
           <View style={styles.headerLeft}>
@@ -1557,8 +1582,8 @@ const MainScreen = ({ navigation }: any) => {
                         try {
                           navigation.navigate("WellnessApp");
                         } catch (error) {
-                          console.warn("WellnessApp screen not found, navigating to Login instead");
-                          navigation.navigate("Login");
+                          console.warn("WellnessApp screen not found, opening debug screen");
+                          navigation.navigate("WellnessDebug");
                         }
                       } else {
                         navigation.navigate("Login");
@@ -1602,15 +1627,16 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "center",
+    alignItems: "flex-start",
     paddingHorizontal: 20,
     paddingVertical: 16,
     marginBottom: 10,
   },
   headerLeft: {
-    flexDirection: "row",
-    alignItems: "center",
+    flexDirection: "column",
+    alignItems: "flex-start",
     flex: 1,
+    paddingRight: 20,
   },
   logoContainer: {
     width: 44,
@@ -1619,7 +1645,6 @@ const styles = StyleSheet.create({
     backgroundColor: "#FEF2F2",
     justifyContent: "center",
     alignItems: "center",
-    marginRight: 14,
     shadowColor: "#E53E3E",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
@@ -1637,7 +1662,6 @@ const styles = StyleSheet.create({
     backgroundColor: "#E22345",
     justifyContent: "center",
     alignItems: "center",
-    marginRight: 14,
     shadowColor: "#E22345",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.2,
@@ -1653,7 +1677,6 @@ const styles = StyleSheet.create({
   headerText: {
     flexDirection: "column",
     alignItems: "flex-start",
-    marginLeft: 12,
     flex: 1,
   },
   greetingText: {
@@ -1668,41 +1691,20 @@ const styles = StyleSheet.create({
     marginTop: 4,
     fontWeight: "500",
   },
-  badgeContainer: {
-    backgroundColor: "#E22345",
-    borderRadius: 12,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    flexDirection: "row",
-    alignItems: "center",
-    shadowColor: "#E22345",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 3,
-    minWidth: 32,
-    justifyContent: "center",
-    alignSelf: "flex-start",
-    marginTop: 4,
-  },
-  badgeText: {
-    fontSize: 11,
-    fontWeight: "700",
-    color: "#FFFFFF",
-    marginLeft: 3,
-  },
+  
   headerRight: {
     flexDirection: "row",
     alignItems: "center",
+    gap: 12,
   },
-  headerIcon: {
-    marginLeft: 16,
+  
+  bellButton: {
+    padding: 8,
   },
   afternoonContainer: {
     flexDirection: "row",
     alignItems: "center",
     paddingHorizontal: 20,
-    marginBottom: 20,
   },
   afternoonText: {
     fontSize: 15,
@@ -2736,16 +2738,19 @@ const styles = StyleSheet.create({
   trackingSection: {
     marginHorizontal: 20,
     marginBottom: 25,
+    flex: 1, // Ensure it takes available space
   },
   trackingWrapper: {
     marginTop: 16,
   },
   trackingList: {
     gap: 12,
+    paddingBottom: 20, // Additional padding at the bottom
   },
   modernTrackingCard: {
     borderRadius: 16,
     padding: 16,
+    minHeight: 80, // Ensure minimum height for better touch targets
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.08,
@@ -2774,17 +2779,19 @@ const styles = StyleSheet.create({
   },
   modernTrackingContent: {
     flex: 1,
+    justifyContent: "center",
   },
   modernTrackingTitle: {
     fontSize: 16,
     fontWeight: "700",
     color: "#1F2937",
-    marginBottom: 4,
+    marginBottom: 6,
   },
   modernTrackingSubtitle: {
-    fontSize: 14,
+    fontSize: 13,
     color: "#64748B",
-    lineHeight: 20,
+    lineHeight: 18,
+    fontWeight: "400",
   },
   modernTrackingArrow: {
     marginLeft: 12,
@@ -2818,11 +2825,7 @@ const styles = StyleSheet.create({
     marginLeft: 12,
     fontWeight: "500",
   },
-  bellButton: {
-    padding: 8,
-    justifyContent: "center",
-    alignItems: "center",
-  },
+
   doctorCard: {
     backgroundColor: "#FFFFFF",
     borderRadius: 16,
@@ -3046,15 +3049,23 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: "700",
     color: "#1F2937",
-    marginBottom: 8,
+    marginBottom: 6,
+    lineHeight: 24,
   },
   headerSubtitle: {
     fontSize: 14,
     color: "#64748B",
     fontWeight: "500",
+    flex: 1,
+    flexWrap: "wrap",
+    lineHeight: 20,
   },
   content: {
     flex: 1,
+  },
+  trackingContentContainer: {
+    paddingBottom: 120, // Extra padding to account for tab bar and safe area
+    flexGrow: 1, // Ensure content can grow to fill available space
   },
   featuredArticleCard: {
     width: "48%",

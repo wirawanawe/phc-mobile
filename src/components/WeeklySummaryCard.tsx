@@ -40,10 +40,8 @@ const WeeklySummaryCard: React.FC<WeeklySummaryCardProps> = ({ onMoreDetailsPres
   useEffect(() => {
     loadWeeklyData();
     
-    // Update weekly data every 5 minutes (less frequent than daily)
-    const interval = setInterval(loadWeeklyData, 300000);
+    // Remove automatic interval - manual refresh only
     
-    return () => clearInterval(interval);
   }, []);
 
   const loadWeeklyData = async () => {

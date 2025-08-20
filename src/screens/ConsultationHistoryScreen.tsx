@@ -51,11 +51,12 @@ const ConsultationHistoryScreen: React.FC<ConsultationHistoryScreenProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'all' | 'upcoming' | 'completed'>('all');
 
-  useFocusEffect(
-    useCallback(() => {
-      fetchConsultations();
-    }, [])
-  );
+  // Remove automatic focus refresh - manual refresh only
+  // useFocusEffect(
+  //   useCallback(() => {
+  //     fetchConsultations();
+  //   }, [])
+  // );
 
   const fetchConsultations = async () => {
     try {

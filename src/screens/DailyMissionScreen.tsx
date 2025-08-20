@@ -13,6 +13,7 @@ import { Text, useTheme, ActivityIndicator } from "react-native-paper";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Icon from "react-native-vector-icons/MaterialCommunityIcons";
 import { LinearGradient } from "expo-linear-gradient";
+import { useFocusEffect } from "@react-navigation/native";
 import { CustomTheme } from "../theme/theme";
 import { useAuth } from "../contexts/AuthContext";
 import api from "../services/api";
@@ -58,6 +59,16 @@ const DailyMissionScreen = ({ navigation }: any) => {
       loadData();
     }
   }, [refreshKey, isAuthenticated]);
+
+  // Remove automatic focus refresh - manual refresh only
+  // useFocusEffect(
+  //   React.useCallback(() => {
+  //     if (isAuthenticated) {
+  //       console.log('🔄 DailyMissionScreen: Refreshing mission data on focus');
+  //       loadData();
+  //     }
+  //   }, [isAuthenticated])
+  // );
 
   // Timer for cooldown countdown in mission cards
   useEffect(() => {
@@ -578,10 +589,10 @@ const DailyMissionScreen = ({ navigation }: any) => {
                       style={styles.missionCardGradient}
                     >
                       <View style={styles.missionHeaderModern}>
-                                                    <LinearGradient
-                              colors={[(mission.color || "#64748B") + "20", (mission.color || "#64748B") + "10"]}
-                              style={styles.missionIconModern}
-                            >
+                        <LinearGradient
+                          colors={[(mission.color || "#64748B") + "20", (mission.color || "#64748B") + "10"]}
+                          style={styles.missionIconModern}
+                        >
                           <Icon
                             name={mission.icon || "help-circle"}
                             size={24}
@@ -590,30 +601,32 @@ const DailyMissionScreen = ({ navigation }: any) => {
                         </LinearGradient>
                         <View style={styles.missionInfoModern}>
                           <Text style={styles.missionTitleModern}>{mission.title || "Untitled Mission"}</Text>
-                          <Text style={styles.missionDescriptionModern}>
-                            {mission.description || "No description available"}
-                          </Text>
-                        </View>
-                        <View style={styles.missionRewardModern}>
-                          {userMission && userMission.status === "completed" ? (
-                            <View style={styles.completedRewardContainerModern}>
-                              <Text style={styles.completedRewardTextModern}>
-                                +{userMission.points_earned}
-                              </Text>
-                              <Icon
+                          <View style={styles.missionDescriptionRow}>
+                            <Text style={styles.missionDescriptionModern}>
+                              {mission.description || "No description available"}
+                            </Text>
+                            <View style={styles.missionRewardModern}>
+                              {userMission && userMission.status === "completed" ? (
+                                <View style={styles.completedRewardContainerModern}>
+                                  <Text style={styles.completedRewardTextModern}>
+                                    +{userMission.points_earned}
+                                  </Text>
+                                                                <Icon
                                 name="check-circle"
-                                size={16}
+                                size={14}
                                 color="#10B981"
                               />
+                                </View>
+                              ) : (
+                                <View style={styles.rewardContainerModern}>
+                                  <Text style={styles.rewardValueModern}>
+                                    {mission.points || 0}
+                                  </Text>
+                                  <Text style={styles.rewardLabelModern}>pts</Text>
+                                </View>
+                              )}
                             </View>
-                          ) : (
-                            <View style={styles.rewardContainerModern}>
-                              <Text style={styles.rewardValueModern}>
-                                {mission.points || 0}
-                              </Text>
-                              <Text style={styles.rewardLabelModern}>pts</Text>
-                            </View>
-                          )}
+                          </View>
                         </View>
                       </View>
 
@@ -979,14 +992,23 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     letterSpacing: -0.3,
   },
+  missionDescriptionRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
   missionDescriptionModern: {
     fontSize: 13,
     color: "#64748B",
     lineHeight: 18,
     fontWeight: "500",
+    flex: 1,
+    marginRight: 12,
   },
   missionRewardModern: {
     alignItems: "center",
+    justifyContent: "center",
+    minWidth: 60,
   },
   completedRewardContainerModern: {
     flexDirection: "row",
@@ -994,26 +1016,26 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   completedRewardTextModern: {
-    fontSize: 18,
+    fontSize: 14,
     fontWeight: "900",
     color: "#10B981",
-    marginRight: 6,
+    marginRight: 4,
     letterSpacing: -0.5,
   },
   rewardContainerModern: {
     alignItems: "center",
   },
   rewardValueModern: {
-    fontSize: 20,
+    fontSize: 16,
     fontWeight: "900",
     color: "#F59E0B",
     letterSpacing: -0.5,
   },
   rewardLabelModern: {
-    fontSize: 11,
+    fontSize: 10,
     color: "#64748B",
     fontWeight: "600",
-    marginTop: 2,
+    marginTop: 1,
   },
   missionFooterModern: {
     flexDirection: "row",

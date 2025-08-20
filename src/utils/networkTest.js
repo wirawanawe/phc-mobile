@@ -1,78 +1,71 @@
 import { Platform } from 'react-native';
 
-/**
- * Simple Network Test Utility
- * Helps test network connectivity to different endpoints
- */
-
+// Simple network test utility
 export const testNetworkConnectivity = async () => {
-  const testEndpoints = [
-    'http://192.168.18.30:3000/api/mobile/auth/login',
-    'http://localhost:3000/api/mobile/auth/login',
-    'http://127.0.0.1:3000/api/mobile/auth/login',
+  const testUrls = [
+    'http://localhost:3000/api/health',
+    'http://192.168.18.30:3000/api/health',
+    'http://10.242.90.103:3000/api/health',
+    'http://192.168.193.150:3000/api/health'
   ];
 
-  console.log('🌐 Network Test: Starting connectivity tests...');
-  
-  for (const endpoint of testEndpoints) {
+  console.log('🔍 Network Test: Starting connectivity test...');
+  console.log('🔍 Network Test: Platform:', Platform.OS);
+  console.log('🔍 Network Test: Development mode:', __DEV__);
+
+  for (const url of testUrls) {
     try {
-      console.log(`🔍 Testing: ${endpoint}`);
-      const startTime = Date.now();
+      console.log(`🌐 Network Test: Testing ${url}...`);
       
-      // Create a timeout controller
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 second timeout
+      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10s timeout
       
-      try {
-        const response = await fetch(endpoint, {
-          method: 'GET',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          signal: controller.signal
-        });
-        
-        clearTimeout(timeoutId);
-        const endTime = Date.now();
-        const responseTime = endTime - startTime;
-        
-        console.log(`✅ ${endpoint}: HTTP ${response.status} (${responseTime}ms)`);
-        
-        if (response.ok || response.status === 405) { // 405 Method Not Allowed is expected for GET on login
-          return { success: true, endpoint, responseTime, status: response.status };
-        }
-      } catch (fetchError) {
-        clearTimeout(timeoutId);
-        throw fetchError;
+      const startTime = Date.now();
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        signal: controller.signal
+      });
+      
+      clearTimeout(timeoutId);
+      const endTime = Date.now();
+      const responseTime = endTime - startTime;
+      
+      if (response.ok) {
+        console.log(`✅ Network Test: SUCCESS - ${url} (${responseTime}ms)`);
+        return { success: true, url, responseTime };
+      } else {
+        console.log(`⚠️ Network Test: HTTP ${response.status} - ${url}`);
       }
     } catch (error) {
-      console.log(`❌ ${endpoint}: ${error.message}`);
-      
-      // Handle specific timeout errors
-      if (error.name === 'AbortError' || error.message.includes('ETIMEDOUT') || error.message.includes('timeout')) {
-        console.log(`⏰ ${endpoint}: Connection timeout`);
-      } else if (error.message.includes('Network request failed')) {
-        console.log(`🌐 ${endpoint}: Network request failed`);
-      } else if (error.message.includes('ECONNREFUSED')) {
-        console.log(`🚫 ${endpoint}: Connection refused`);
-      }
+      console.log(`❌ Network Test: FAILED - ${url} - ${error.message}`);
     }
   }
   
-  return { success: false, message: 'All endpoints failed' };
+  console.log('❌ Network Test: All URLs failed');
+  return { success: false, error: 'No working connection found' };
 };
 
+// Get the best available URL for the current platform
 export const getBestEndpoint = async () => {
-  const result = await testNetworkConnectivity();
-  
-  if (result.success) {
-    // Extract base URL from successful endpoint
-    const baseURL = result.endpoint.replace('/auth/login', '');
-    console.log(`🎯 Best endpoint found: ${baseURL}`);
-    return baseURL;
+  if (__DEV__) {
+    if (Platform.OS === 'android') {
+      return 'http://10.0.2.2:3000/api/mobile';
+    }
+    
+    if (Platform.OS === 'ios') {
+      return 'http://localhost:3000/api/mobile';
+    }
+    
+    // For physical devices, test connectivity
+    const testResult = await testNetworkConnectivity();
+    if (testResult.success) {
+      return testResult.url.replace('/api/health', '/api/mobile');
+    }
   }
   
-  // Fallback to local IP address for mobile devices
-  console.log('📱 Using local IP fallback endpoint');
-  return 'http://192.168.18.30:3000/api/mobile';
+  // Fallback to production
+  return 'https://dash.doctorphc.id/api/mobile';
 }; 

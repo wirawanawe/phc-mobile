@@ -43,11 +43,7 @@ export class ConnectionTest {
 
   static async testAllEndpoints() {
     const endpoints = [
-      'https://dash.doctorphc.id/api/mobile/auth/me', // Production server (primary)
-      'http://localhost:3000/api/mobile/auth/me', // Local development (fallback)
-      'http://127.0.0.1:3000/api/mobile/auth/me', // Local development (fallback)
-      'http://10.0.2.2:3000/api/mobile/auth/me', // Android emulator (fallback)
-      'http://192.168.1.100:3000/api/mobile/auth/me' // Local network (fallback)
+      'https://dash.doctorphc.id/api/mobile/auth/me' // Production server (primary)
     ];
 
     console.log('🔍 Testing all endpoints...');
@@ -114,8 +110,8 @@ export class ConnectionTest {
     return {
       platform: Platform.OS,
       version: Platform.Version,
-      isEmulator: Platform.OS === 'android' ? '10.0.2.2' : '127.0.0.1',
-      localhost: Platform.OS === 'android' ? '10.0.2.2' : 'localhost'
+      isEmulator: false,
+      localhost: 'https://dash.doctorphc.id'
     };
   }
 }

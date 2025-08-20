@@ -21,6 +21,15 @@ const ProfileScreen = ({ navigation }: any) => {
     achievements: 0,
     healthScore: 0,
   });
+  const [wellnessProgramStatus, setWellnessProgramStatus] = useState({
+    program_status: 'not_joined',
+    should_renew: false,
+    days_remaining: 0,
+    days_completed: 0,
+    program_duration: 0,
+    program_cycles: 0,
+    program_history: []
+  });
   const [loading, setLoading] = useState(true);
 
   // Function to get initials from full name
@@ -36,9 +45,9 @@ const ProfileScreen = ({ navigation }: any) => {
     }
   };
 
-  // Fetch user statistics from database
+  // Fetch user statistics and wellness program status from database
   useEffect(() => {
-    const fetchUserStats = async () => {
+    const fetchUserData = async () => {
       if (isAuthenticated && user) {
         try {
           setLoading(true);
@@ -77,8 +86,15 @@ const ProfileScreen = ({ navigation }: any) => {
               healthScore,
             });
           }
+
+          // Fetch wellness program status
+          const programStatusResponse = await apiService.checkWellnessProgramStatus();
+          if (programStatusResponse.success && programStatusResponse.data) {
+            setWellnessProgramStatus(programStatusResponse.data);
+          }
+          
         } catch (error) {
-          console.error("Error fetching user stats:", error);
+          console.error("Error fetching user data:", error);
           // Use default values if API fails
           setUserStats({
             daysActive: 1,
@@ -93,7 +109,7 @@ const ProfileScreen = ({ navigation }: any) => {
       }
     };
 
-    fetchUserStats();
+    fetchUserData();
   }, [isAuthenticated, user]);
 
   // Use data from AuthContext if authenticated, otherwise use default
@@ -150,6 +166,14 @@ const ProfileScreen = ({ navigation }: any) => {
       screenName: "MedicalHistory",
     },
     {
+      id: "wellness-history",
+      title: "Riwayat Program Wellness",
+      subtitle: "Lihat summary program wellness yang telah selesai",
+      icon: "history",
+      color: "#8B5CF6",
+      screenName: "WellnessHistory",
+    },
+    {
       id: "4",
       title: "Pengaturan Privasi",
       subtitle: "Kelola privasi dan keamanan Anda",
@@ -173,6 +197,14 @@ const ProfileScreen = ({ navigation }: any) => {
       color: "#6366F1",
       screenName: "AboutApp",
     },
+    ...(isAuthenticated ? [{
+      id: "debug",
+      title: "Debug Wellness",
+      subtitle: "Diagnose wellness app issues",
+      icon: "bug",
+      color: "#F59E0B",
+      screenName: "WellnessDebug",
+    }] : []),
     {
       id: "7",
       title: "Keluar",
@@ -182,6 +214,25 @@ const ProfileScreen = ({ navigation }: any) => {
       screenName: "Welcome",
     },
   ];
+
+  const handleRenewProgram = () => {
+    Alert.alert(
+      "Perpanjang Program Wellness",
+      "Program wellness Anda telah selesai. Apakah Anda ingin mendaftar ulang untuk program baru?",
+      [
+        {
+          text: "Batal",
+          style: "cancel",
+        },
+        {
+          text: "Daftar Ulang",
+          onPress: () => {
+            navigation.navigate("WellnessApp");
+          },
+        },
+      ]
+    );
+  };
 
   const handleMenuPress = (item: any) => {
     if (item.title === "Keluar") {
@@ -251,10 +302,7 @@ const ProfileScreen = ({ navigation }: any) => {
                   <View style={styles.avatar}>
                     <Text style={styles.avatarText}>{userProfile.avatar}</Text>
                   </View>
-                  <View style={styles.levelBadge}>
-                    <Icon name="crown" size={14} color="#F59E0B" />
-                    <Text style={styles.levelText}>{userProfile.level}</Text>
-                  </View>
+
                 </View>
               </View>
 
@@ -267,10 +315,10 @@ const ProfileScreen = ({ navigation }: any) => {
               </View>
             </View>
 
-            <View style={styles.pointsContainer}>
+            {/* <View style={styles.pointsContainer}>
               <Icon name="star" size={18} color="#F59E0B" />
               <Text style={styles.pointsText}>{userProfile.points} poin</Text>
-            </View>
+            </View> */}
           </LinearGradient>
         </View>
 
@@ -304,6 +352,58 @@ const ProfileScreen = ({ navigation }: any) => {
             <Text style={styles.statLabel}>Skor Kesehatan</Text>
           </View>
         </View>
+
+        {/* Wellness Program Status */}
+        {wellnessProgramStatus.program_status !== 'not_joined' && (
+          <View style={styles.wellnessStatusContainer}>
+            <Text style={styles.sectionTitle}>Status Program Wellness</Text>
+            <View style={styles.wellnessStatusCard}>
+              <View style={styles.wellnessStatusHeader}>
+                <Icon 
+                  name={wellnessProgramStatus.program_status === 'active' ? 'play-circle' : 'check-circle'} 
+                  size={24} 
+                  color={wellnessProgramStatus.program_status === 'active' ? '#10B981' : '#8B5CF6'} 
+                />
+                <Text style={styles.wellnessStatusTitle}>
+                  {wellnessProgramStatus.program_status === 'active' ? 'Program Aktif' : 'Program Selesai'}
+                </Text>
+              </View>
+              
+              {wellnessProgramStatus.program_status === 'active' && (
+                <View style={styles.wellnessProgressInfo}>
+                  <Text style={styles.wellnessProgressText}>
+                    {wellnessProgramStatus.days_completed} dari {wellnessProgramStatus.program_duration} hari
+                  </Text>
+                  <Text style={styles.wellnessProgressText}>
+                    Sisa {wellnessProgramStatus.days_remaining} hari
+                  </Text>
+                </View>
+              )}
+
+              {wellnessProgramStatus.program_status === 'completed' && (
+                <View style={styles.wellnessCompletedInfo}>
+                  <Text style={styles.wellnessCompletedText}>
+                    Program selesai! Total {wellnessProgramStatus.program_cycles} siklus program
+                  </Text>
+                  {wellnessProgramStatus.program_history.length > 0 && (
+                    <Text style={styles.wellnessHistoryText}>
+                      {wellnessProgramStatus.program_history.length} program sebelumnya
+                    </Text>
+                  )}
+                </View>
+              )}
+
+              {wellnessProgramStatus.should_renew && (
+                <TouchableOpacity
+                  style={styles.renewButton}
+                  onPress={handleRenewProgram}
+                >
+                  <Text style={styles.renewButtonText}>Daftar Program Baru</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          </View>
+        )}
 
         {/* Menu Items */}
         <View style={styles.menuContainer}>
@@ -530,6 +630,68 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: "#64748B",
     textAlign: "center",
+    fontWeight: "600",
+  },
+  wellnessStatusContainer: {
+    paddingHorizontal: 20,
+    marginBottom: 32,
+  },
+  wellnessStatusCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 20,
+    padding: 20,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 4,
+    borderWidth: 1,
+    borderColor: "#F1F5F9",
+  },
+  wellnessStatusHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 16,
+  },
+  wellnessStatusTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#1F2937",
+    marginLeft: 12,
+  },
+  wellnessProgressInfo: {
+    marginBottom: 16,
+  },
+  wellnessProgressText: {
+    fontSize: 14,
+    color: "#64748B",
+    marginBottom: 4,
+    fontWeight: "500",
+  },
+  wellnessCompletedInfo: {
+    marginBottom: 16,
+  },
+  wellnessCompletedText: {
+    fontSize: 14,
+    color: "#64748B",
+    marginBottom: 4,
+    fontWeight: "500",
+  },
+  wellnessHistoryText: {
+    fontSize: 12,
+    color: "#8B5CF6",
+    fontWeight: "600",
+  },
+  renewButton: {
+    backgroundColor: "#8B5CF6",
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    alignItems: "center",
+  },
+  renewButtonText: {
+    color: "#FFFFFF",
+    fontSize: 14,
     fontWeight: "600",
   },
   menuContainer: {

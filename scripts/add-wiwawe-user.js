@@ -4,6 +4,7 @@
  */
 
 const mysql = require('mysql2/promise');
+const bcrypt = require('bcryptjs');
 
 async function addWiwaweUser() {
   console.log('👤 Adding Wiwawe User to Database...\n');
@@ -34,13 +35,17 @@ async function addWiwaweUser() {
       console.log(`   Name: ${existingUsers[0].name}`);
       console.log(`   Email: ${existingUsers[0].email}`);
       
-      // Update password to ensure it works
+      // Hash password and update
+      const hashedPassword = await bcrypt.hash('password123', 10);
       await connection.execute(
         'UPDATE mobile_users SET password = ? WHERE email = ?',
-        ['password123', 'wiwawe@phc.com']
+        [hashedPassword, 'wiwawe@phc.com']
       );
-      console.log('✅ Password updated to: password123');
+      console.log('✅ Password updated to: password123 (hashed)');
     } else {
+      // Hash password for new user
+      const hashedPassword = await bcrypt.hash('password123', 10);
+      
       // Add new user
       const [result] = await connection.execute(
         `INSERT INTO mobile_users (
@@ -50,7 +55,7 @@ async function addWiwaweUser() {
         [
           'Wiwawe PHC',
           'wiwawe@phc.com',
-          'password123',
+          hashedPassword,
           '+6281234567890',
           '1990-01-01',
           'male',

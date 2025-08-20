@@ -1,166 +1,156 @@
-# 🌐 Network Troubleshooting Guide
+# Network Troubleshooting Guide
 
-This guide helps resolve "Network request failed" errors in the PHC Mobile app.
+## Overview
+This guide helps you resolve connection timeout issues in the PHC Mobile app.
 
-## 🔍 Quick Diagnosis
+## Quick Fixes
 
-### 1. Check Server Status
+### 1. Restart the App
+- Close the app completely
+- Reopen the app
+- Try loading mission data again
+
+### 2. Check Server Status
+Ensure the backend server is running:
 ```bash
-# In the dash-app directory
 cd dash-app
-npm run dev
+node server.js
 ```
 
-The server should start on `http://localhost:3000`
-
-### 2. Test Server Connectivity
+### 3. Test Network Connectivity
+Run the network diagnostic script:
 ```bash
-curl http://localhost:3000/api/mobile/auth/me
+node scripts/test-network.js
 ```
 
-Expected response: `{"success":false,"message":"Authorization header required"}`
+## Common Issues & Solutions
 
-### 3. Check Available IP Addresses
-```bash
-ifconfig | grep "inet " | grep -v 127.0.0.1
-```
+### Issue: "Koneksi timeout. Silakan coba lagi."
+**Symptoms:**
+- App shows timeout error when loading mission data
+- Network requests fail with timeout errors
 
-## 🛠️ Common Solutions
+**Solutions:**
+1. **Check Internet Connection**
+   - Ensure your device has internet access
+   - Try switching between WiFi and mobile data
 
-### Issue 1: Server Not Running
-**Symptoms**: All endpoints fail with "Network request failed"
+2. **Verify Server is Running**
+   - Check if the backend server is running on port 3000
+   - Look for the server process: `ps aux | grep node`
 
-**Solution**:
-1. Navigate to `dash-app` directory
-2. Run `npm run dev`
-3. Verify server starts on port 3000
-
-### Issue 2: Wrong IP Address
-**Symptoms**: Some endpoints work, others don't
-
-**Solution**:
-1. Update IP addresses in `src/utils/networkHelper.js`
-2. Update IP addresses in `src/services/api.js`
-3. Use your computer's actual IP address
-
-### Issue 3: Firewall Blocking
-**Symptoms**: Server running but mobile app can't connect
-
-**Solution**:
-1. Check macOS firewall settings
-2. Allow incoming connections on port 3000
-3. Temporarily disable firewall for testing
-
-### Issue 4: Network Configuration
-**Symptoms**: Works on simulator but not on physical device
-
-**Solution**:
-- **Android Emulator**: Use `10.0.2.2:3000`
-- **iOS Simulator**: Use `localhost:3000`
-- **Physical Device**: Use computer's IP address
-
-## 📱 Platform-Specific Configuration
-
-### Android
-```javascript
-// In src/services/api.js
-if (Platform.OS === "android") {
-  return "http://10.0.2.2:3000/api/mobile"; // Emulator
-  // or
-  return "http://YOUR_COMPUTER_IP:3000/api/mobile"; // Physical device
-}
-```
-
-### iOS
-```javascript
-// In src/services/api.js
-if (Platform.OS === "ios") {
-  return "http://localhost:3000/api/mobile"; // Simulator
-  // or
-  return "http://YOUR_COMPUTER_IP:3000/api/mobile"; // Physical device
-}
-```
-
-## 🔧 Debug Tools
-
-### 1. Network Diagnostic Screen
-Use the `NetworkTestScreen` to test connectivity:
-- Run network diagnostic
-- Test registration
-- Test login
-- View detailed results
-
-### 2. Console Logs
-Check console output for:
-- `🔍 Testing connectivity to:`
-- `✅ Network test successful`
-- `❌ Network test failed`
-
-### 3. API Service Logs
-Look for:
-- `🚀 API Service initialized with URL:`
-- `🔍 Attempting registration to:`
-- `📥 Registration response status:`
-
-## 📋 Troubleshooting Checklist
-
-- [ ] Server is running on port 3000
-- [ ] Server responds to curl test
-- [ ] IP addresses are correct
-- [ ] Firewall allows port 3000
-- [ ] Device and computer on same network
-- [ ] Using correct IP for platform (emulator vs physical)
-- [ ] Network diagnostic passes
-- [ ] Registration test succeeds
-
-## 🚨 Emergency Solutions
-
-### If Nothing Works:
-
-1. **Restart Everything**:
+3. **Test Server Connectivity**
    ```bash
-   # Stop server
-   Ctrl+C in dash-app terminal
-   
-   # Restart server
-   cd dash-app && npm run dev
-   
-   # Restart mobile app
-   npx expo start --clear
+   curl http://localhost:3000/api/health
    ```
+   Should return HTTP 200
 
-2. **Use Localhost Only**:
-   ```javascript
-   // Temporarily force localhost
-   return "http://localhost:3000/api/mobile";
-   ```
+4. **Check IP Configuration**
+   - For physical devices, ensure they're on the same network as the server
+   - The app automatically tests multiple IP addresses:
+     - `192.168.193.150:3000` (fastest)
+     - `192.168.18.30:3000`
+     - `10.242.90.103:3000`
+     - `localhost:3000` (fallback)
 
-3. **Check Network Interface**:
+### Issue: Slow Response Times
+**Solutions:**
+1. **Use the Fastest IP Address**
+   - The app automatically selects the fastest available IP
+   - Check console logs for "Found working URL" messages
+
+2. **Optimize Network Settings**
+   - Move closer to WiFi router
+   - Close other bandwidth-heavy applications
+
+### Issue: Authentication Errors
+**Solutions:**
+1. **Clear App Data**
+   - Clear app storage/cache
+   - Log out and log back in
+
+2. **Check Token Expiry**
+   - The app automatically refreshes tokens
+   - If issues persist, try logging out and back in
+
+## Network Diagnostic Screen
+
+The app includes a built-in network diagnostic screen that can help identify issues:
+
+1. Navigate to the diagnostic screen in the app
+2. Run the diagnostic test
+3. Follow the recommended actions
+
+## Development Environment
+
+### For Android Emulator:
+- Uses `10.0.2.2:3000` (special Android emulator IP)
+- Ensure emulator is running and server is accessible
+
+### For iOS Simulator:
+- Uses `localhost:3000`
+- Ensure simulator is running and server is accessible
+
+### For Physical Devices:
+- Automatically tests multiple IP addresses
+- Prioritizes the fastest available connection
+- Falls back to localhost if needed
+
+## Server Configuration
+
+### Backend Server:
+- Runs on port 3000
+- Health endpoint: `/api/health`
+- Mobile API endpoint: `/api/mobile/*`
+
+### CORS Configuration:
+- Server should allow requests from mobile app
+- Check server logs for CORS errors
+
+## Debugging Steps
+
+1. **Check Console Logs**
+   - Look for network-related messages
+   - Identify which IP addresses are being tested
+   - Check for timeout or connection errors
+
+2. **Monitor Network Activity**
+   - Use browser dev tools to monitor requests
+   - Check response times and status codes
+
+3. **Test Individual Endpoints**
    ```bash
-   # Find your computer's IP
-   ifconfig | grep "inet " | grep -v 127.0.0.1
+   # Test health endpoint
+   curl http://localhost:3000/api/health
    
-   # Test each IP
-   for ip in $(ifconfig | grep "inet " | grep -v 127.0.0.1 | awk '{print $2}'); do
-     echo "Testing $ip:3000"
-     curl -s --connect-timeout 5 http://$ip:3000/api/mobile/auth/me && echo " - OK" || echo " - FAILED"
-   done
+   # Test missions endpoint
+   curl http://localhost:3000/api/mobile/missions
    ```
 
-## 📞 Getting Help
+## Performance Optimization
 
-If you're still having issues:
+### Timeout Settings:
+- Request timeout: 15 seconds
+- Connectivity test timeout: 5 seconds per IP
+- Retry attempts: 3 with exponential backoff
 
-1. Run the Network Diagnostic Screen
-2. Check console logs for error details
-3. Verify server is running and accessible
-4. Test with curl commands
-5. Check network configuration
+### Caching:
+- API responses are cached when possible
+- Network status is monitored continuously
 
-## 🔄 Recent Updates
+## Support
 
-- Updated IP addresses to match current network configuration
-- Added comprehensive network diagnostic tool
-- Improved error handling with detailed logging
-- Created NetworkTestScreen for debugging
-- Enhanced API service with better error reporting 
+If issues persist:
+1. Check the network diagnostic screen in the app
+2. Run the network test script
+3. Review server logs for errors
+4. Ensure all network configurations are correct
+
+## Environment Variables
+
+The app uses different configurations based on the environment:
+
+- **Development**: Tests multiple local IP addresses
+- **Production**: Uses `https://dash.doctorphc.id`
+
+Make sure the correct environment is set when building the app.

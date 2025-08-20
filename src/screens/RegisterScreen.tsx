@@ -7,11 +7,13 @@ import {
   KeyboardAvoidingView,
   Platform,
   TextInput,
+  Alert,
 } from "react-native";
 import { Text, useTheme, Button } from "react-native-paper";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import Icon from "react-native-vector-icons/MaterialCommunityIcons";
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { CustomTheme } from "../theme/theme";
 import LogoPutih from "../components/LogoPutih";
 import CustomAlert from "../components/CustomAlert";
@@ -32,15 +34,18 @@ const RegisterScreen = ({ navigation }: any) => {
     password: "",
     confirmPassword: "",
     phone: "",
+    dateOfBirth: new Date('1990-01-01'), // Default date
+    gender: "",
   });
   const [isLoading, setIsLoading] = useState(false);
+  const [showDatePicker, setShowDatePicker] = useState(false);
 
   const handleRegister = async () => {
     // Client-side validation
-    if (!formData.name.trim() || !formData.email.trim() || !formData.password.trim() || !formData.confirmPassword.trim()) {
+    if (!formData.name.trim() || !formData.email.trim() || !formData.password.trim() || !formData.confirmPassword.trim() || !formData.gender) {
       showWarningAlert(
         "Data Tidak Lengkap",
-        "Mohon isi semua field yang diperlukan"
+        "Mohon isi semua field yang diperlukan termasuk tanggal lahir dan jenis kelamin"
       );
       return;
     }
@@ -69,6 +74,17 @@ const RegisterScreen = ({ navigation }: any) => {
       return;
     }
 
+    // Validate date of birth (user must be at least 13 years old)
+    const today = new Date();
+    const minDate = new Date(today.getFullYear() - 13, today.getMonth(), today.getDate());
+    if (formData.dateOfBirth > minDate) {
+      showWarningAlert(
+        "Tanggal Lahir Tidak Valid",
+        "Anda harus berusia minimal 13 tahun untuk mendaftar"
+      );
+      return;
+    }
+
     setIsLoading(true);
 
     try {
@@ -77,6 +93,8 @@ const RegisterScreen = ({ navigation }: any) => {
         email: formData.email,
         password: formData.password,
         phone: formData.phone,
+        dateOfBirth: formData.dateOfBirth.toISOString().split('T')[0], // Format as YYYY-MM-DD
+        gender: formData.gender,
       });
 
       if (result.success) {
@@ -122,6 +140,25 @@ const RegisterScreen = ({ navigation }: any) => {
   const isValidEmail = (email: string) => {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     return emailRegex.test(email);
+  };
+
+  const handleDateChange = (event: any, selectedDate?: Date) => {
+    setShowDatePicker(false);
+    if (selectedDate) {
+      setFormData({ ...formData, dateOfBirth: selectedDate });
+    }
+  };
+
+  const formatDate = (date: Date) => {
+    return date.toLocaleDateString('id-ID', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
+    });
+  };
+
+  const handleGenderSelect = (gender: string) => {
+    setFormData({ ...formData, gender });
   };
 
   const handleLogin = () => {
@@ -222,6 +259,57 @@ const RegisterScreen = ({ navigation }: any) => {
                 </View>
               </View>
 
+              {/* Date of Birth Input */}
+              <View style={styles.inputContainer}>
+                <TouchableOpacity
+                  style={styles.inputWrapper}
+                  onPress={() => setShowDatePicker(true)}
+                >
+                  <Icon
+                    name="calendar-outline"
+                    size={20}
+                    color="#9CA3AF"
+                    style={styles.inputIcon}
+                  />
+                  <Text style={[styles.textInput, { color: formData.dateOfBirth ? '#1F2937' : '#9CA3AF' }]}>
+                    {formData.dateOfBirth ? formatDate(formData.dateOfBirth) : "Tanggal Lahir"}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
+              {/* Gender Selection */}
+              <View style={styles.inputContainer}>
+                <Text style={styles.genderLabel}>Jenis Kelamin</Text>
+                <View style={styles.genderContainer}>
+                  {[
+                    { value: 'male', label: 'Laki-laki', icon: 'gender-male' },
+                    { value: 'female', label: 'Perempuan', icon: 'gender-female' },
+                  ].map((option) => (
+                    <TouchableOpacity
+                      key={option.value}
+                      style={[
+                        styles.genderButton,
+                        formData.gender === option.value && styles.genderButtonActive
+                      ]}
+                      onPress={() => handleGenderSelect(option.value)}
+                    >
+                      <Icon
+                        name={option.icon}
+                        size={20}
+                        color={formData.gender === option.value ? '#FFFFFF' : '#9CA3AF'}
+                        style={styles.genderIcon}
+                      />
+                      <Text style={[
+                        styles.genderText,
+                        formData.gender === option.value && styles.genderTextActive
+                      ]}>
+                        {option.label}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+
               {/* Password Input */}
               <View style={styles.inputContainer}>
                 <View style={styles.inputWrapper}>
@@ -308,6 +396,18 @@ const RegisterScreen = ({ navigation }: any) => {
             </View>
           </ScrollView>
         </KeyboardAvoidingView>
+
+        {/* Date Picker Modal */}
+        {showDatePicker && (
+          <DateTimePicker
+            value={formData.dateOfBirth}
+            mode="date"
+            display="default"
+            onChange={handleDateChange}
+            maximumDate={new Date()}
+            minimumDate={new Date('1900-01-01')}
+          />
+        )}
 
         {/* Custom Alert Modal */}
         <CustomAlert
@@ -396,6 +496,47 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 16,
     color: "#1F2937",
+  },
+  genderLabel: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#FFFFFF",
+    marginBottom: 8,
+    marginLeft: 4,
+  },
+  genderContainer: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: 8,
+  },
+  genderButton: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#FFFFFF",
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  genderButtonActive: {
+    backgroundColor: "#E22345",
+  },
+  genderIcon: {
+    marginRight: 8,
+  },
+  genderText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#9CA3AF",
+  },
+  genderTextActive: {
+    color: "#FFFFFF",
   },
   errorContainer: {
     backgroundColor: "rgba(239, 68, 68, 0.1)",

@@ -10,7 +10,6 @@ DELETE FROM meal_tracking;
 DELETE FROM food_database;
 
 -- Try to delete from old table if it exists
-DELETE FROM meal_logging;
 
 -- Re-enable foreign key checks
 SET FOREIGN_KEY_CHECKS = 1;

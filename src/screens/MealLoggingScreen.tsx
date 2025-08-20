@@ -39,6 +39,7 @@ interface FoodItem {
   barcode?: string;
   image_url?: string;
   isQuickFood?: boolean;
+  quantity?: number; // Add quantity field
 }
 
 const MealLoggingScreen = ({ navigation }: any) => {
@@ -70,7 +71,7 @@ const MealLoggingScreen = ({ navigation }: any) => {
       icon: "moon-waning-crescent",
       color: "#8B5CF6",
     },
-    { id: "snacks", name: "Snacks", icon: "food-apple", color: "#10B981" },
+    { id: "snack", name: "Snacks", icon: "food-apple", color: "#10B981" },
   ];
 
   const recentMealTabs = [
@@ -78,7 +79,7 @@ const MealLoggingScreen = ({ navigation }: any) => {
     { id: "breakfast", name: "Breakfast", icon: "weather-sunny", color: "#F59E0B" },
     { id: "lunch", name: "Lunch", icon: "sun-wireless", color: "#EF4444" },
     { id: "dinner", name: "Dinner", icon: "moon-waning-crescent", color: "#8B5CF6" },
-    { id: "snacks", name: "Snacks", icon: "food-apple", color: "#10B981" },
+    { id: "snack", name: "Snacks", icon: "food-apple", color: "#10B981" },
   ];
 
   // Search food from database
@@ -92,7 +93,7 @@ const MealLoggingScreen = ({ navigation }: any) => {
     setIsSearching(true);
     try {
       const response = await apiService.searchFood(query);
-      if (response.success) {
+      if (response.success && response.data && Array.isArray(response.data)) {
         setSearchResults(response.data);
         
         // Check quick food status for each search result (only if authenticated)
@@ -143,7 +144,7 @@ const MealLoggingScreen = ({ navigation }: any) => {
   const getFallbackFoodResults = (query: string) => {
     const fallbackFoods = [
       {
-        id: 1,
+        id: 17,
         name: "Nasi Goreng",
         name_indonesian: "Nasi Goreng",
         category: "Rice Dishes",
@@ -156,7 +157,7 @@ const MealLoggingScreen = ({ navigation }: any) => {
         sodium_per_100g: 450,
       },
       {
-        id: 2,
+        id: 18,
         name: "Ayam Goreng",
         name_indonesian: "Ayam Goreng",
         category: "Chicken Dishes",
@@ -169,7 +170,7 @@ const MealLoggingScreen = ({ navigation }: any) => {
         sodium_per_100g: 380,
       },
       {
-        id: 3,
+        id: 19,
         name: "Gado-gado",
         name_indonesian: "Gado-gado",
         category: "Salads",
@@ -182,7 +183,7 @@ const MealLoggingScreen = ({ navigation }: any) => {
         sodium_per_100g: 320,
       },
       {
-        id: 4,
+        id: 20,
         name: "Sate Ayam",
         name_indonesian: "Sate Ayam",
         category: "Grilled Dishes",
@@ -195,7 +196,7 @@ const MealLoggingScreen = ({ navigation }: any) => {
         sodium_per_100g: 420,
       },
       {
-        id: 5,
+        id: 21,
         name: "Soto Ayam",
         name_indonesian: "Soto Ayam",
         category: "Soups",
@@ -208,7 +209,7 @@ const MealLoggingScreen = ({ navigation }: any) => {
         sodium_per_100g: 280,
       },
       {
-        id: 6,
+        id: 22,
         name: "Rendang",
         name_indonesian: "Rendang",
         category: "Beef Dishes",
@@ -221,7 +222,7 @@ const MealLoggingScreen = ({ navigation }: any) => {
         sodium_per_100g: 450,
       },
       {
-        id: 7,
+        id: 23,
         name: "Mie Goreng",
         name_indonesian: "Mie Goreng",
         category: "Noodle Dishes",
@@ -234,7 +235,7 @@ const MealLoggingScreen = ({ navigation }: any) => {
         sodium_per_100g: 380,
       },
       {
-        id: 8,
+        id: 24,
         name: "Bakso",
         name_indonesian: "Bakso",
         category: "Meatballs",
@@ -247,8 +248,8 @@ const MealLoggingScreen = ({ navigation }: any) => {
         sodium_per_100g: 320,
       },
       {
-        id: 11,
-        name: "Pisang",
+        id: 27,
+        name: "Banana",
         name_indonesian: "Pisang",
         category: "Fruits",
         calories_per_100g: 89,
@@ -260,8 +261,8 @@ const MealLoggingScreen = ({ navigation }: any) => {
         sodium_per_100g: 1,
       },
       {
-        id: 14,
-        name: "Brokoli",
+        id: 32,
+        name: "Broccoli",
         name_indonesian: "Brokoli",
         category: "Vegetables",
         calories_per_100g: 34,
@@ -307,7 +308,24 @@ const MealLoggingScreen = ({ navigation }: any) => {
 
   // Add food to meal
   const addFoodToMeal = (food: FoodItem) => {
-    setSelectedFoods(prev => [...prev, food]);
+    setSelectedFoods(prev => {
+      // Check if food already exists in selected foods
+      const existingFoodIndex = prev.findIndex(item => item.id === food.id);
+      
+      if (existingFoodIndex !== -1) {
+        // If food exists, increase quantity
+        const updatedFoods = [...prev];
+        const existingFood = updatedFoods[existingFoodIndex];
+        updatedFoods[existingFoodIndex] = {
+          ...existingFood,
+          quantity: (existingFood.quantity || 1) + 1
+        };
+        return updatedFoods;
+      } else {
+        // If food doesn't exist, add it with quantity 1
+        return [...prev, { ...food, quantity: 1 }];
+      }
+    });
     setSearchQuery("");
     setSearchResults([]);
     setShowSearchModal(false);
@@ -316,20 +334,40 @@ const MealLoggingScreen = ({ navigation }: any) => {
   // Add quick food to meal
   const addQuickFoodToMeal = (quickFood: any) => {
     // Convert quick food to FoodItem format
+    // Quick foods already contain actual nutrition values (not per 100g)
     const foodItem: FoodItem = {
       id: parseInt(quickFood.id),
       name: quickFood.name,
       category: quickFood.category || "Quick Food",
-      calories_per_100g: quickFood.calories,
-      protein_per_100g: quickFood.protein,
-      carbs_per_100g: quickFood.carbs,
-      fat_per_100g: quickFood.fat,
+      calories_per_100g: quickFood.calories || 0, // These are already actual values
+      protein_per_100g: quickFood.protein || 0,
+      carbs_per_100g: quickFood.carbs || 0,
+      fat_per_100g: quickFood.fat || 0,
       fiber_per_100g: quickFood.fiber_per_100g || 0,
       sugar_per_100g: quickFood.sugar_per_100g || 0,
       sodium_per_100g: quickFood.sodium_per_100g || 0,
+      serving_weight: 100, // Set serving weight to 100g for quick foods
+      quantity: 1, // Default quantity for quick foods
     };
     
-    setSelectedFoods(prev => [...prev, foodItem]);
+    setSelectedFoods(prev => {
+      // Check if food already exists in selected foods
+      const existingFoodIndex = prev.findIndex(item => item.id === foodItem.id);
+      
+      if (existingFoodIndex !== -1) {
+        // If food exists, increase quantity
+        const updatedFoods = [...prev];
+        const existingFood = updatedFoods[existingFoodIndex];
+        updatedFoods[existingFoodIndex] = {
+          ...existingFood,
+          quantity: (existingFood.quantity || 1) + 1
+        };
+        return updatedFoods;
+      } else {
+        // If food doesn't exist, add it with quantity 1
+        return [...prev, foodItem];
+      }
+    });
     Alert.alert("Success", `${quickFood.name} added to your meal!`);
   };
 
@@ -404,37 +442,149 @@ const MealLoggingScreen = ({ navigation }: any) => {
 
   // Save meal to database
   const saveMeal = async () => {
+    console.log('🍽️ saveMeal function called!');
+    console.log('🍽️ selectedFoods length:', selectedFoods.length);
+    console.log('🍽️ selectedMeal:', selectedMeal);
+    
     if (selectedFoods.length === 0) {
+      console.log('⚠️ No foods selected, showing alert');
       Alert.alert("No Food Selected", "Please add at least one food item to your meal");
       return;
     }
 
     // Check if user is authenticated
+    console.log('🔐 Authentication check - isAuthenticated:', isAuthenticated);
     if (!isAuthenticated) {
+      console.log('⚠️ User not authenticated, showing alert');
       Alert.alert("Authentication Required", "Please log in to save your meal");
       return;
     }
 
     try {
-      // Calculate totals from selected foods
-      const totalCalories = selectedFoods.reduce((sum, food) => sum + (food.calories_per_100g || 0), 0);
-      const totalProtein = selectedFoods.reduce((sum, food) => sum + (food.protein_per_100g || 0), 0);
-      const totalCarbs = selectedFoods.reduce((sum, food) => sum + (food.carbs_per_100g || 0), 0);
-      const totalFat = selectedFoods.reduce((sum, food) => sum + (food.fat_per_100g || 0), 0);
-      const totalFiber = selectedFoods.reduce((sum, food) => sum + (food.fiber_per_100g || 0), 0);
-      const totalSugar = selectedFoods.reduce((sum, food) => sum + (food.sugar_per_100g || 0), 0);
-      const totalSodium = selectedFoods.reduce((sum, food) => sum + (food.sodium_per_100g || 0), 0);
+      // Calculate totals from selected foods (using same logic as food transformation)
+      const totalCalories = selectedFoods.reduce((sum, food) => {
+        const servingSize = food.serving_weight || 100;
+        const quantity = food.quantity || 1; // Use food.quantity or default to 1
+        
+        let actualCalories;
+        if (food.serving_weight === 100) {
+          // Quick foods - values are already actual
+          actualCalories = Math.round(food.calories_per_100g || 0);
+        } else {
+          // Search results - convert from per 100g to actual
+          const actualWeight = (servingSize * quantity) / 100;
+          actualCalories = Math.round((food.calories_per_100g || 0) * actualWeight);
+        }
+        return sum + actualCalories;
+      }, 0);
+      
+      const totalProtein = selectedFoods.reduce((sum, food) => {
+        const servingSize = food.serving_weight || 100;
+        const quantity = food.quantity || 1; // Use food.quantity or default to 1
+        
+        let actualProtein;
+        if (food.serving_weight === 100) {
+          // Quick foods - values are already actual
+          actualProtein = Math.round((food.protein_per_100g || 0) * 10) / 10;
+        } else {
+          // Search results - convert from per 100g to actual
+          const actualWeight = (servingSize * quantity) / 100;
+          actualProtein = Math.round((food.protein_per_100g || 0) * actualWeight * 10) / 10;
+        }
+        return sum + actualProtein;
+      }, 0);
+      
+      const totalCarbs = selectedFoods.reduce((sum, food) => {
+        const servingSize = food.serving_weight || 100;
+        const quantity = food.quantity || 1; // Use food.quantity or default to 1
+        
+        let actualCarbs;
+        if (food.serving_weight === 100) {
+          // Quick foods - values are already actual
+          actualCarbs = Math.round((food.carbs_per_100g || 0) * 10) / 10;
+        } else {
+          // Search results - convert from per 100g to actual
+          const actualWeight = (servingSize * quantity) / 100;
+          actualCarbs = Math.round((food.carbs_per_100g || 0) * actualWeight * 10) / 10;
+        }
+        return sum + actualCarbs;
+      }, 0);
+      
+      const totalFat = selectedFoods.reduce((sum, food) => {
+        const servingSize = food.serving_weight || 100;
+        const quantity = food.quantity || 1; // Use food.quantity or default to 1
+        
+        let actualFat;
+        if (food.serving_weight === 100) {
+          // Quick foods - values are already actual
+          actualFat = Math.round((food.fat_per_100g || 0) * 10) / 10;
+        } else {
+          // Search results - convert from per 100g to actual
+          const actualWeight = (servingSize * quantity) / 100;
+          actualFat = Math.round((food.fat_per_100g || 0) * actualWeight * 10) / 10;
+        }
+        return sum + actualFat;
+      }, 0);
+      
+      const totalFiber = selectedFoods.reduce((sum, food) => {
+        const servingSize = food.serving_weight || 100;
+        const quantity = food.quantity || 1; // Use food.quantity or default to 1
+        const actualWeight = (servingSize * quantity) / 100;
+        const actualFiber = Math.round((food.fiber_per_100g || 0) * actualWeight * 10) / 10;
+        return sum + actualFiber;
+      }, 0);
+      
+      const totalSugar = selectedFoods.reduce((sum, food) => {
+        const servingSize = food.serving_weight || 100;
+        const quantity = food.quantity || 1; // Use food.quantity or default to 1
+        const actualWeight = (servingSize * quantity) / 100;
+        const actualSugar = Math.round((food.sugar_per_100g || 0) * actualWeight * 10) / 10;
+        return sum + actualSugar;
+      }, 0);
+      
+      const totalSodium = selectedFoods.reduce((sum, food) => {
+        const servingSize = food.serving_weight || 100;
+        const quantity = food.quantity || 1; // Use food.quantity or default to 1
+        const actualWeight = (servingSize * quantity) / 100;
+        const actualSodium = Math.round((food.sodium_per_100g || 0) * actualWeight * 10) / 10;
+        return sum + actualSodium;
+      }, 0);
 
       // Transform selected foods to match API expected format
-      const foods = selectedFoods.map(food => ({
-        food_id: food.id,
-        quantity: 1, // default quantity, could be made configurable
-        unit: 'serving',
-        calories: food.calories_per_100g || 0,
-        protein: food.protein_per_100g || 0,
-        carbs: food.carbs_per_100g || 0,
-        fat: food.fat_per_100g || 0
-      }));
+      // Calculate nutrition based on actual serving size
+      const foods = selectedFoods.map(food => {
+        const servingSize = food.serving_weight || 100; // Default to 100g if not specified
+        const quantity = food.quantity || 1; // Default quantity
+        
+        // For quick foods, values are already actual values (not per 100g)
+        // For search results, values are per 100g and need to be converted
+        let actualCalories, actualProtein, actualCarbs, actualFat;
+        
+        if (food.serving_weight === 100) {
+          // Quick foods - values are already actual
+          actualCalories = Math.round(food.calories_per_100g || 0);
+          actualProtein = Math.round((food.protein_per_100g || 0) * 10) / 10;
+          actualCarbs = Math.round((food.carbs_per_100g || 0) * 10) / 10;
+          actualFat = Math.round((food.fat_per_100g || 0) * 10) / 10;
+        } else {
+          // Search results - convert from per 100g to actual
+          const actualWeight = (servingSize * quantity) / 100;
+          actualCalories = Math.round((food.calories_per_100g || 0) * actualWeight);
+          actualProtein = Math.round((food.protein_per_100g || 0) * actualWeight * 10) / 10;
+          actualCarbs = Math.round((food.carbs_per_100g || 0) * actualWeight * 10) / 10;
+          actualFat = Math.round((food.fat_per_100g || 0) * actualWeight * 10) / 10;
+        }
+        
+        return {
+          food_id: food.id,
+          quantity: quantity,
+          unit: 'serving',
+          calories: actualCalories,
+          protein: actualProtein,
+          carbs: actualCarbs,
+          fat: actualFat
+        };
+      });
 
       const mealData = {
         meal_type: selectedMeal,
@@ -443,7 +593,65 @@ const MealLoggingScreen = ({ navigation }: any) => {
         recorded_at: new Date().toISOString()
       };
 
+      // Debug logging
+      console.log('🍽️ Selected foods:', selectedFoods.map(food => ({
+        name: food.name,
+        calories_per_100g: food.calories_per_100g,
+        protein_per_100g: food.protein_per_100g,
+        carbs_per_100g: food.carbs_per_100g,
+        fat_per_100g: food.fat_per_100g,
+        serving_weight: food.serving_weight,
+        quantity: food.quantity
+      })));
+      console.log('🍽️ Transformed foods:', foods);
+      console.log('🍽️ Meal data to send:', JSON.stringify(mealData, null, 2));
+      console.log('📊 Nutrition totals:', {
+        calories: totalCalories,
+        protein: totalProtein,
+        carbs: totalCarbs,
+        fat: totalFat
+      });
+      
+      // Test calculation for first food
+      if (selectedFoods.length > 0) {
+        const testFood = selectedFoods[0];
+        console.log('🧪 Test calculation for:', testFood.name);
+        console.log('   Original values:', {
+          calories: testFood.calories_per_100g,
+          protein: testFood.protein_per_100g,
+          carbs: testFood.carbs_per_100g,
+          fat: testFood.fat_per_100g,
+          serving_weight: testFood.serving_weight,
+          quantity: testFood.quantity
+        });
+        
+        const servingSize = testFood.serving_weight || 100;
+        const quantity = testFood.quantity || 1;
+        
+        if (testFood.serving_weight === 100) {
+          console.log('   Quick food - using values directly');
+          console.log('   Calculated:', {
+            calories: Math.round(testFood.calories_per_100g || 0),
+            protein: Math.round((testFood.protein_per_100g || 0) * 10) / 10,
+            carbs: Math.round((testFood.carbs_per_100g || 0) * 10) / 10,
+            fat: Math.round((testFood.fat_per_100g || 0) * 10) / 10
+          });
+        } else {
+          const actualWeight = (servingSize * quantity) / 100;
+          console.log('   Search result - converting from per 100g');
+          console.log('   actualWeight:', actualWeight);
+          console.log('   Calculated:', {
+            calories: Math.round((testFood.calories_per_100g || 0) * actualWeight),
+            protein: Math.round((testFood.protein_per_100g || 0) * actualWeight * 10) / 10,
+            carbs: Math.round((testFood.carbs_per_100g || 0) * actualWeight * 10) / 10,
+            fat: Math.round((testFood.fat_per_100g || 0) * actualWeight * 10) / 10
+          });
+        }
+      }
+
+      console.log('📡 About to call API...');
       const response = await apiService.createMealEntry(mealData);
+      console.log('📡 API Response received:', response);
       
       if (response.success) {
         Alert.alert("Success", `Meal logged successfully!\nTotal calories: ${totalCalories} kcal`);
@@ -458,8 +666,13 @@ const MealLoggingScreen = ({ navigation }: any) => {
       } else {
         Alert.alert("Error", response.message || "Failed to save meal");
       }
-    } catch (error) {
-      console.error('Error saving meal:', error);
+    } catch (error: any) {
+      console.error('❌ Error saving meal:', error);
+      console.error('❌ Error details:', {
+        message: error?.message || 'Unknown error',
+        name: error?.name || 'Unknown',
+        stack: error?.stack || 'No stack trace'
+      });
       Alert.alert("Error", "Failed to save meal. Please check your connection and try again.");
     }
   };
@@ -467,6 +680,40 @@ const MealLoggingScreen = ({ navigation }: any) => {
   // Remove food from selection
   const removeFood = (index: number) => {
     setSelectedFoods(prev => prev.filter((_, i) => i !== index));
+  };
+
+  // Increase food quantity
+  const increaseQuantity = (index: number) => {
+    setSelectedFoods(prev => {
+      const updatedFoods = [...prev];
+      const food = updatedFoods[index];
+      updatedFoods[index] = {
+        ...food,
+        quantity: (food.quantity || 1) + 1
+      };
+      return updatedFoods;
+    });
+  };
+
+  // Decrease food quantity
+  const decreaseQuantity = (index: number) => {
+    setSelectedFoods(prev => {
+      const updatedFoods = [...prev];
+      const food = updatedFoods[index];
+      const currentQuantity = food.quantity || 1;
+      
+      if (currentQuantity <= 1) {
+        // If quantity is 1 or less, remove the food
+        return prev.filter((_, i) => i !== index);
+      } else {
+        // Decrease quantity
+        updatedFoods[index] = {
+          ...food,
+          quantity: currentQuantity - 1
+        };
+        return updatedFoods;
+      }
+    });
   };
 
   const [dailyNutrition, setDailyNutrition] = useState({
@@ -515,7 +762,7 @@ const MealLoggingScreen = ({ navigation }: any) => {
       // Only load user's quick foods if authenticated
       if (isAuthenticated) {
         const response = await apiService.getQuickFoods();
-        if (response.success && response.data) {
+        if (response.success && response.data && Array.isArray(response.data)) {
           const formattedQuickFoods = response.data.map((food: any) => ({
             ...food,
             // Map nutrition data from per_100g format to display format
@@ -604,7 +851,7 @@ const MealLoggingScreen = ({ navigation }: any) => {
   // Default quick foods as fallback
   const getDefaultQuickFoods = () => [
     {
-      id: "1",
+      id: "17",
       name: "Nasi Goreng",
       calories: 186,
       protein: 6.8,
@@ -614,7 +861,7 @@ const MealLoggingScreen = ({ navigation }: any) => {
       color: "#F59E0B",
     },
     {
-      id: "2",
+      id: "18",
       name: "Ayam Goreng",
       calories: 239,
       protein: 23.5,
@@ -624,7 +871,7 @@ const MealLoggingScreen = ({ navigation }: any) => {
       color: "#EF4444",
     },
     {
-      id: "4",
+      id: "20",
       name: "Sate Ayam",
       calories: 185,
       protein: 25.8,
@@ -634,7 +881,7 @@ const MealLoggingScreen = ({ navigation }: any) => {
       color: "#3B82F6",
     },
     {
-      id: "3",
+      id: "19",
       name: "Gado-gado",
       calories: 145,
       protein: 8.2,
@@ -644,7 +891,7 @@ const MealLoggingScreen = ({ navigation }: any) => {
       color: "#10B981",
     },
     {
-      id: "5",
+      id: "21",
       name: "Soto Ayam",
       calories: 85,
       protein: 12.5,
@@ -654,7 +901,7 @@ const MealLoggingScreen = ({ navigation }: any) => {
       color: "#F59E0B",
     },
     {
-      id: "6",
+      id: "22",
       name: "Rendang",
       calories: 320,
       protein: 28.5,
@@ -664,7 +911,7 @@ const MealLoggingScreen = ({ navigation }: any) => {
       color: "#8B5CF6",
     },
     {
-      id: "7",
+      id: "23",
       name: "Mie Goreng",
       calories: 165,
       protein: 8.5,
@@ -674,7 +921,7 @@ const MealLoggingScreen = ({ navigation }: any) => {
       color: "#F59E0B",
     },
     {
-      id: "8",
+      id: "24",
       name: "Bakso",
       calories: 145,
       protein: 18.5,
@@ -729,8 +976,8 @@ const MealLoggingScreen = ({ navigation }: any) => {
           limit: 50, // Get more meals to filter by time
         });
         
-        if (response.success && response.data) {
-          const allMeals = [];
+        if (response.success && response.data && Array.isArray(response.data)) {
+          const allMeals: any[] = [];
           
           response.data.forEach((meal: any) => {
             if (meal.foods && meal.foods.length > 0) {
@@ -942,7 +1189,15 @@ const MealLoggingScreen = ({ navigation }: any) => {
             <Icon name="arrow-left" size={24} color="#FFFFFF" />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Log Meal</Text>
-          <TouchableOpacity style={styles.saveButton} onPress={saveMeal}>
+          <TouchableOpacity 
+            style={styles.saveButton} 
+            onPress={() => {
+              console.log('🔘 Save button pressed!');
+              console.log('🔘 Selected foods count:', selectedFoods.length);
+              console.log('🔘 Selected meal type:', selectedMeal);
+              saveMeal();
+            }}
+          >
             <Text style={styles.saveButtonText}>Save</Text>
           </TouchableOpacity>
         </View>
@@ -986,12 +1241,21 @@ const MealLoggingScreen = ({ navigation }: any) => {
                       {food.calories_per_100g} cal/100g • {food.category}
                     </Text>
                   </View>
-                  <TouchableOpacity
-                    style={styles.removeFoodButton}
-                    onPress={() => removeFood(index)}
-                  >
-                    <Icon name="close" size={16} color="#EF4444" />
-                  </TouchableOpacity>
+                  <View style={styles.quantityContainer}>
+                    <TouchableOpacity
+                      style={styles.quantityButton}
+                      onPress={() => decreaseQuantity(index)}
+                    >
+                      <Icon name="minus" size={16} color="#6B7280" />
+                    </TouchableOpacity>
+                    <Text style={styles.quantityText}>{food.quantity || 1}</Text>
+                    <TouchableOpacity
+                      style={styles.quantityButton}
+                      onPress={() => increaseQuantity(index)}
+                    >
+                      <Icon name="plus" size={16} color="#6B7280" />
+                    </TouchableOpacity>
+                  </View>
                 </View>
               ))}
             </View>
@@ -1416,6 +1680,32 @@ const styles = StyleSheet.create({
   },
   removeFoodButton: {
     padding: 8,
+  },
+  quantityContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#F8FAFC",
+    borderRadius: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  quantityButton: {
+    padding: 6,
+    borderRadius: 8,
+    backgroundColor: "#FFFFFF",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  quantityText: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#1F2937",
+    marginHorizontal: 12,
+    minWidth: 20,
+    textAlign: "center",
   },
   mealTabsContainer: {
     paddingHorizontal: 20,

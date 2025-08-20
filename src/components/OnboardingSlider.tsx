@@ -34,14 +34,6 @@ const OnboardingSlider: React.FC<OnboardingSliderProps> = ({ onComplete }) => {
   const slides: OnboardingSlide[] = [
     {
       id: "1",
-      title: "Selamat Datang di PHC",
-      description:
-        "Platform kesehatan dan kebugaran terdepan untuk karyawan Indonesia. Mulai perjalanan kesehatan Anda bersama kami.",
-      icon: "🏥",
-      gradient: ((theme as any).customColors?.primaryGradient as string[]) || ["#E22345", "#C53030"],
-    },
-    {
-      id: "2",
       title: "Pendaftaran Klinik online",
       description:
         "Daftar klinik online dengan mudah. Tersedia klinik terdepan di Indonesia.",
@@ -49,7 +41,7 @@ const OnboardingSlider: React.FC<OnboardingSliderProps> = ({ onComplete }) => {
       gradient: ((theme as any).customColors?.primaryGradient as string[]) || ["#E22345", "#C53030"],
     },
     {
-      id: "3",
+      id: "2",
       title: "Konsultasi dengan Dokter",
       description:
         "Konsultasi langsung dengan dokter berpengalaman. Layanan kesehatan yang cepat dan terpercaya.",
@@ -57,7 +49,7 @@ const OnboardingSlider: React.FC<OnboardingSliderProps> = ({ onComplete }) => {
       gradient: ((theme as any).customColors?.primaryGradient as string[]) || ["#E22345", "#C53030"],
     },
     {
-      id: "4",
+      id: "3",
       title: "Fitness & Wellness",
       description:
         "Program kebugaran yang menyenangkan dengan gamifikasi dan tantangan yang memotivasi untuk gaya hidup sehat.",
@@ -65,7 +57,7 @@ const OnboardingSlider: React.FC<OnboardingSliderProps> = ({ onComplete }) => {
       gradient: ((theme as any).customColors?.primaryGradient as string[]) || ["#E22345", "#C53030"],
     },
     {
-      id: "5",
+      id: "4",
       title: "Siap Memulai?",
       description:
         "Bergabunglah dengan ribuan karyawan yang telah merasakan manfaat platform kesehatan PHC. Mari mulai perjalanan sehat Anda!",
@@ -290,7 +282,6 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.1,
     shadowRadius: 8,
-    elevation: 4,
   },
   iconText: {
     fontSize: 55,

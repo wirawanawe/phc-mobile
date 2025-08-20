@@ -1,6 +1,6 @@
-const { getDefaultConfig } = require('expo/metro-config');
+const { getDefaultConfig } = require('@react-native/metro-config');
 
-/** @type {import('expo/metro-config').MetroConfig} */
+/** @type {import('@react-native/metro-config').MetroConfig} */
 const config = getDefaultConfig(__dirname);
 
 // Fix pretty-format bundling issue by resolving missing DOM plugins

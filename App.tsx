@@ -7,6 +7,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 
 // Import screens
 import WelcomeScreen from "./src/screens/WelcomeScreen";
+import OnboardingScreen from "./src/screens/OnboardingScreen";
 import TermsScreen from "./src/screens/TermsScreen";
 import MainScreen from "./src/screens/MainScreen";
 import AssessmentScreen from "./src/screens/AssessmentScreen";
@@ -34,6 +35,7 @@ import ChatDetailScreen from "./src/screens/ChatDetailScreen";
 import LoginScreen from "./src/screens/LoginScreen";
 import RegisterScreen from "./src/screens/RegisterScreen";
 import MoodTrackingScreen from "./src/screens/MoodTrackingScreen";
+import MoodInputScreen from "./src/screens/MoodInputScreen";
 import HealthInsightsScreen from "./src/screens/HealthInsightsScreen";
 import WaterTrackingScreen from "./src/screens/WaterTrackingScreen";
 import SleepTrackingScreen from "./src/screens/SleepTrackingScreen";
@@ -54,14 +56,18 @@ import ConsultationHistoryScreen from "./src/screens/ConsultationHistoryScreen";
 
 // Import new separated apps
 import WellnessApp, { TestWellnessApp } from "./src/screens/WellnessApp";
+import WellnessDebugScreen from "./src/screens/WellnessDebugScreen";
 // import ClinicsApp from "./src/screens/ClinicsApp"; // Temporarily commented out
 import ActivityScreen from "./src/screens/ActivityScreen";
 import WellnessActivityDetailScreen from "./src/screens/WellnessActivityDetailScreen";
+import WellnessActivityCompletionScreen from "./src/screens/WellnessActivityCompletionScreen";
+import AnthropometryScreen from "./src/screens/AnthropometryScreen";
 
 
 // Import new profile screens
 import HealthGoalsScreen from "./src/screens/HealthGoalsScreen";
 import MedicalHistoryScreen from "./src/screens/MedicalHistoryScreen";
+import WellnessHistoryScreen from "./src/screens/WellnessHistoryScreen";
 import PrivacySettingsScreen from "./src/screens/PrivacySettingsScreen";
 import HelpSupportScreen from "./src/screens/HelpSupportScreen";
 import AboutAppScreen from "./src/screens/AboutAppScreen";
@@ -140,6 +146,11 @@ function AppContent() {
             <Stack.Screen
               name="Welcome"
               component={WelcomeScreen}
+              options={{ headerShown: false }}
+            />
+            <Stack.Screen
+              name="Onboarding"
+              component={OnboardingScreen}
               options={{ headerShown: false }}
             />
             <Stack.Screen
@@ -235,6 +246,11 @@ function AppContent() {
             options={{ headerShown: false }}
           />
           <Stack.Screen
+            name="WellnessActivityCompletion"
+            component={WellnessActivityCompletionScreen}
+            options={{ headerShown: false }}
+          />
+          <Stack.Screen
             name="DetailDoctor"
             component={DetailDoctor}
             options={{ title: "Expert Consultation" }}
@@ -301,6 +317,11 @@ function AppContent() {
             options={{ title: "Mood & Wellness" }}
           />
           <Stack.Screen
+            name="MoodInput"
+            component={MoodInputScreen}
+            options={{ headerShown: false }}
+          />
+          <Stack.Screen
             name="HealthInsights"
             component={HealthInsightsScreen}
             options={{ title: "Health Insights" }}
@@ -324,6 +345,11 @@ function AppContent() {
             name="FitnessTracking"
             component={FitnessTrackingScreen}
             options={{ title: "Track Fitness" }}
+          />
+          <Stack.Screen
+            name="Anthropometry"
+            component={AnthropometryScreen}
+            options={{ title: "Antropometri" }}
           />
           <Stack.Screen
             name="RealtimeFitness"
@@ -363,6 +389,11 @@ function AppContent() {
                 name="MedicalHistory"
                 component={MedicalHistoryScreen}
                 options={{ title: "Medical History" }}
+              />
+              <Stack.Screen
+                name="WellnessHistory"
+                component={WellnessHistoryScreen}
+                options={{ title: "Wellness History" }}
               />
               <Stack.Screen
                 name="PrivacySettings"
@@ -447,6 +478,11 @@ function AppContent() {
               <Stack.Screen
                 name="WellnessApp"
                 component={WellnessApp}
+                options={{ headerShown: false }}
+              />
+              <Stack.Screen
+                name="WellnessDebug"
+                component={WellnessDebugScreen}
                 options={{ headerShown: false }}
               />
               {/* ClinicsApp and related screens - temporarily commented out */}

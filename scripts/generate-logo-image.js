@@ -4,7 +4,7 @@ const path = require("path");
 
 // SVG template for PHC logo with transparent background
 const generateLogoImageSVG = (size = 200) => {
-  return `<svg width="${size}" height="${size}" viewBox="0 0 200 120" xmlns="http://www.w3.org/2000/svg">
+  return `<svg width="${size}" height="${size}" viewBox="0 0 300 120" xmlns="http://www.w3.org/2000/svg">
   <!-- Heart and Ribbon Elements - Centered -->
   <path d="M30 40 Q30 24 44 24 Q60 24 60 40 Q60 24 76 24 Q90 24 90 40 Q90 56 60 70 Q30 56 30 40" fill="#D32F2F"/>
   
@@ -34,6 +34,9 @@ const generateLogoImageSVG = (size = 200) => {
   <path d="M130 40 L130 56 M130 40 L150 40 L150 48 L130 48 L130 56 L150 56" stroke="#D32F2F" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
   <path d="M130 60 L150 60 M140 60 L140 72" stroke="#D32F2F" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
   <path d="M130 66 L150 66 M130 66 L150 72 M150 66 L130 72" stroke="#D32F2F" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+  
+  <!-- Indonesia Text -->
+  <text x="130" y="90" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="#D32F2F">INDONESIA</text>
 </svg>`;
 };
 
@@ -57,14 +60,14 @@ const generateLogoImage = async () => {
     // Convert to PNG with transparent background
     const pngPath = path.join(assetsDir, "phc-logo.png");
     await sharp(Buffer.from(logoSVG))
-      .resize(400, 240) // 5:3 aspect ratio
+      .resize(600, 240) // 5:2.5 aspect ratio to accommodate full text
       .png()
       .toFile(pngPath);
 
     console.log("✅ PHC Logo Image generated successfully!");
     console.log("📁 Files created:");
-    console.log("  - assets/phc-logo.svg (400x240)");
-    console.log("  - assets/phc-logo.png (400x240)");
+    console.log("  - assets/phc-logo.svg (600x240)");
+    console.log("  - assets/phc-logo.png (600x240)");
     console.log("");
     console.log("💡 You can now use this image in your Logo component:");
     console.log('   source={require("../assets/phc-logo.png")}');

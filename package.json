@@ -25,10 +25,12 @@
     "@react-native-async-storage/async-storage": "2.1.2",
     "@react-native-community/blur": "^4.4.1",
     "@react-native-community/datetimepicker": "^8.4.1",
+    "@react-native-community/netinfo": "^11.4.1",
     "@react-navigation/bottom-tabs": "^7.4.2",
     "@react-navigation/native": "^7.1.14",
     "@react-navigation/stack": "^7.4.2",
     "axios": "^1.11.0",
+    "bcryptjs": "^3.0.2",
     "expo": "^53.0.20",
     "expo-apple-authentication": "^7.2.4",
     "expo-auth-session": "^6.2.1",
@@ -43,7 +45,7 @@
     "expo-status-bar": "~2.2.3",
     "expo-web-browser": "^14.2.0",
     "mysql2": "^3.14.3",
-    "node-fetch": "^3.3.2",
+    "node-fetch": "^2.7.0",
     "react": "19.0.0",
     "react-dom": "19.0.0",
     "react-native": "0.79.5",
@@ -58,11 +60,13 @@
     "react-native-super-grid": "^6.0.1",
     "react-native-svg": "^15.11.2",
     "react-native-vector-icons": "^10.2.0",
-    "react-native-web": "^0.20.0"
+    "react-native-web": "^0.20.0",
+    "sharp": "^0.34.3"
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",
     "@react-native-community/cli": "^19.1.1",
+    "@react-native/metro-config": "^0.81.0",
     "@types/react": "~19.0.10",
     "metro-resolver": "^0.82.5",
     "typescript": "~5.8.3"

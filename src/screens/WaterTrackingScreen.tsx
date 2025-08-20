@@ -146,16 +146,16 @@ const WaterTrackingScreen = ({ navigation }: any) => {
     };
   }, []);
 
-  // Refresh data when screen comes into focus
-  useEffect(() => {
-    const unsubscribe = navigation.addListener('focus', () => {
-      loadWaterSettings();
-      loadTodayWaterIntake();
-      loadWeeklyWaterIntake();
-    });
+  // Remove automatic focus refresh - manual refresh only
+  // useEffect(() => {
+  //   const unsubscribe = navigation.addListener('focus', () => {
+  //     loadWaterSettings();
+  //     loadTodayWaterIntake();
+  //     loadWeeklyWaterIntake();
+  //   });
 
-    return unsubscribe;
-  }, [navigation]);
+  //   return unsubscribe;
+  // }, [navigation]);
 
   const loadWaterSettings = async () => {
     setIsLoadingSettings(true);

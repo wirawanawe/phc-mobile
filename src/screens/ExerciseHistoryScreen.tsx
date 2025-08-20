@@ -31,7 +31,54 @@ interface ExerciseEntry {
   notes: string;
   created_at: string;
   updated_at: string;
+  intensity?: string;
 }
+
+// Workout types with their parameters
+const WORKOUT_TYPES = {
+  "Weight Lifting": {
+    icon: "dumbbell",
+    parameters: [
+      { name: "weight_kg", label: "Weight (kg)", unit: "kg" },
+      { name: "sets", label: "Sets", unit: "sets" },
+      { name: "reps", label: "Reps", unit: "reps" }
+    ]
+  },
+  "Running": {
+    icon: "run",
+    parameters: [
+      { name: "distance_km", label: "Distance", unit: "km" },
+      { name: "pace_min_km", label: "Pace", unit: "min/km" }
+    ]
+  },
+  "Cycling": {
+    icon: "bike",
+    parameters: [
+      { name: "distance_km", label: "Distance", unit: "km" },
+      { name: "speed_kmh", label: "Speed", unit: "km/h" }
+    ]
+  },
+  "Swimming": {
+    icon: "swim",
+    parameters: [
+      { name: "distance_m", label: "Distance", unit: "m" },
+      { name: "stroke_type", label: "Stroke Type", unit: "" }
+    ]
+  },
+  "Yoga": {
+    icon: "yoga",
+    parameters: [
+      { name: "intensity", label: "Intensity", unit: "" }
+    ]
+  },
+  "Walking": {
+    icon: "walk",
+    parameters: [
+      { name: "distance_km", label: "Distance", unit: "km" },
+      { name: "steps", label: "Steps", unit: "steps" }
+    ]
+  }
+};
 
 const ExerciseHistoryScreen = ({ navigation }: any) => {
   const theme = useTheme<CustomTheme>();
@@ -44,15 +91,29 @@ const ExerciseHistoryScreen = ({ navigation }: any) => {
   useEffect(() => {
     if (isAuthenticated) {
       loadExerciseHistory();
+    } else {
+      console.log('⚠️ ExerciseHistoryScreen - User not authenticated, not loading data');
+      setExerciseHistory([]);
+      setIsLoading(false);
     }
   }, [isAuthenticated]);
 
   const loadExerciseHistory = async () => {
     try {
       setIsLoading(true);
+      
+      // Check if user is authenticated before making API call
+      if (!isAuthenticated) {
+        console.log('⚠️ ExerciseHistoryScreen - User not authenticated, redirecting to login');
+        navigation.navigate('Login');
+        return;
+      }
+      
       const response = await api.getFitnessHistory();
       
-      if (response.success && response.data) {
+      console.log('🔍 ExerciseHistoryScreen - API Response:', JSON.stringify(response, null, 2));
+      
+      if (response.success && response.data && Array.isArray(response.data)) {
         // Map the data to ensure correct field names
         const mappedData = response.data.map((entry: any) => {
           return {
@@ -63,20 +124,44 @@ const ExerciseHistoryScreen = ({ navigation }: any) => {
             distance_km: entry.distance_km || 0,
             workout_type: entry.workout_type || entry.activity_type || 'Exercise',
             notes: entry.notes || '',
+            intensity: entry.intensity || '',
             created_at: entry.created_at,
             updated_at: entry.updated_at
           };
         });
         
+        console.log('🔍 ExerciseHistoryScreen - Mapped data:', mappedData);
         setExerciseHistory(mappedData);
       } else {
+        console.warn('⚠️ ExerciseHistoryScreen - Invalid response structure:', response);
+        
+        // Check if it's an authentication error
+        if (response.message && response.message.includes('Authentication required')) {
+          console.log('🔐 ExerciseHistoryScreen - Authentication required, redirecting to login');
+          navigation.navigate('Login');
+          return;
+        }
+        
         setExerciseHistory([]);
       }
     } catch (error) {
       console.error("Error loading exercise history:", error);
+      
+      // Check if it's an authentication error
+      if (error.message && (
+        error.message.includes('Authentication failed') || 
+        error.message.includes('Authentication required') ||
+        error.message.includes('401')
+      )) {
+        console.log('🔐 ExerciseHistoryScreen - Authentication error detected, redirecting to login');
+        navigation.navigate('Login');
+        return;
+      }
+      
       handleAuthError(error, () => {
         navigation.navigate('Login');
       });
+      setExerciseHistory([]);
     } finally {
       setIsLoading(false);
     }
@@ -166,6 +251,128 @@ const ExerciseHistoryScreen = ({ navigation }: any) => {
     return colorMap[workoutType] || '#6B7280';
   };
 
+  // Function to extract workout parameters from notes
+  const getWorkoutParameters = (entry: ExerciseEntry) => {
+    const workoutType = entry.workout_type;
+    const workoutConfig = WORKOUT_TYPES[workoutType as keyof typeof WORKOUT_TYPES];
+    
+    if (!workoutConfig) {
+      console.log(`⚠️ No workout config found for: ${workoutType}`);
+      return [];
+    }
+
+    const parameters: Array<{label: string, value: string, unit: string}> = [];
+    console.log(`🔍 Processing parameters for ${workoutType}:`, {
+      id: entry.id,
+      workout_type: entry.workout_type,
+      exercise_minutes: entry.exercise_minutes,
+      distance_km: entry.distance_km,
+      steps: entry.steps,
+      intensity: entry.intensity,
+      notes: entry.notes
+    });
+    
+    // Track which parameters we've already added to avoid duplicates
+    const addedParams = new Set<string>();
+    
+    // Add duration (always available)
+    if (entry.exercise_minutes && typeof entry.exercise_minutes === 'number' && entry.exercise_minutes > 0) {
+      parameters.push({
+        label: "Duration",
+        value: entry.exercise_minutes.toString(),
+        unit: "minutes"
+      });
+      addedParams.add("duration");
+    }
+
+    // Try to extract additional parameters from notes if it's JSON
+    if (entry.notes) {
+      try {
+        const notesData = JSON.parse(entry.notes);
+        if (notesData.workoutParameters) {
+          const workoutParams = notesData.workoutParameters;
+          
+          console.log(`🔍 Workout params for ${workoutType}:`, workoutParams);
+          
+          // Add parameters based on workout type
+          workoutConfig.parameters.forEach(param => {
+            console.log(`🔍 Checking param ${param.name} for ${workoutType}:`, workoutParams[param.name]);
+            
+            if (workoutParams[param.name] && workoutParams[param.name] !== "") {
+              parameters.push({
+                label: param.label,
+                value: workoutParams[param.name],
+                unit: param.unit
+              });
+              addedParams.add(param.name);
+            }
+          });
+        }
+      } catch (error) {
+        // If notes is not JSON, it's just a regular note
+        // We'll handle this in the notes display
+        console.log(`📝 Notes is not JSON for ${workoutType}:`, entry.notes);
+      }
+    }
+
+    // Add fallback parameters from database fields if not already added from JSON
+    // Only add distance for workout types that use distance (not Yoga)
+    if (workoutType !== "Yoga" && !addedParams.has("distance_km") && entry.distance_km && typeof entry.distance_km === 'number' && entry.distance_km > 0) {
+      parameters.push({
+        label: "Distance",
+        value: entry.distance_km.toFixed(1),
+        unit: "km"
+      });
+    }
+
+    // Only add steps for workout types that use steps (Walking, Running)
+    if ((workoutType === "Walking" || workoutType === "Running") && !addedParams.has("steps") && entry.steps && typeof entry.steps === 'number' && entry.steps > 0) {
+      parameters.push({
+        label: "Steps",
+        value: entry.steps.toLocaleString(),
+        unit: "steps"
+      });
+    }
+
+    // Add intensity only for Yoga (from database field)
+    if (workoutType === "Yoga" && !addedParams.has("intensity") && entry.intensity && typeof entry.intensity === 'string' && entry.intensity.trim() !== '') {
+      parameters.push({
+        label: "Intensity",
+        value: entry.intensity.charAt(0).toUpperCase() + entry.intensity.slice(1),
+        unit: ""
+      });
+    }
+
+    // Special handling for Swimming distance (convert to meters if stored as km)
+    if (workoutType === "Swimming" && !addedParams.has("distance_m") && entry.distance_km && typeof entry.distance_km === 'number' && entry.distance_km > 0) {
+      parameters.push({
+        label: "Distance",
+        value: (entry.distance_km * 1000).toString(),
+        unit: "m"
+      });
+    }
+
+    // Debug: Log final parameters
+    console.log(`📊 Final parameters for ${workoutType}:`, parameters);
+
+    return parameters;
+  };
+
+  // Function to get actual notes (not JSON parameters)
+  const getActualNotes = (entry: ExerciseEntry) => {
+    if (!entry.notes) {
+      return "";
+    }
+
+    try {
+      const notesData = JSON.parse(entry.notes);
+      return notesData.userNotes || "";
+    } catch (error) {
+      // If notes is not JSON, return as is
+      return entry.notes;
+    }
+  };
+
   if (isLoading) {
     return (
       <LinearGradient colors={["#F8FAFF", "#E8EAFF"]} style={styles.container}>
@@ -207,14 +414,14 @@ const ExerciseHistoryScreen = ({ navigation }: any) => {
             <View style={styles.summaryCard}>
               <Icon name="fire" size={24} color="#F59E0B" />
               <Text style={styles.summaryTitle}>
-                {exerciseHistory.reduce((total, entry) => total + (typeof entry.calories_burned === 'number' ? entry.calories_burned : 0), 0)}
+                {exerciseHistory.reduce((total, entry) => total + (entry.calories_burned && typeof entry.calories_burned === 'number' ? entry.calories_burned : 0), 0)}
               </Text>
               <Text style={styles.summarySubtitle}>Total Calories</Text>
             </View>
             <View style={styles.summaryCard}>
               <Icon name="clock-outline" size={24} color="#10B981" />
               <Text style={styles.summaryTitle}>
-                {exerciseHistory.reduce((total, entry) => total + (typeof entry.exercise_minutes === 'number' ? entry.exercise_minutes : 0), 0)}
+                {exerciseHistory.reduce((total, entry) => total + (entry.exercise_minutes && typeof entry.exercise_minutes === 'number' ? entry.exercise_minutes : 0), 0)}
               </Text>
               <Text style={styles.summarySubtitle}>Total Minutes</Text>
             </View>
@@ -282,50 +489,39 @@ const ExerciseHistoryScreen = ({ navigation }: any) => {
                       </View>
                     </View>
 
-                    <View style={styles.exerciseStats}>
-                      <View style={styles.statItem}>
-                        <Icon name="walk" size={16} color="#6B7280" />
-                        <Text style={styles.statValue}>
-                          {typeof entry.steps === 'number' ? entry.steps.toLocaleString() : '0'}
-                        </Text>
-                        <Text style={styles.statLabel}>Steps</Text>
-                      </View>
-                      <View style={styles.statItem}>
-                        <Icon name="clock-outline" size={16} color="#6B7280" />
-                        <Text style={styles.statValue}>
-                          {typeof entry.exercise_minutes === 'number' ? entry.exercise_minutes : 0}
-                        </Text>
-                        <Text style={styles.statLabel}>Minutes</Text>
-                      </View>
-                      <View style={styles.statItem}>
-                        <Icon name="fire" size={16} color="#6B7280" />
-                        <Text style={styles.statValue}>
-                          {typeof entry.calories_burned === 'number' ? entry.calories_burned : 0}
-                        </Text>
-                        <Text style={styles.statLabel}>Calories</Text>
-                      </View>
-                      <View style={styles.statItem}>
-                        <Icon name="map-marker-distance" size={16} color="#6B7280" />
-                        <Text style={styles.statValue}>
-                          {(() => {
-                            const distance = entry.distance_km;
-                            if (typeof distance === 'number' && distance > 0) {
-                              return distance.toFixed(1);
-                            } else if (distance === 0) {
-                              return '0.0';
-                            } else {
-                              return '0.0';
-                            }
-                          })()}
-                        </Text>
-                        <Text style={styles.statLabel}>km</Text>
-                      </View>
-                    </View>
+                    {/* Workout Parameters */}
+                    {(() => {
+                      const parameters = getWorkoutParameters(entry);
+                      if (parameters.length > 0) {
+                        return (
+                          <View style={styles.parametersContainer}>
+                            {parameters.map((param, index) => (
+                              <View key={index} style={styles.parameterItem}>
+                                <Text style={styles.parameterLabel}>{param.label}</Text>
+                                <Text style={styles.parameterValue}>
+                                  {param.value}{param.unit ? ` ${param.unit}` : ''}
+                                </Text>
+                              </View>
+                            ))}
+                          </View>
+                        );
+                      }
+                      return null;
+                    })()}
 
-                    {entry.notes && (
+                                         {/* Calories */}
+                     <View style={styles.caloriesContainer}>
+                       <Icon name="fire" size={16} color="#F59E0B" />
+                       <Text style={styles.caloriesValue}>
+                         {entry.calories_burned && typeof entry.calories_burned === 'number' ? entry.calories_burned : 0}
+                       </Text>
+                       <Text style={styles.caloriesLabel}>calories</Text>
+                     </View>
+
+                    {getActualNotes(entry) && (
                       <View style={styles.notesContainer}>
                         <Text style={styles.notesLabel}>Notes:</Text>
-                        <Text style={styles.notesText}>{entry.notes}</Text>
+                        <Text style={styles.notesText}>{getActualNotes(entry)}</Text>
                       </View>
                     )}
                   </Card.Content>
@@ -372,48 +568,34 @@ const ExerciseHistoryScreen = ({ navigation }: any) => {
                 </View>
 
                 <View style={styles.detailSection}>
-                  <Text style={styles.detailLabel}>Statistics</Text>
-                  <View style={styles.detailStats}>
-                                         <View style={styles.detailStatItem}>
-                       <Text style={styles.detailStatValue}>
-                         {typeof selectedEntry.steps === 'number' ? selectedEntry.steps.toLocaleString() : '0'}
-                       </Text>
-                       <Text style={styles.detailStatLabel}>Steps</Text>
-                     </View>
-                     <View style={styles.detailStatItem}>
-                       <Text style={styles.detailStatValue}>
-                         {typeof selectedEntry.exercise_minutes === 'number' ? selectedEntry.exercise_minutes : 0}
-                       </Text>
-                       <Text style={styles.detailStatLabel}>Minutes</Text>
-                     </View>
-                     <View style={styles.detailStatItem}>
-                       <Text style={styles.detailStatValue}>
-                         {typeof selectedEntry.calories_burned === 'number' ? selectedEntry.calories_burned : 0}
-                       </Text>
-                       <Text style={styles.detailStatLabel}>Calories</Text>
-                     </View>
-                                         <View style={styles.detailStatItem}>
-                       <Text style={styles.detailStatValue}>
-                         {(() => {
-                           const distance = selectedEntry.distance_km;
-                           if (typeof distance === 'number' && distance > 0) {
-                             return distance.toFixed(1);
-                           } else if (distance === 0) {
-                             return '0.0';
-                           } else {
-                             return '0.0';
-                           }
-                         })()}
-                       </Text>
-                       <Text style={styles.detailStatLabel}>Distance (km)</Text>
-                     </View>
+                  <Text style={styles.detailLabel}>Parameters</Text>
+                  <View style={styles.detailParameters}>
+                    {getWorkoutParameters(selectedEntry).map((param, index) => (
+                      <View key={index} style={styles.detailParameterItem}>
+                        <Text style={styles.detailParameterLabel}>{param.label}</Text>
+                        <Text style={styles.detailParameterValue}>
+                          {param.value}{param.unit ? ` ${param.unit}` : ''}
+                        </Text>
+                      </View>
+                    ))}
                   </View>
                 </View>
 
-                {selectedEntry.notes && (
+                <View style={styles.detailSection}>
+                  <Text style={styles.detailLabel}>Calories Burned</Text>
+                                     <View style={styles.detailCalories}>
+                     <Icon name="fire" size={24} color="#F59E0B" />
+                     <Text style={styles.detailCaloriesValue}>
+                       {selectedEntry.calories_burned && typeof selectedEntry.calories_burned === 'number' ? selectedEntry.calories_burned : 0}
+                     </Text>
+                     <Text style={styles.detailCaloriesLabel}>calories</Text>
+                   </View>
+                </View>
+
+                {getActualNotes(selectedEntry) && (
                   <View style={styles.detailSection}>
                     <Text style={styles.detailLabel}>Notes</Text>
-                    <Text style={styles.detailText}>{selectedEntry.notes}</Text>
+                    <Text style={styles.detailText}>{getActualNotes(selectedEntry)}</Text>
                   </View>
                 )}
               </ScrollView>
@@ -627,6 +809,52 @@ const styles = StyleSheet.create({
     color: "#6B7280",
     lineHeight: 20,
   },
+  parametersContainer: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 12,
+    marginBottom: 12,
+  },
+  parameterItem: {
+    backgroundColor: "#F8FAFC",
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    minWidth: 80,
+    alignItems: "center",
+  },
+  parameterLabel: {
+    fontSize: 12,
+    color: "#6B7280",
+    fontWeight: "500",
+    marginBottom: 2,
+  },
+  parameterValue: {
+    fontSize: 14,
+    color: "#1F2937",
+    fontWeight: "600",
+  },
+  caloriesContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#FEF3C7",
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  caloriesValue: {
+    fontSize: 16,
+    color: "#F59E0B",
+    fontWeight: "700",
+    marginLeft: 4,
+  },
+  caloriesLabel: {
+    fontSize: 12,
+    color: "#F59E0B",
+    fontWeight: "500",
+    marginLeft: 4,
+  },
   modalOverlay: {
     position: "absolute",
     top: 0,
@@ -704,6 +932,51 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: "#6B7280",
     marginTop: 4,
+  },
+  detailParameters: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 12,
+  },
+  detailParameterItem: {
+    backgroundColor: "#F8FAFC",
+    borderRadius: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    minWidth: 100,
+    alignItems: "center",
+  },
+  detailParameterLabel: {
+    fontSize: 12,
+    color: "#6B7280",
+    fontWeight: "500",
+    marginBottom: 4,
+  },
+  detailParameterValue: {
+    fontSize: 16,
+    color: "#1F2937",
+    fontWeight: "600",
+  },
+  detailCalories: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#FEF3C7",
+    borderRadius: 12,
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+  },
+  detailCaloriesValue: {
+    fontSize: 24,
+    color: "#F59E0B",
+    fontWeight: "700",
+    marginLeft: 8,
+  },
+  detailCaloriesLabel: {
+    fontSize: 14,
+    color: "#F59E0B",
+    fontWeight: "500",
+    marginLeft: 4,
   },
   modalActions: {
     padding: 20,

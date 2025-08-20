@@ -35,7 +35,7 @@ const TodaySummaryCard: React.FC<TodaySummaryCardProps> = ({ onMoreDetailsPress,
     exerciseMinutes: 0,
     distance: 0,
   });
-  const [wellnessScore, setWellnessScore] = useState(54);
+  const [wellnessScore, setWellnessScore] = useState(0); // No data available instead of default 54
   const [loading, setLoading] = useState(true);
   const lastDateCheck = React.useRef(new Date().toDateString());
 
@@ -72,6 +72,19 @@ const TodaySummaryCard: React.FC<TodaySummaryCardProps> = ({ onMoreDetailsPress,
     const handleMoodLogged = () => {
       loadTodayData();
     };
+
+    // Listen for wellness activity events
+    const handleWellnessActivityCompleted = () => {
+      loadTodayData();
+    };
+
+    const handleWellnessActivityUpdated = () => {
+      loadTodayData();
+    };
+
+    const handleWellnessActivityDeleted = () => {
+      loadTodayData();
+    };
     
     // Listen for general data refresh events
     const handleDataRefresh = () => {
@@ -88,7 +101,7 @@ const TodaySummaryCard: React.FC<TodaySummaryCardProps> = ({ onMoreDetailsPress,
         exerciseMinutes: 0,
         distance: 0,
       });
-      setWellnessScore(54);
+      setWellnessScore(0); // No data available instead of default 54
       loadTodayData();
     };
     
@@ -98,44 +111,26 @@ const TodaySummaryCard: React.FC<TodaySummaryCardProps> = ({ onMoreDetailsPress,
     eventEmitter.on('fitnessLogged', handleFitnessLogged);
     eventEmitter.on('sleepLogged', handleSleepLogged);
     eventEmitter.on('moodLogged', handleMoodLogged);
+    eventEmitter.on('wellnessActivityCompleted', handleWellnessActivityCompleted);
+    eventEmitter.on('wellnessActivityUpdated', handleWellnessActivityUpdated);
+    eventEmitter.on('wellnessActivityDeleted', handleWellnessActivityDeleted);
     eventEmitter.on('dataRefresh', handleDataRefresh);
     eventEmitter.on('dailyReset', handleDailyReset);
     
-    if (!isWellnessApp) {
-      // Hanya untuk MainScreen: auto-refresh dan date change detection
-      const interval = setInterval(loadTodayData, 30000);
-      const dateCheckInterval = setInterval(() => {
-        const today = new Date().toDateString();
-        if (lastDateCheck.current !== today) {
-          lastDateCheck.current = today;
-          loadTodayData();
-        }
-      }, 60000);
-      
-      return () => {
-        clearInterval(interval);
-        clearInterval(dateCheckInterval);
-        // Remove event listeners
-        eventEmitter.off('mealLogged', handleMealLogged);
-        eventEmitter.off('waterLogged', handleWaterLogged);
-        eventEmitter.off('fitnessLogged', handleFitnessLogged);
-        eventEmitter.off('sleepLogged', handleSleepLogged);
-        eventEmitter.off('moodLogged', handleMoodLogged);
-        eventEmitter.off('dataRefresh', handleDataRefresh);
-        eventEmitter.off('dailyReset', handleDailyReset);
-      };
-    } else {
-      return () => {
-        // Remove event listeners for WellnessApp
-        eventEmitter.off('mealLogged', handleMealLogged);
-        eventEmitter.off('waterLogged', handleWaterLogged);
-        eventEmitter.off('fitnessLogged', handleFitnessLogged);
-        eventEmitter.off('sleepLogged', handleSleepLogged);
-        eventEmitter.off('moodLogged', handleMoodLogged);
-        eventEmitter.off('dataRefresh', handleDataRefresh);
-        eventEmitter.off('dailyReset', handleDailyReset);
-      };
-    }
+    // Remove automatic intervals - manual refresh only
+    return () => {
+      // Remove event listeners
+      eventEmitter.off('mealLogged', handleMealLogged);
+      eventEmitter.off('waterLogged', handleWaterLogged);
+      eventEmitter.off('fitnessLogged', handleFitnessLogged);
+      eventEmitter.off('sleepLogged', handleSleepLogged);
+      eventEmitter.off('moodLogged', handleMoodLogged);
+      eventEmitter.off('wellnessActivityCompleted', handleWellnessActivityCompleted);
+      eventEmitter.off('wellnessActivityUpdated', handleWellnessActivityUpdated);
+      eventEmitter.off('wellnessActivityDeleted', handleWellnessActivityDeleted);
+      eventEmitter.off('dataRefresh', handleDataRefresh);
+      eventEmitter.off('dailyReset', handleDailyReset);
+    };
   }, [date, isWellnessApp]);
 
   const loadTodayData = async () => {
@@ -446,8 +441,18 @@ const TodaySummaryCard: React.FC<TodaySummaryCardProps> = ({ onMoreDetailsPress,
       
     } catch (error) {
       console.error('Error loading today data:', error);
-      // Handle authentication errors silently - don't show alert for background data loading
-      handleAuthError(error);
+      
+      // Handle different types of errors appropriately
+      if (error.message && error.message.includes('timeout')) {
+        console.warn('Connection timeout detected, using cached/default data');
+        // Don't show alert for timeout errors in background loading
+      } else if (error.message && (error.message.includes('Authentication failed') || error.message.includes('401'))) {
+        // Handle authentication errors silently - don't show alert for background data loading
+        handleAuthError(error);
+      } else {
+        // For other errors, just log them without showing alerts
+        console.warn('Data loading error (non-critical):', error.message);
+      }
       
       // Set default values on error to prevent undefined values
       setMetrics({

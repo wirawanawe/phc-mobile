@@ -43,7 +43,7 @@ const HomeTab = ({ navigation }: any) => {
       setLoading(true);
       const response = await apiService.getClinics();
       
-      if (response.success) {
+      if (response.success && response.data && Array.isArray(response.data)) {
         const transformedClinics = response.data.map((clinic: any) => ({
           ...clinic,
           available: true,
@@ -234,11 +234,12 @@ const HistoryTab = ({ navigation, route }: any) => {
   const [bookingHistory, setBookingHistory] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
 
-  useFocusEffect(
-    React.useCallback(() => {
-      fetchBookingHistory();
-    }, [])
-  );
+  // Remove automatic focus refresh - manual refresh only
+  // useFocusEffect(
+  //   React.useCallback(() => {
+  //     fetchBookingHistory();
+  //   }, [])
+  // );
 
   // Handle refresh trigger from navigation params
   useEffect(() => {

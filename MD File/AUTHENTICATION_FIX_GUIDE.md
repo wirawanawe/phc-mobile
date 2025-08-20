@@ -1,154 +1,163 @@
-# 🔐 Authentication Issue Fix Guide
+# 🔐 Authentication Fix Guide
 
 ## 🚨 Problem Description
 
-The PHC Mobile app is experiencing authentication issues where users see "Authentication failed. Please login again." errors. This is causing problems with:
+You're experiencing repeated "Authentication failed. Please login again." errors when loading weekly progress data. This is caused by expired JWT tokens that need to be refreshed or cleared.
 
-- Sleep data updates
-- Wellness score calculations
-- API calls throughout the app
-- User session management
+## 🛠️ Quick Fix Solutions
 
-## 🔍 Root Causes
+### Option 1: Using the Debug Screen (Recommended)
 
-1. **Expired Authentication Tokens**: JWT tokens have expired and need to be refreshed
-2. **Invalid Token Storage**: Tokens stored in AsyncStorage may be corrupted
-3. **Network Connectivity Issues**: Temporary network problems affecting API calls
-4. **Server Authentication Issues**: Backend authentication system problems
+1. **Navigate to Debug Screen**:
+   - In your app, navigate to the Debug screen
+   - If you can't find it, try going to Profile → About App → Debug (if available)
 
-## 🛠️ Solutions
-
-### Option 1: Quick Fix (Recommended)
-
-1. **Open the Debug Screen**:
-   - Navigate to the Debug Screen in the app
-   - Or use the React Native debugger console
-
-2. **Clear Authentication Data**:
-   - Tap "Clear Auth Data" button
-   - Or run in debugger: `require('./src/utils/authDebugger.js').clearAuth()`
-
-3. **Login Again**:
-   - The app will redirect you to the login screen
-   - Enter your credentials and login again
+2. **Use Debug Tools**:
+   - Tap "Check & Fix Auth Issues" first
+   - If that doesn't work, tap "Clear Auth Data"
+   - Login again with your credentials
 
 ### Option 2: Using React Native Debugger
 
-If you have access to the React Native debugger console:
+1. **Open React Native Debugger Console**
+2. **Run these commands**:
+   ```javascript
+   // Check current auth status
+   require('./src/utils/authFix.js').default.debugAuth()
+   
+   // Clear authentication data
+   require('./src/utils/authFix.js').default.clearAuth()
+   
+   // Force re-login
+   require('./src/utils/authFix.js').default.forceReLogin()
+   ```
 
-```javascript
-// Check current authentication status
-require('./src/utils/authDebugger.js').debugAuth()
+### Option 3: Using the Command Line Script
 
-// Clear authentication data
-require('./src/utils/authDebugger.js').clearAuth()
+1. **Run the fix script**:
+   ```bash
+   node scripts/fix-auth.js
+   ```
 
-// Force re-login
-require('./src/utils/authDebugger.js').forceReLogin()
+2. **Follow the interactive prompts**
 
-// Check token format
-require('./src/utils/authDebugger.js').checkTokens()
+### Option 4: Manual Fix (Last Resort)
+
+1. **Close the app completely**
+2. **Clear app data from device settings**:
+   - iOS: Settings → General → iPhone Storage → PHC Mobile → Delete App
+   - Android: Settings → Apps → PHC Mobile → Storage → Clear Data
+3. **Reinstall the app**
+4. **Login again with your credentials**
+
+## 🔍 Understanding the Issue
+
+### Root Causes
+
+1. **Expired JWT Tokens**: Your authentication tokens have expired (typically after 30-90 days)
+2. **Token Refresh Failure**: The automatic token refresh mechanism failed
+3. **Multiple API Calls**: Several components are trying to load data simultaneously, causing repeated authentication failures
+
+### Error Pattern
+
+```
+ERROR  Error loading weekly progress: [Error: Authentication failed. Please login again.]
+LOG  🔐 Authentication error detected in weekly progress loading
 ```
 
-### Option 3: Nuclear Option (Last Resort)
+This pattern repeats because:
+- Multiple components (WeeklySummaryCard, TodaySummaryCard, etc.) are loading data
+- Each component encounters the same authentication error
+- The error handling system processes each error separately
 
-If the above options don't work:
-
-1. **Clear All App Data**:
-   - Go to device Settings > Apps > PHC Mobile
-   - Clear app data/cache
-   - Restart the app
-
-2. **Or use Debug Screen**:
-   - Tap "Clear All Data (Nuclear)" button
-   - This will clear everything and restart the app
-
-## 🔧 Technical Details
+## 🛠️ Technical Details
 
 ### Authentication Flow
 
-1. **Login**: User provides credentials
-2. **Token Generation**: Server returns access token and refresh token
-3. **Token Storage**: Tokens stored in AsyncStorage
-4. **API Calls**: Access token included in Authorization header
-5. **Token Refresh**: When access token expires, refresh token used to get new tokens
+1. **Token Storage**: JWT tokens are stored in AsyncStorage
+2. **Token Validation**: Tokens are validated before API calls
+3. **Token Refresh**: Expired tokens should be automatically refreshed
+4. **Error Handling**: Authentication errors trigger logout and re-login
 
-### Common Error Messages
+### Files Involved
 
-- `"Authentication failed. Please login again."` - Token expired or invalid
-- `"Invalid refresh token"` - Refresh token expired or corrupted
-- `"User not found or inactive"` - User account issues
-- `"Network request failed"` - Connectivity problems
+- `src/contexts/AuthContext.tsx` - Main authentication logic
+- `src/services/api.js` - API service with token handling
+- `src/utils/errorHandler.ts` - Error handling utilities
+- `src/utils/authFix.js` - Authentication fix utilities
+- `src/screens/DebugScreen.tsx` - Debug interface
 
-### Debug Information
-
-The debug tools will show:
-- ✅ **Present**: Token/data exists and is valid
-- ❌ **Missing**: Token/data is missing or corrupted
-- 🔍 **Token Preview**: First 20 characters of token for verification
-
-## 📱 User Instructions
-
-### For End Users
-
-1. **If you see authentication errors**:
-   - Try logging out and logging back in
-   - If that doesn't work, use the Debug Screen
-
-2. **To access Debug Screen**:
-   - Navigate to Settings or Profile section
-   - Look for "Debug" or "Troubleshoot" option
-   - Or ask your administrator for access
-
-3. **After clearing data**:
-   - You'll need to login again
-   - Some app settings may need to be reconfigured
-   - Your data is safe on the server
+## 🔧 Prevention
 
 ### For Developers
 
-1. **Check server logs**:
-   - Monitor `/api/mobile/auth/refresh` endpoint
-   - Look for JWT verification errors
-   - Check user account status
+1. **Implement Better Token Refresh**:
+   ```javascript
+   // In api.js - enhance token refresh logic
+   async refreshAccessToken() {
+     try {
+       const refreshToken = await AsyncStorage.getItem('refreshToken');
+       if (!refreshToken) throw new Error('No refresh token');
+       
+       const response = await fetch(`${this.baseURL}/auth/refresh`, {
+         method: 'POST',
+         headers: { 'Content-Type': 'application/json' },
+         body: JSON.stringify({ refreshToken })
+       });
+       
+       if (response.ok) {
+         const data = await response.json();
+         await AsyncStorage.setItem('authToken', data.accessToken);
+         return data.accessToken;
+       }
+     } catch (error) {
+       throw new Error('Token refresh failed');
+     }
+   }
+   ```
 
-2. **Verify JWT Secret**:
-   - Ensure `JWT_SECRET` in `.env.local` is correct
-   - Restart server if secret was changed
+2. **Add Request Debouncing**:
+   ```javascript
+   // Prevent multiple simultaneous auth requests
+   let authRequestInProgress = false;
+   
+   async function makeAuthenticatedRequest() {
+     if (authRequestInProgress) {
+       await new Promise(resolve => setTimeout(resolve, 1000));
+     }
+     authRequestInProgress = true;
+     try {
+       // Make request
+     } finally {
+       authRequestInProgress = false;
+     }
+   }
+   ```
 
-3. **Test authentication flow**:
-   - Use Postman or similar tool to test login endpoint
-   - Verify token refresh endpoint works
-   - Check user account exists and is active
+### For Users
 
-## 🚀 Prevention
-
-To prevent future authentication issues:
-
-1. **Regular Token Refresh**: Implement automatic token refresh before expiration
-2. **Better Error Handling**: Provide clear error messages to users
-3. **Offline Support**: Handle network connectivity issues gracefully
-4. **User Education**: Inform users about session timeouts and re-login requirements
+1. **Regular Login**: Login regularly to refresh tokens
+2. **Stable Connection**: Ensure stable internet connection
+3. **App Updates**: Keep the app updated to latest version
 
 ## 📞 Support
 
-If you continue to experience issues:
+If the above solutions don't work:
 
-1. **Check Network**: Ensure stable internet connection
-2. **Restart App**: Close and reopen the application
-3. **Contact Support**: Reach out to your system administrator
-4. **Check Server Status**: Verify backend services are running
+1. **Check Backend**: Ensure the backend server is running
+2. **Network**: Verify internet connectivity
+3. **Credentials**: Try logging in with different credentials
+4. **Device**: Test on a different device if possible
 
-## 🔄 Recovery Process
+## 🔄 Recovery Steps
 
-After fixing authentication issues:
+After fixing the authentication:
 
 1. **Verify Login**: Ensure you can login successfully
-2. **Test Features**: Try using sleep tracking, wellness features
-3. **Check Data**: Verify your data is still accessible
-4. **Report Issues**: Let administrators know if problems persist
+2. **Test Features**: Try accessing weekly progress and other features
+3. **Monitor Logs**: Watch for any remaining authentication errors
+4. **Report Issues**: If problems persist, report with detailed logs
 
 ---
 
-**Note**: This guide is designed to help users resolve common authentication issues. For persistent problems, contact your system administrator or development team.
-
+**Note**: This guide addresses the immediate authentication issues. For long-term stability, consider implementing the prevention measures listed above.

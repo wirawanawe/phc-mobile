@@ -18,7 +18,7 @@ const Logo: React.FC<LogoProps> = ({ size = "medium", showText = true }) => {
       case "small":
         return { width: Math.min(60, baseSize * 0.8) };
       case "large":
-        return { width: Math.min(200, baseSize * 2.5) };
+        return { width: Math.min(280, baseSize * 5.5) }; // Increased from 200 to 280 and from 2.5 to 3.5
       default:
         return { width: Math.min(100, baseSize * 1.3) };
     }
@@ -45,7 +45,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   logoWrapper: {
-    aspectRatio: 5/3, // Maintain logo aspect ratio (5:3)
+    aspectRatio: 5/2.5, // Updated aspect ratio to match new logo (5:2.5)
     alignItems: "center",
     justifyContent: "center",
   },

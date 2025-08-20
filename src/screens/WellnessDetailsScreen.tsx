@@ -10,598 +10,894 @@ import {
   TextInput,
   Alert,
   Modal,
+  RefreshControl,
 } from "react-native";
-import { Text, useTheme, Button, SegmentedButtons } from "react-native-paper";
+import { Text, useTheme, Button, Card } from "react-native-paper";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Icon from "react-native-vector-icons/MaterialCommunityIcons";
 import { LinearGradient } from "expo-linear-gradient";
+import DateTimePicker from "@react-native-community/datetimepicker";
 import { CustomTheme } from "../theme/theme";
-import ProgressRing from "../components/ProgressRing";
 import api from "../services/api";
 import { safeGoBack } from "../utils/safeNavigation";
+import eventEmitter from "../utils/eventEmitter";
 
 const { width } = Dimensions.get("window");
 
-// Type definitions for workout parameters
-interface WorkoutParameters {
-  weight_kg?: string;
-  sets?: string;
-  reps?: string;
-  distance_km?: string;
-  pace_min_km?: string;
-  speed_kmh?: string;
-  distance_m?: string;
-  stroke_type?: string;
-  intensity?: string;
-  steps?: string;
+interface TrackingData {
+  mood?: any;
+  fitness?: any;
+  water?: any;
+  sleep?: any;
+  meal?: any;
 }
 
-// Workout types with their parameters and calorie calculation formulas
-const WORKOUT_TYPES = {
-  "Weight Lifting": {
-    icon: "dumbbell",
-    parameters: [
-      { name: "weight_kg", label: "Weight (kg)", type: "number", unit: "kg" },
-      { name: "sets", label: "Number of Sets", type: "number", unit: "sets" },
-      { name: "reps", label: "Reps per Set", type: "number", unit: "reps" }
-    ],
-    calorieFormula: (params: WorkoutParameters, duration: number) => {
-      const weight = parseFloat(params.weight_kg || "0") || 0;
-      const sets = parseInt(params.sets || "0") || 0;
-      const reps = parseInt(params.reps || "0") || 0;
-      const totalReps = sets * reps;
-      return Math.round((weight * totalReps * 0.1) + (duration * 3));
-    }
-  },
-  "Running": {
-    icon: "run",
-    parameters: [
-      { name: "distance_km", label: "Distance (km)", type: "number", unit: "km" },
-      { name: "pace_min_km", label: "Pace (min/km)", type: "number", unit: "min/km" }
-    ],
-    calorieFormula: (params: WorkoutParameters, duration: number) => {
-      const distance = parseFloat(params.distance_km || "0") || 0;
-      const pace = parseFloat(params.pace_min_km || "6") || 6; // default 6 min/km
-      const speed = 60 / pace; // km/h
-      return Math.round(distance * 60 + (duration * 8));
-    }
-  },
-  "Cycling": {
-    icon: "bike",
-    parameters: [
-      { name: "distance_km", label: "Distance (km)", type: "number", unit: "km" },
-      { name: "speed_kmh", label: "Average Speed (km/h)", type: "number", unit: "km/h" }
-    ],
-    calorieFormula: (params: WorkoutParameters, duration: number) => {
-      const distance = parseFloat(params.distance_km || "0") || 0;
-      const speed = parseFloat(params.speed_kmh || "20") || 20; // default 20 km/h
-      return Math.round(distance * 30 + (duration * 5));
-    }
-  },
-  "Swimming": {
-    icon: "swim",
-    parameters: [
-      { name: "distance_m", label: "Distance (m)", type: "number", unit: "m" },
-      { name: "stroke_type", label: "Stroke Type", type: "select", options: ["Freestyle", "Breaststroke", "Butterfly", "Backstroke"] }
-    ],
-    calorieFormula: (params: WorkoutParameters, duration: number) => {
-      const distance = parseFloat(params.distance_m || "0") || 0;
-      const strokeType = params.stroke_type || "Freestyle";
-      const strokeMultiplier: { [key: string]: number } = {
-        "Freestyle": 1,
-        "Breaststroke": 1.2,
-        "Butterfly": 1.5,
-        "Backstroke": 1.1
-      };
-      return Math.round((distance * 0.5) * (strokeMultiplier[strokeType] || 1) + (duration * 6));
-    }
-  },
-  "Yoga": {
-    icon: "yoga",
-    parameters: [
-      { name: "intensity", label: "Intensity Level", type: "select", options: ["Light", "Moderate", "Intense"] }
-    ],
-    calorieFormula: (params: WorkoutParameters, duration: number) => {
-      const intensity = params.intensity || "Moderate";
-      const intensityMultiplier: { [key: string]: number } = {
-        "Light": 2,
-        "Moderate": 3,
-        "Intense": 4
-      };
-      return Math.round(duration * (intensityMultiplier[intensity] || 3));
-    }
-  },
-  "Walking": {
-    icon: "walk",
-    parameters: [
-      { name: "distance_km", label: "Distance (km)", type: "number", unit: "km" },
-      { name: "steps", label: "Steps", type: "number", unit: "steps" }
-    ],
-    calorieFormula: (params: WorkoutParameters, duration: number) => {
-      const distance = parseFloat(params.distance_km || "0") || 0;
-      const steps = parseInt(params.steps || "0") || 0;
-      return Math.round((distance * 50) + (steps * 0.04) + (duration * 2));
-    }
-  }
-};
+interface TrackingCategory {
+  id: string;
+  title: string;
+  icon: string;
+  color: string;
+  data: any;
+  hasData: boolean;
+}
 
 const WellnessDetailsScreen = ({ navigation }: any) => {
   const theme = useTheme<CustomTheme>();
   const [loading, setLoading] = useState(true);
-  const [wellnessStats, setWellnessStats] = useState<any>(null);
-  const [moodData, setMoodData] = useState<any>(null);
-  const [missionStats, setMissionStats] = useState<any>(null);
-  const [userMissions, setUserMissions] = useState<any[]>([]);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   
-  // Workout log states
-  const [showWorkoutModal, setShowWorkoutModal] = useState(false);
-  const [selectedWorkoutType, setSelectedWorkoutType] = useState("");
-  const [workoutParameters, setWorkoutParameters] = useState<any>({});
-  const [workoutDuration, setWorkoutDuration] = useState("");
-  const [calculatedCalories, setCalculatedCalories] = useState(0);
-  const [workoutNotes, setWorkoutNotes] = useState("");
-  const [savingWorkout, setSavingWorkout] = useState(false);
+  // Date selection states
+  const [selectedDate, setSelectedDate] = useState(new Date());
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  
+  // Tracking data states
+  const [trackingData, setTrackingData] = useState<TrackingData>({});
+  const [hasData, setHasData] = useState(false);
+  
+  // Category selection states
+  const [selectedCategory, setSelectedCategory] = useState<string>('all');
+  const [trackingCategories, setTrackingCategories] = useState<TrackingCategory[]>([]);
 
   useEffect(() => {
-    fetchWellnessData();
+    fetchTrackingData();
+    
+    // Listen for tracking-related events to refresh data
+    const handleDataRefresh = () => {
+      console.log('🔍 WellnessDetailsScreen: Data refresh event received, refreshing data...');
+      fetchTrackingData();
+    };
+
+    // Register event listeners
+    eventEmitter.on('moodLogged', handleDataRefresh);
+    eventEmitter.on('fitnessLogged', handleDataRefresh);
+    eventEmitter.on('waterLogged', handleDataRefresh);
+    eventEmitter.on('sleepLogged', handleDataRefresh);
+    eventEmitter.on('mealLogged', handleDataRefresh);
+    eventEmitter.on('wellnessActivityCompleted', handleDataRefresh);
+    eventEmitter.on('wellnessActivityUpdated', handleDataRefresh);
+    eventEmitter.on('wellnessActivityDeleted', handleDataRefresh);
+    eventEmitter.on('dataRefresh', handleDataRefresh);
+
+    // Cleanup event listeners on unmount
+    return () => {
+      eventEmitter.off('moodLogged', handleDataRefresh);
+      eventEmitter.off('fitnessLogged', handleDataRefresh);
+      eventEmitter.off('waterLogged', handleDataRefresh);
+      eventEmitter.off('sleepLogged', handleDataRefresh);
+      eventEmitter.off('mealLogged', handleDataRefresh);
+      eventEmitter.off('wellnessActivityCompleted', handleDataRefresh);
+      eventEmitter.off('wellnessActivityUpdated', handleDataRefresh);
+      eventEmitter.off('wellnessActivityDeleted', handleDataRefresh);
+      eventEmitter.off('dataRefresh', handleDataRefresh);
+    };
   }, []);
 
-  // Calculate calories when parameters change
+  // Fetch data when date changes
   useEffect(() => {
-    if (selectedWorkoutType && workoutDuration) {
-      const workout = WORKOUT_TYPES[selectedWorkoutType as keyof typeof WORKOUT_TYPES];
-      if (workout) {
-        const calories = workout.calorieFormula(workoutParameters, parseInt(workoutDuration) || 0);
-        setCalculatedCalories(calories);
-      }
-    }
-  }, [selectedWorkoutType, workoutParameters, workoutDuration]);
+    fetchTrackingData();
+  }, [selectedDate]);
 
-  const handleParameterChange = (paramName: string, value: string) => {
-    setWorkoutParameters((prev: WorkoutParameters) => ({
-      ...prev,
-      [paramName]: value
-    }));
-  };
-
-  const handleSaveWorkout = async () => {
-    if (!selectedWorkoutType || !workoutDuration) {
-      Alert.alert("Error", "Please select a workout type and enter duration");
-      return;
-    }
-
-    setSavingWorkout(true);
+  const fetchTrackingData = async (isRefresh = false) => {
     try {
-      const workoutData = {
-        activity_type: selectedWorkoutType,
-        activity_name: selectedWorkoutType,
-        duration_minutes: parseInt(workoutDuration),
-        calories_burned: calculatedCalories,
-        distance_km: workoutParameters.distance_km ? parseFloat(workoutParameters.distance_km) : null,
-        steps: workoutParameters.steps ? parseInt(workoutParameters.steps) : null,
-        intensity: workoutParameters.intensity ? workoutParameters.intensity.toLowerCase() : 'moderate',
-        notes: workoutNotes,
-        tracking_date: new Date().toISOString().split('T')[0],
-        tracking_time: new Date().toTimeString().split(' ')[0]
-      };
-
-      const response = await api.createFitnessEntry(workoutData);
-      
-      if (response.success) {
-        Alert.alert("Success", "Workout logged successfully!", [
-          {
-            text: "OK",
-            onPress: () => {
-              setShowWorkoutModal(false);
-              resetWorkoutForm();
-              fetchWellnessData(); // Refresh data
-            }
-          }
-        ]);
+      if (isRefresh) {
+        setRefreshing(true);
+      } else {
+        setLoading(true);
       }
-    } catch (error) {
-      console.error("Error saving workout:", error);
-      Alert.alert("Error", "Failed to save workout. Please try again.");
-    } finally {
-      setSavingWorkout(false);
-    }
-  };
-
-  const resetWorkoutForm = () => {
-    setSelectedWorkoutType("");
-    setWorkoutParameters({});
-    setWorkoutDuration("");
-    setCalculatedCalories(0);
-    setWorkoutNotes("");
-  };
-
-  const fetchWellnessData = async () => {
-    try {
-      setLoading(true);
       setError(null);
 
-      // Fetch wellness stats, mood data, and mission data in parallel
-      const [statsResponse, moodResponse, missionStatsResponse, userMissionsResponse] = await Promise.all([
-        api.getWellnessStats({ period: "week" }),
-        api.getMoodTracker({ period: "week" }),
-        api.getMissionStats({ date: new Date().toISOString().split('T')[0] }),
-        api.getMyMissions(),
+      // Convert to local date string to match database timezone
+      const dateString = selectedDate.toLocaleDateString('en-CA'); // YYYY-MM-DD format
+      console.log(`Fetching tracking data for date: ${dateString}`);
+
+      // Fetch all tracking data for the selected date
+      const [moodResponse, fitnessResponse, waterResponse, sleepResponse, mealResponse] = await Promise.all([
+        api.getMoodHistory({ date: dateString }),
+        api.getFitnessHistory({ date: dateString }),
+        api.getWaterHistory({ date: dateString }),
+        api.getSleepHistory({ sleep_date: dateString }),
+        api.getMealHistory({ date: dateString }),
       ]);
 
-  
-      console.log("Wellness Stats Response:", statsResponse);
+      const newTrackingData: TrackingData = {};
+      let hasAnyData = false;
+
+      // Debug logging for API responses
+      console.log("=== API RESPONSES DEBUG ===");
       console.log("Mood Response:", moodResponse);
-      console.log("Mission Stats Response:", missionStatsResponse);
-      console.log("User Missions Response:", userMissionsResponse);
+      console.log("Fitness Response:", fitnessResponse);
+      console.log("Water Response:", waterResponse);
+      console.log("Sleep Response:", sleepResponse);
+      console.log("Meal Response:", mealResponse);
+      console.log("=== END API RESPONSES DEBUG ===");
 
-      if (statsResponse.success) {
-        setWellnessStats(statsResponse.data);
-        console.log("Wellness Stats Data:", statsResponse.data);
+      // Process mood data
+      if (moodResponse.success && moodResponse.data?.entries?.length > 0) {
+        newTrackingData.mood = moodResponse.data;
+        hasAnyData = true;
+        console.log("✅ Mood data processed:", moodResponse.data.entries.length, "entries");
+      } else if (moodResponse.success && moodResponse.moodData?.length > 0) {
+        // Handle case where data is in moodData field
+        newTrackingData.mood = { entries: moodResponse.moodData };
+        hasAnyData = true;
+        console.log("✅ Mood data processed (moodData format):", moodResponse.moodData.length, "entries");
+      } else if (moodResponse.success && Array.isArray(moodResponse.data) && moodResponse.data.length > 0) {
+        // Handle case where data is directly an array
+        newTrackingData.mood = { entries: moodResponse.data };
+        hasAnyData = true;
+        console.log("✅ Mood data processed (array format):", moodResponse.data.length, "entries");
       } else {
-        console.warn("Failed to fetch wellness stats:", statsResponse.message);
+        console.log("❌ Mood data not available or empty");
       }
 
-      if (moodResponse.success) {
-        setMoodData(moodResponse.data);
-        console.log("Mood Data:", moodResponse.data);
-        console.log("Mood Data Keys:", Object.keys(moodResponse.data || {}));
-        console.log("Most Common Mood:", moodResponse.data?.most_common_mood);
-        console.log("Total Entries:", moodResponse.data?.total_entries);
+      // Process fitness data
+      if (fitnessResponse.success && fitnessResponse.data?.entries?.length > 0) {
+        newTrackingData.fitness = fitnessResponse.data;
+        hasAnyData = true;
+        console.log("✅ Fitness data processed:", fitnessResponse.data.entries.length, "entries");
+      } else if (fitnessResponse.success && Array.isArray(fitnessResponse.data) && fitnessResponse.data.length > 0) {
+        // Handle case where data is directly an array
+        newTrackingData.fitness = { entries: fitnessResponse.data };
+        hasAnyData = true;
+        console.log("✅ Fitness data processed (array format):", fitnessResponse.data.length, "entries");
+      } else if (fitnessResponse.success === false && fitnessResponse.message === "Authentication required") {
+        console.log("⚠️ Fitness data requires authentication - skipping");
       } else {
-        console.warn("Failed to fetch mood data:", moodResponse.message);
+        console.log("❌ Fitness data not available or empty");
       }
 
-      if (missionStatsResponse.success) {
-        setMissionStats(missionStatsResponse.data);
-        console.log("Mission Stats Data:", missionStatsResponse.data);
+      // Process water data
+      if (waterResponse.success && waterResponse.data?.entries?.length > 0) {
+        newTrackingData.water = waterResponse.data;
+        hasAnyData = true;
+        console.log("✅ Water data processed:", waterResponse.data.entries.length, "entries");
+      } else if (waterResponse.success && Array.isArray(waterResponse.data) && waterResponse.data.length > 0) {
+        // Handle case where data is directly an array
+        newTrackingData.water = { entries: waterResponse.data };
+        hasAnyData = true;
+        console.log("✅ Water data processed (array format):", waterResponse.data.length, "entries");
       } else {
-        console.warn("Failed to fetch mission stats:", missionStatsResponse.message);
+        console.log("❌ Water data not available or empty");
       }
 
-      if (userMissionsResponse.success) {
-        setUserMissions(userMissionsResponse.data);
-        console.log("User Missions Data:", userMissionsResponse.data);
+      // Process sleep data
+      if (sleepResponse.success && sleepResponse.data?.sleepData?.length > 0) {
+        newTrackingData.sleep = sleepResponse.data;
+        hasAnyData = true;
+        console.log("✅ Sleep data processed:", sleepResponse.data.sleepData.length, "entries");
+      } else if (sleepResponse.success && sleepResponse.sleepData?.length > 0) {
+        // Handle case where data is in sleepData field
+        newTrackingData.sleep = { sleepData: sleepResponse.sleepData };
+        hasAnyData = true;
+        console.log("✅ Sleep data processed (sleepData format):", sleepResponse.sleepData.length, "entries");
+      } else if (sleepResponse.success && Array.isArray(sleepResponse.data) && sleepResponse.data.length > 0) {
+        // Handle case where data is directly an array
+        newTrackingData.sleep = { sleepData: sleepResponse.data };
+        hasAnyData = true;
+        console.log("✅ Sleep data processed (array format):", sleepResponse.data.length, "entries");
       } else {
-        console.warn("Failed to fetch user missions:", userMissionsResponse.message);
+        console.log("❌ Sleep data not available or empty");
       }
 
-      // If all requests failed, show error
-      if (!statsResponse.success && !moodResponse.success && !missionStatsResponse.success) {
-        setError("Failed to load wellness data. Please try again.");
-      }
-    } catch (err) {
-      console.error("Error fetching wellness data:", err);
-      setError("Failed to load wellness data. Please try again.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const calculateOverallScore = () => {
-    if (!wellnessStats && !missionStats) return 54; // Default fallback
-
-    // Get data from both wellness activities and missions
-    const wellnessActivities = wellnessStats?.total_activities_completed || 0;
-    const wellnessPoints = wellnessStats?.total_points_earned || 0;
-    const wellnessStreak = wellnessStats?.streak_days || 0;
-    
-    // Get data from missions
-    const missionActivities = missionStats?.completed_missions || 0;
-    const missionPoints = missionStats?.total_points_earned || 0;
-    const missionStreak = calculateMissionStreak();
-    
-    // Combine data
-    const totalActivities = wellnessActivities + missionActivities;
-    const totalPoints = wellnessPoints + missionPoints;
-    const totalStreak = Math.max(wellnessStreak, missionStreak);
-    
-    // Check if mood data actually exists
-    const hasMoodData = moodData && 
-                       moodData.most_common_mood && 
-                       moodData.total_entries > 0 && 
-                       moodData.most_common_mood !== null;
-    const averageMood = hasMoodData ? moodData.most_common_mood : "neutral";
-
-    // Convert mood to numeric value
-    const moodScores = {
-      very_happy: 100,
-      happy: 80,
-      neutral: 60,
-      sad: 40,
-      very_sad: 20,
-    };
-
-    const moodScore = hasMoodData ? moodScores[averageMood as keyof typeof moodScores] || 60 : 60;
-
-    // Calculate weighted average
-    const activityScore = Math.min(totalActivities * 10, 100); // Max 100 for activities
-    const pointsScore = Math.min(totalPoints * 2, 100); // Max 100 for points
-    const streakScore = Math.min(totalStreak * 15, 100); // Max 100 for streak
-
-    // If no activities, give a lower base score
-    if (totalActivities === 0) {
-      return Math.round((moodScore * 0.6 + pointsScore * 0.2 + streakScore * 0.2));
-    }
-
-    const overallScore = Math.round(
-      (activityScore * 0.3 + moodScore * 0.3 + pointsScore * 0.2 + streakScore * 0.2)
-    );
-
-    return Math.max(0, Math.min(100, overallScore));
-  };
-
-  const calculateMissionStreak = () => {
-    if (!userMissions || userMissions.length === 0) return 0;
-    
-    // Calculate streak based on completed missions
-    const completedMissions = userMissions.filter((mission: any) => mission.status === 'completed');
-    if (completedMissions.length === 0) return 0;
-    
-    // Sort by completion date and calculate consecutive days
-    const sortedMissions = completedMissions.sort((a: any, b: any) => 
-      new Date(b.completed_at).getTime() - new Date(a.completed_at).getTime()
-    );
-    
-    let streak = 1;
-    let currentDate = new Date(sortedMissions[0].completed_at);
-    
-    for (let i = 1; i < sortedMissions.length; i++) {
-      const missionDate = new Date(sortedMissions[i].completed_at);
-      const daysDiff = Math.floor((currentDate.getTime() - missionDate.getTime()) / (1000 * 60 * 60 * 24));
-      
-      if (daysDiff === 1) {
-        streak++;
-        currentDate = missionDate;
+      // Process meal data
+      if (mealResponse.success && mealResponse.data?.entries?.length > 0) {
+        newTrackingData.meal = mealResponse.data;
+        hasAnyData = true;
+        console.log("✅ Meal data processed:", mealResponse.data.entries.length, "entries");
+      } else if (mealResponse.success && Array.isArray(mealResponse.data) && mealResponse.data.length > 0) {
+        // Handle case where data is directly an array
+        newTrackingData.meal = { entries: mealResponse.data };
+        hasAnyData = true;
+        console.log("✅ Meal data processed (array format):", mealResponse.data.length, "entries");
       } else {
-        break;
+        console.log("❌ Meal data not available or empty");
       }
-    }
-    
-    return streak;
-  };
 
-  const getWellnessMetrics = () => {
-    if (!wellnessStats && !missionStats) {
-      return [
+      setTrackingData(newTrackingData);
+      setHasData(hasAnyData);
+
+      // Create tracking categories
+      const categories: TrackingCategory[] = [
         {
-          id: "1",
-          title: "Physical Health",
-          score: 78,
-          color: "#10B981",
-          icon: "heart-pulse",
-          details: "Based on your activity, sleep, and vital signs",
+          id: 'all',
+          title: 'All',
+          icon: 'view-dashboard',
+          color: '#4CAF50',
+          data: newTrackingData,
+          hasData: hasAnyData
         },
         {
-          id: "2",
-          title: "Mental Wellness",
-          score: 65,
-          color: "#8B5CF6",
-          icon: "brain",
-          details: "Based on stress levels and mood tracking",
+          id: 'mood',
+          title: 'Mood',
+          icon: 'emoticon',
+          color: '#FF9800',
+          data: newTrackingData.mood,
+          hasData: newTrackingData.mood?.entries?.length > 0
         },
         {
-          id: "3",
-          title: "Nutrition",
-          score: 82,
-          color: "#F59E0B",
-          icon: "food-apple",
-          details: "Based on your daily food intake and hydration",
+          id: 'water',
+          title: 'Water',
+          icon: 'cup-water',
+          color: '#2196F3',
+          data: newTrackingData.water,
+          hasData: newTrackingData.water?.entries?.length > 0
         },
         {
-          id: "4",
-          title: "Social Connection",
-          score: 71,
-          color: "#3B82F6",
-          icon: "account-group",
-          details: "Based on social interactions and support network",
-        },
-      ];
-    }
-
-    const moodScores = {
-      very_happy: 100,
-      happy: 80,
-      neutral: 60,
-      sad: 40,
-      very_sad: 20,
-    };
-
-    // Check if mood data actually exists
-    const hasMoodData = moodData && 
-                       moodData.most_common_mood && 
-                       moodData.total_entries > 0 && 
-                       moodData.most_common_mood !== null;
-    const averageMood = hasMoodData ? moodData.most_common_mood : null;
-    const moodScore = hasMoodData ? moodScores[averageMood as keyof typeof moodScores] || 60 : 0;
-
-    // Format mood for display
-    const formatMood = (mood: string) => {
-      return mood.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase());
-    };
-
-    // Combine wellness activities and mission activities
-    const wellnessActivities = wellnessStats?.total_activities_completed || 0;
-    const missionActivities = missionStats?.completed_missions || 0;
-    const totalActivities = wellnessActivities + missionActivities;
-
-    // Combine points from both sources
-    const wellnessPoints = wellnessStats?.total_points_earned || 0;
-    const missionPoints = missionStats?.total_points_earned || 0;
-    const totalPoints = wellnessPoints + missionPoints;
-
-    // Calculate streak from both sources
-    const wellnessStreak = wellnessStats?.streak_days || 0;
-    const missionStreak = calculateMissionStreak();
-    const totalStreak = Math.max(wellnessStreak, missionStreak);
-
-
-    console.log("Wellness Stats:", wellnessStats);
-    console.log("Mission Stats:", missionStats);
-    console.log("User Missions:", userMissions);
-    console.log("Mood Data:", moodData);
-    console.log("Has Mood Data:", hasMoodData);
-    console.log("Average Mood:", averageMood);
-    console.log("Mood Score:", moodScore);
-    console.log("Wellness Activities:", wellnessActivities);
-    console.log("Mission Activities:", missionActivities);
-    console.log("Total Activities:", totalActivities);
-    console.log("Wellness Points:", wellnessPoints);
-    console.log("Mission Points:", missionPoints);
-    console.log("Total Points:", totalPoints);
-    console.log("Wellness Streak:", wellnessStreak);
-    console.log("Mission Streak:", missionStreak);
-    console.log("Total Streak:", totalStreak);
-
-    return [
-      {
-        id: "1",
-        title: "Activity Completion",
-        score: Math.min(totalActivities * 10, 100),
-        color: "#10B981",
-        icon: "run",
-        details: `${totalActivities} activities completed (${wellnessActivities} wellness + ${missionActivities} missions)`,
-      },
-      {
-        id: "2",
-        title: "Mental Wellness",
-        score: moodScore,
-        color: "#8B5CF6",
-        icon: "brain",
-        details: hasMoodData 
-          ? `Mood: ${formatMood(averageMood)} (${moodData.total_entries} entries)`
-          : "No mood data available. Start tracking your mood!",
-      },
-      {
-        id: "3",
-        title: "Points Earned",
-        score: Math.min(totalPoints * 2, 100),
-        color: "#F59E0B",
-        icon: "star",
-        details: `${totalPoints} points earned (${wellnessPoints} wellness + ${missionPoints} missions)`,
-      },
-      {
-        id: "4",
-        title: "Streak Days",
-        score: Math.min(totalStreak * 15, 100),
-        color: "#3B82F6",
-        icon: "fire",
-        details: `${totalStreak} day streak`,
-      },
-    ];
-  };
-
-  const getWeeklyProgress = () => {
-    if (!wellnessStats?.category_breakdown && !userMissions) {
-      return [
-        { day: "Mon", score: 45 },
-        { day: "Tue", score: 52 },
-        { day: "Wed", score: 48 },
-        { day: "Thu", score: 61 },
-        { day: "Fri", score: 58 },
-        { day: "Sat", score: 67 },
-        { day: "Sun", score: 54 },
-      ];
-    }
-
-    // Create weekly progress based on both wellness activities and missions
-    const dayNames = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-    const totalActivities = (wellnessStats?.total_activities_completed || 0) + (missionStats?.completed_missions || 0);
-    
-    // Group missions by completion date
-    const missionsByDate = userMissions.reduce((acc: any, mission: any) => {
-      if (mission.status === 'completed' && mission.completed_at) {
-        const date = new Date(mission.completed_at).toISOString().split('T')[0];
-        acc[date] = (acc[date] || 0) + 1;
-      }
-      return acc;
-    }, {});
-    
-    return dayNames.map((day, index) => {
-      let score = 20; // Base score
-      
-      if (totalActivities > 0) {
-        // Calculate score based on activity distribution
-        const dailyActivities = Math.floor(totalActivities / 7) + (index < totalActivities % 7 ? 1 : 0);
-        
-        // Add bonus for missions completed on this day of the week
-        const today = new Date();
-        const dayOfWeek = today.getDay();
-        const targetDay = (dayOfWeek + index) % 7;
-        const targetDate = new Date(today.getTime() + (index - dayOfWeek) * 24 * 60 * 60 * 1000);
-        const dateString = targetDate.toISOString().split('T')[0];
-        const missionsOnDay = missionsByDate[dateString] || 0;
-        
-        score = Math.min(dailyActivities * 15 + missionsOnDay * 10, 100);
-      }
-      
-      return {
-        day,
-        score: Math.max(score, 20), // Minimum 20 for visual appeal
-      };
-    });
-  };
-
-  const getRecommendations = () => {
-    const recommendations = [];
-
-    // Combine data from both sources
-    const totalActivities = (wellnessStats?.total_activities_completed || 0) + (missionStats?.completed_missions || 0);
-    const totalPoints = (wellnessStats?.total_points_earned || 0) + (missionStats?.total_points_earned || 0);
-    const totalStreak = Math.max(wellnessStats?.streak_days || 0, calculateMissionStreak());
-
-    if (totalActivities < 3) {
-      recommendations.push({
-        icon: "run",
-        text: "Try to complete at least 3 activities or missions this week to improve your score.",
-      });
-    }
-
-    if (totalStreak < 3) {
-      recommendations.push({
-        icon: "fire",
-        text: "Build a consistent routine by maintaining a 3-day streak with activities or missions.",
-      });
-    }
-
-    if (totalPoints < 50) {
-      recommendations.push({
-        icon: "star",
-        text: "Complete more activities and missions to earn points and track your progress.",
-      });
-    }
-
-    // Check mood data
-    if (moodData?.most_common_mood === "sad" || moodData?.most_common_mood === "very_sad") {
-      recommendations.push({
-        icon: "heart",
-        text: "Consider trying mood-lifting activities like meditation or exercise.",
-      });
-    }
-
-    // Check if user has no activities at all
-    if (totalActivities === 0) {
-      recommendations.push({
-        icon: "plus-circle",
-        text: "Start your wellness journey by completing your first activity or mission today.",
-      });
-    }
-
-    // Default recommendations if no data or insufficient recommendations
-    if (recommendations.length < 2) {
-      recommendations.push(
-        {
-          icon: "run",
-          text: "Try to increase your daily step count to improve your physical health score.",
+          id: 'fitness',
+          title: 'Fitness',
+          icon: 'dumbbell',
+          color: '#9C27B0',
+          data: newTrackingData.fitness,
+          hasData: newTrackingData.fitness?.entries?.length > 0
         },
         {
-          icon: "meditation",
-          text: "Practice mindfulness exercises to boost your mental wellness.",
+          id: 'sleep',
+          title: 'Sleep',
+          icon: 'sleep',
+          color: '#673AB7',
+          data: newTrackingData.sleep,
+          hasData: newTrackingData.sleep?.sleepData?.length > 0
+        },
+        {
+          id: 'meal',
+          title: 'Meal',
+          icon: 'food-apple',
+          color: '#FF5722',
+          data: newTrackingData.meal,
+          hasData: newTrackingData.meal?.entries?.length > 0
         }
+      ];
+
+      setTrackingCategories(categories);
+
+      console.log("Tracking Data:", newTrackingData);
+      console.log("Has Data:", hasAnyData);
+      console.log("Categories:", categories);
+
+    } catch (err) {
+      console.error("Error fetching tracking data:", err);
+      setError("Failed to load tracking data. Please try again.");
+    } finally {
+      if (isRefresh) {
+        setRefreshing(false);
+      } else {
+        setLoading(false);
+      }
+    }
+  };
+
+  const onRefresh = () => {
+    fetchTrackingData(true);
+  };
+
+  // Category Slider Component
+  const CategorySlider = () => (
+    <ScrollView 
+      horizontal 
+      showsHorizontalScrollIndicator={false}
+      style={styles.categorySlider}
+      contentContainerStyle={styles.categorySliderContent}
+    >
+      {trackingCategories.map((category) => (
+        <TouchableOpacity
+          key={category.id}
+          style={[
+            styles.categoryItem,
+            selectedCategory === category.id && styles.categoryItemActive,
+            !category.hasData && styles.categoryItemDisabled
+          ]}
+          onPress={() => setSelectedCategory(category.id)}
+          disabled={!category.hasData}
+        >
+          <Icon 
+            name={category.icon} 
+            size={20} 
+            color={selectedCategory === category.id ? '#FFFFFF' : category.color} 
+          />
+          <Text style={[
+            styles.categoryText,
+            selectedCategory === category.id && styles.categoryTextActive,
+            !category.hasData && styles.categoryTextDisabled
+          ]}>
+            {category.title}
+          </Text>
+          {category.hasData && (
+            <View style={[
+              styles.categoryBadge,
+              { backgroundColor: category.color }
+            ]}>
+              <Text style={styles.categoryBadgeText}>
+                {category.id === 'all' ? 
+                  Object.values(trackingData).filter(data => 
+                    data?.entries?.length > 0 || data?.sleepData?.length > 0
+                  ).length :
+                  category.id === 'sleep' ? 
+                    category.data?.sleepData?.length || 0 :
+                    category.data?.entries?.length || 0
+                }
+              </Text>
+            </View>
+          )}
+        </TouchableOpacity>
+      ))}
+    </ScrollView>
+  );
+
+  // Render content based on selected category
+  const renderContent = () => {
+    if (selectedCategory === 'all') {
+      return (
+        <>
+          {trackingData.mood && trackingData.mood.entries?.length > 0 && (
+            <View style={styles.sectionContainer}>
+              <Text style={styles.sectionTitle}>Mood Tracking</Text>
+              {trackingData.mood.entries.map((entry: any, index: number) => (
+                <Card key={index} style={styles.trackingCard}>
+                  <Card.Content>
+                    <View style={styles.trackingHeader}>
+                      <View style={styles.trackingIconContainer}>
+                        <Icon 
+                          name={getMoodIcon(entry.mood_level)} 
+                          size={24} 
+                          color={getMoodColor(entry.mood_level)} 
+                        />
+                      </View>
+                      <View style={styles.trackingInfo}>
+                        <Text style={styles.trackingTitle}>
+                          {entry.mood_level.replace('_', ' ').replace(/\b\w/g, (l: string) => l.toUpperCase())}
+                        </Text>
+                        <Text style={styles.trackingSubtitle}>
+                          Score: {entry.mood_score}/10
+                        </Text>
+                        {entry.tracking_time && (
+                          <Text style={styles.trackingTime}>
+                            {formatTime(entry.tracking_time)}
+                          </Text>
+                        )}
+                      </View>
+                      <View style={styles.trackingScore}>
+                        <Text style={[styles.trackingScoreValue, { color: getMoodColor(entry.mood_level) }]}>
+                          {entry.mood_score}
+                        </Text>
+                        <Text style={styles.trackingScoreLabel}>/10</Text>
+                      </View>
+                    </View>
+                    {entry.notes && (
+                      <Text style={styles.trackingNotes}>{entry.notes}</Text>
+                    )}
+                  </Card.Content>
+                </Card>
+              ))}
+            </View>
+          )}
+
+          {trackingData.water && trackingData.water.entries?.length > 0 && (
+            <View style={styles.sectionContainer}>
+              <Text style={styles.sectionTitle}>Water Intake</Text>
+              {trackingData.water.entries.map((entry: any, index: number) => (
+                <Card key={index} style={styles.trackingCard}>
+                  <Card.Content>
+                    <View style={styles.trackingHeader}>
+                      <View style={styles.trackingIconContainer}>
+                        <Icon name="cup-water" size={24} color="#2196F3" />
+                      </View>
+                      <View style={styles.trackingInfo}>
+                        <Text style={styles.trackingTitle}>
+                          {entry.amount_ml}ml Water
+                        </Text>
+                        <Text style={styles.trackingSubtitle}>
+                          {entry.tracking_time && formatTime(entry.tracking_time)}
+                        </Text>
+                      </View>
+                      <View style={styles.trackingScore}>
+                        <Text style={[styles.trackingScoreValue, { color: "#2196F3" }]}>
+                          {entry.amount_ml}
+                        </Text>
+                        <Text style={styles.trackingScoreLabel}>ml</Text>
+                      </View>
+                    </View>
+                    {entry.notes && (
+                      <Text style={styles.trackingNotes}>{entry.notes}</Text>
+                    )}
+                  </Card.Content>
+                </Card>
+              ))}
+            </View>
+          )}
+
+          {trackingData.fitness && trackingData.fitness.entries?.length > 0 && (
+            <View style={styles.sectionContainer}>
+              <Text style={styles.sectionTitle}>Fitness Activities</Text>
+              {trackingData.fitness.entries.map((entry: any, index: number) => (
+                <Card key={index} style={styles.trackingCard}>
+                  <Card.Content>
+                    <View style={styles.trackingHeader}>
+                      <View style={styles.trackingIconContainer}>
+                        <Icon name={getActivityIcon(entry.activity_type)} size={24} color="#9C27B0" />
+                      </View>
+                      <View style={styles.trackingInfo}>
+                        <Text style={styles.trackingTitle}>
+                          {entry.activity_name || entry.activity_type}
+                        </Text>
+                        <Text style={styles.trackingSubtitle}>
+                          {entry.duration_minutes} minutes • {entry.calories_burned} calories
+                        </Text>
+                        {entry.tracking_time && (
+                          <Text style={styles.trackingTime}>
+                            {formatTime(entry.tracking_time)}
+                          </Text>
+                        )}
+                      </View>
+                      <View style={styles.trackingScore}>
+                        <Text style={[styles.trackingScoreValue, { color: "#9C27B0" }]}>
+                          {entry.duration_minutes}
+                        </Text>
+                        <Text style={styles.trackingScoreLabel}>min</Text>
+                      </View>
+                    </View>
+                    {entry.notes && (
+                      <Text style={styles.trackingNotes}>{entry.notes}</Text>
+                    )}
+                  </Card.Content>
+                </Card>
+              ))}
+            </View>
+          )}
+
+          {trackingData.sleep && trackingData.sleep.sleepData?.length > 0 && (
+            <View style={styles.sectionContainer}>
+              <Text style={styles.sectionTitle}>Sleep Tracking</Text>
+              {trackingData.sleep.sleepData.map((entry: any, index: number) => (
+                <Card key={index} style={styles.trackingCard}>
+                  <Card.Content>
+                    <View style={styles.trackingHeader}>
+                      <View style={styles.trackingIconContainer}>
+                        <Icon name="sleep" size={24} color="#673AB7" />
+                      </View>
+                      <View style={styles.trackingInfo}>
+                        <Text style={styles.trackingTitle}>
+                          {entry.sleep_hours || (entry.sleep_duration_minutes / 60).toFixed(1)} hours
+                        </Text>
+                        <Text style={styles.trackingSubtitle}>
+                          {entry.bedtime} - {entry.wake_time}
+                        </Text>
+                        <Text style={styles.trackingSubtitle}>
+                          Quality: {entry.sleep_quality}
+                        </Text>
+                      </View>
+                      <View style={styles.trackingScore}>
+                        <Text style={[styles.trackingScoreValue, { color: "#673AB7" }]}>
+                          {entry.sleep_hours || (entry.sleep_duration_minutes / 60).toFixed(1)}
+                        </Text>
+                        <Text style={styles.trackingScoreLabel}>hrs</Text>
+                      </View>
+                    </View>
+                    {entry.notes && (
+                      <Text style={styles.trackingNotes}>{entry.notes}</Text>
+                    )}
+                  </Card.Content>
+                </Card>
+              ))}
+            </View>
+          )}
+
+          {trackingData.meal && trackingData.meal.entries?.length > 0 && (
+            <View style={styles.sectionContainer}>
+              <Text style={styles.sectionTitle}>Meal Tracking</Text>
+              {trackingData.meal.entries.map((entry: any, index: number) => (
+                <Card key={index} style={styles.trackingCard}>
+                  <Card.Content>
+                    <View style={styles.trackingHeader}>
+                      <View style={styles.trackingIconContainer}>
+                        <Icon name="food-apple" size={24} color="#FF5722" />
+                      </View>
+                      <View style={styles.trackingInfo}>
+                        <Text style={styles.trackingTitle}>
+                          {entry.meal_type.charAt(0).toUpperCase() + entry.meal_type.slice(1)}
+                        </Text>
+                        <Text style={styles.trackingSubtitle}>
+                          {entry.recorded_at && formatTime(entry.recorded_at.split('T')[1])}
+                        </Text>
+                      </View>
+                      <View style={styles.trackingScore}>
+                        <Text style={[styles.trackingScoreValue, { color: "#FF5722" }]}>
+                          {entry.foods?.length || 0}
+                        </Text>
+                        <Text style={styles.trackingScoreLabel}>items</Text>
+                      </View>
+                    </View>
+                    
+                    {/* Food Items and Nutritional Content */}
+                    {entry.foods && entry.foods.length > 0 && (
+                      <View style={styles.foodItemsContainer}>
+                        <Text style={styles.foodItemsTitle}>Makanan:</Text>
+                        {entry.foods.map((food: any, foodIndex: number) => (
+                          <View key={foodIndex} style={styles.foodItem}>
+                            <View style={styles.foodItemHeader}>
+                              <Text style={styles.foodItemName}>
+                                {food.food_name_indonesian || food.food_name || 'Unknown Food'}
+                              </Text>
+                              <Text style={styles.foodItemQuantity}>
+                                {food.quantity} {food.unit}
+                              </Text>
+                            </View>
+                            <View style={styles.nutritionInfo}>
+                              <View style={styles.nutritionItem}>
+                                <Text style={styles.nutritionLabel}>Kalori</Text>
+                                <Text style={styles.nutritionValue}>{Math.round(food.calories || 0)} kcal</Text>
+                              </View>
+                              <View style={styles.nutritionItem}>
+                                <Text style={styles.nutritionLabel}>Protein</Text>
+                                <Text style={styles.nutritionValue}>{parseFloat(food.protein || 0).toFixed(1)}g</Text>
+                              </View>
+                              <View style={styles.nutritionItem}>
+                                <Text style={styles.nutritionLabel}>Karbohidrat</Text>
+                                <Text style={styles.nutritionValue}>{parseFloat(food.carbs || 0).toFixed(1)}g</Text>
+                              </View>
+                              <View style={styles.nutritionItem}>
+                                <Text style={styles.nutritionLabel}>Lemak</Text>
+                                <Text style={styles.nutritionValue}>{parseFloat(food.fat || 0).toFixed(1)}g</Text>
+                              </View>
+                            </View>
+                          </View>
+                        ))}
+                      </View>
+                    )}
+                    
+                    {entry.notes && (
+                      <Text style={styles.trackingNotes}>{entry.notes}</Text>
+                    )}
+                  </Card.Content>
+                </Card>
+              ))}
+            </View>
+          )}
+        </>
       );
     }
 
-    return recommendations.slice(0, 3); // Limit to 3 recommendations
+    // Render specific category
+    const category = trackingCategories.find(cat => cat.id === selectedCategory);
+    if (!category || !category.hasData) {
+      return (
+        <View style={styles.noDataContainer}>
+          <Icon name={category?.icon || "calendar-blank"} size={64} color="rgba(255, 255, 255, 0.6)" />
+          <Text style={styles.noDataTitle}>No {category?.title || 'Tracking'} Data</Text>
+          <Text style={styles.noDataText}>
+            No {category?.title?.toLowerCase() || 'tracking'} data found for {formatDate(selectedDate)}.
+          </Text>
+        </View>
+      );
+    }
+
+    // Render specific category content
+    switch (selectedCategory) {
+      case 'mood':
+        return (
+          <View style={styles.sectionContainer}>
+            <Text style={styles.sectionTitle}>Mood Tracking</Text>
+            {category.data.entries.map((entry: any, index: number) => (
+              <Card key={index} style={styles.trackingCard}>
+                <Card.Content>
+                  <View style={styles.trackingHeader}>
+                    <View style={styles.trackingIconContainer}>
+                      <Icon 
+                        name={getMoodIcon(entry.mood_level)} 
+                        size={24} 
+                        color={getMoodColor(entry.mood_level)} 
+                      />
+                    </View>
+                    <View style={styles.trackingInfo}>
+                      <Text style={styles.trackingTitle}>
+                        {entry.mood_level.replace('_', ' ').replace(/\b\w/g, (l: string) => l.toUpperCase())}
+                      </Text>
+                      <Text style={styles.trackingSubtitle}>
+                        Score: {entry.mood_score}/10
+                      </Text>
+                      {entry.tracking_time && (
+                        <Text style={styles.trackingTime}>
+                          {formatTime(entry.tracking_time)}
+                        </Text>
+                      )}
+                    </View>
+                    <View style={styles.trackingScore}>
+                      <Text style={[styles.trackingScoreValue, { color: getMoodColor(entry.mood_level) }]}>
+                        {entry.mood_score}
+                      </Text>
+                      <Text style={styles.trackingScoreLabel}>/10</Text>
+                    </View>
+                  </View>
+                  {entry.notes && (
+                    <Text style={styles.trackingNotes}>{entry.notes}</Text>
+                  )}
+                </Card.Content>
+              </Card>
+            ))}
+          </View>
+        );
+
+      case 'water':
+        return (
+          <View style={styles.sectionContainer}>
+            <Text style={styles.sectionTitle}>Water Intake</Text>
+            {category.data.entries.map((entry: any, index: number) => (
+              <Card key={index} style={styles.trackingCard}>
+                <Card.Content>
+                  <View style={styles.trackingHeader}>
+                    <View style={styles.trackingIconContainer}>
+                      <Icon name="cup-water" size={24} color="#2196F3" />
+                    </View>
+                    <View style={styles.trackingInfo}>
+                      <Text style={styles.trackingTitle}>
+                        {entry.amount_ml}ml Water
+                      </Text>
+                      <Text style={styles.trackingSubtitle}>
+                        {entry.tracking_time && formatTime(entry.tracking_time)}
+                      </Text>
+                    </View>
+                    <View style={styles.trackingScore}>
+                      <Text style={[styles.trackingScoreValue, { color: "#2196F3" }]}>
+                        {entry.amount_ml}
+                      </Text>
+                      <Text style={styles.trackingScoreLabel}>ml</Text>
+                    </View>
+                  </View>
+                  {entry.notes && (
+                    <Text style={styles.trackingNotes}>{entry.notes}</Text>
+                  )}
+                </Card.Content>
+              </Card>
+            ))}
+          </View>
+        );
+
+      case 'fitness':
+        return (
+          <View style={styles.sectionContainer}>
+            <Text style={styles.sectionTitle}>Fitness Activities</Text>
+            {category.data.entries.map((entry: any, index: number) => (
+              <Card key={index} style={styles.trackingCard}>
+                <Card.Content>
+                  <View style={styles.trackingHeader}>
+                    <View style={styles.trackingIconContainer}>
+                      <Icon name={getActivityIcon(entry.activity_type)} size={24} color="#9C27B0" />
+                    </View>
+                    <View style={styles.trackingInfo}>
+                      <Text style={styles.trackingTitle}>
+                        {entry.activity_name || entry.activity_type}
+                      </Text>
+                      <Text style={styles.trackingSubtitle}>
+                        {entry.duration_minutes} minutes • {entry.calories_burned} calories
+                      </Text>
+                      {entry.tracking_time && (
+                        <Text style={styles.trackingTime}>
+                          {formatTime(entry.tracking_time)}
+                        </Text>
+                      )}
+                    </View>
+                    <View style={styles.trackingScore}>
+                      <Text style={[styles.trackingScoreValue, { color: "#9C27B0" }]}>
+                        {entry.duration_minutes}
+                      </Text>
+                      <Text style={styles.trackingScoreLabel}>min</Text>
+                    </View>
+                  </View>
+                  {entry.notes && (
+                    <Text style={styles.trackingNotes}>{entry.notes}</Text>
+                  )}
+                </Card.Content>
+              </Card>
+            ))}
+          </View>
+        );
+
+      case 'sleep':
+        return (
+          <View style={styles.sectionContainer}>
+            <Text style={styles.sectionTitle}>Sleep Tracking</Text>
+            {category.data.sleepData.map((entry: any, index: number) => (
+              <Card key={index} style={styles.trackingCard}>
+                <Card.Content>
+                  <View style={styles.trackingHeader}>
+                    <View style={styles.trackingIconContainer}>
+                      <Icon name="sleep" size={24} color="#673AB7" />
+                    </View>
+                    <View style={styles.trackingInfo}>
+                      <Text style={styles.trackingTitle}>
+                        {entry.sleep_hours || (entry.sleep_duration_minutes / 60).toFixed(1)} hours
+                      </Text>
+                      <Text style={styles.trackingSubtitle}>
+                        {entry.bedtime} - {entry.wake_time}
+                      </Text>
+                      <Text style={styles.trackingSubtitle}>
+                        Quality: {entry.sleep_quality}
+                      </Text>
+                    </View>
+                    <View style={styles.trackingScore}>
+                      <Text style={[styles.trackingScoreValue, { color: "#673AB7" }]}>
+                        {entry.sleep_hours || (entry.sleep_duration_minutes / 60).toFixed(1)}
+                      </Text>
+                      <Text style={styles.trackingScoreLabel}>hrs</Text>
+                    </View>
+                  </View>
+                  {entry.notes && (
+                    <Text style={styles.trackingNotes}>{entry.notes}</Text>
+                  )}
+                </Card.Content>
+              </Card>
+            ))}
+          </View>
+        );
+
+      case 'meal':
+        return (
+          <View style={styles.sectionContainer}>
+            <Text style={styles.sectionTitle}>Meal Tracking</Text>
+            {category.data.entries.map((entry: any, index: number) => (
+              <Card key={index} style={styles.trackingCard}>
+                <Card.Content>
+                  <View style={styles.trackingHeader}>
+                    <View style={styles.trackingIconContainer}>
+                      <Icon name="food-apple" size={24} color="#FF5722" />
+                    </View>
+                    <View style={styles.trackingInfo}>
+                      <Text style={styles.trackingTitle}>
+                        {entry.meal_type.charAt(0).toUpperCase() + entry.meal_type.slice(1)}
+                      </Text>
+                      <Text style={styles.trackingSubtitle}>
+                        {entry.recorded_at && formatTime(entry.recorded_at.split('T')[1])}
+                      </Text>
+                    </View>
+                    <View style={styles.trackingScore}>
+                      <Text style={[styles.trackingScoreValue, { color: "#FF5722" }]}>
+                        {entry.foods?.length || 0}
+                      </Text>
+                      <Text style={styles.trackingScoreLabel}>items</Text>
+                    </View>
+                  </View>
+                  
+                  {/* Food Items and Nutritional Content */}
+                  {entry.foods && entry.foods.length > 0 && (
+                    <View style={styles.foodItemsContainer}>
+                      <Text style={styles.foodItemsTitle}>Makanan:</Text>
+                      {entry.foods.map((food: any, foodIndex: number) => (
+                        <View key={foodIndex} style={styles.foodItem}>
+                          <View style={styles.foodItemHeader}>
+                            <Text style={styles.foodItemName}>
+                              {food.food_name_indonesian || food.food_name || 'Unknown Food'}
+                            </Text>
+                            <Text style={styles.foodItemQuantity}>
+                              {food.quantity} {food.unit}
+                            </Text>
+                          </View>
+                          <View style={styles.nutritionInfo}>
+                            <View style={styles.nutritionItem}>
+                              <Text style={styles.nutritionLabel}>Kalori</Text>
+                              <Text style={styles.nutritionValue}>{Math.round(food.calories || 0)} kcal</Text>
+                            </View>
+                            <View style={styles.nutritionItem}>
+                              <Text style={styles.nutritionLabel}>Protein</Text>
+                              <Text style={styles.nutritionValue}>{parseFloat(food.protein || 0).toFixed(1)}g</Text>
+                            </View>
+                            <View style={styles.nutritionItem}>
+                              <Text style={styles.nutritionLabel}>Karbohidrat</Text>
+                              <Text style={styles.nutritionValue}>{parseFloat(food.carbs || 0).toFixed(1)}g</Text>
+                            </View>
+                            <View style={styles.nutritionItem}>
+                              <Text style={styles.nutritionLabel}>Lemak</Text>
+                              <Text style={styles.nutritionValue}>{parseFloat(food.fat || 0).toFixed(1)}g</Text>
+                            </View>
+                          </View>
+                        </View>
+                      ))}
+                    </View>
+                  )}
+                  
+                  {entry.notes && (
+                    <Text style={styles.trackingNotes}>{entry.notes}</Text>
+                  )}
+                </Card.Content>
+              </Card>
+            ))}
+          </View>
+        );
+
+      default:
+        return null;
+    }
+  };
+
+  const handleDateChange = (event: any, selectedDate?: Date) => {
+    setShowDatePicker(false);
+    if (selectedDate) {
+      setSelectedDate(selectedDate);
+    }
+  };
+
+  const formatDate = (date: Date) => {
+    const today = new Date();
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+    
+    if (date.toDateString() === today.toDateString()) {
+      return "Today";
+    } else if (date.toDateString() === yesterday.toDateString()) {
+      return "Yesterday";
+    } else {
+      return date.toLocaleDateString('en-US', { 
+        weekday: 'long', 
+        year: 'numeric', 
+        month: 'long', 
+        day: 'numeric' 
+      });
+    }
+  };
+
+  const formatTime = (timeString: string) => {
+    if (!timeString) return "";
+    const time = new Date(`2000-01-01T${timeString}`);
+    return time.toLocaleTimeString('en-US', { 
+      hour: '2-digit', 
+      minute: '2-digit',
+      hour12: true 
+    });
+  };
+
+  const getMoodIcon = (moodLevel: string) => {
+    const moodIcons: { [key: string]: string } = {
+      'very_happy': 'emoticon-happy',
+      'happy': 'emoticon-happy-outline',
+      'neutral': 'emoticon-neutral',
+      'sad': 'emoticon-sad',
+      'very_sad': 'emoticon-cry'
+    };
+    return moodIcons[moodLevel] || 'emoticon-neutral';
+  };
+
+  const getMoodColor = (moodLevel: string) => {
+    const moodColors: { [key: string]: string } = {
+      'very_happy': '#10B981',
+      'happy': '#34D399',
+      'neutral': '#F59E0B',
+      'sad': '#F97316',
+      'very_sad': '#EF4444'
+    };
+    return moodColors[moodLevel] || '#F59E0B';
+  };
+
+  const getActivityIcon = (activityType: string) => {
+    const activityIcons: { [key: string]: string } = {
+      'Weight Lifting': 'dumbbell',
+      'Running': 'run',
+      'Cycling': 'bike',
+      'Swimming': 'swim',
+      'Yoga': 'yoga',
+      'Walking': 'walk',
+      'Cardio': 'heart-pulse',
+      'Strength Training': 'weight-lifter'
+    };
+    return activityIcons[activityType] || 'run';
   };
 
   if (loading) {
@@ -614,7 +910,7 @@ const WellnessDetailsScreen = ({ navigation }: any) => {
         <SafeAreaView style={styles.safeArea}>
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color="#FFFFFF" />
-            <Text style={styles.loadingText}>Loading wellness data...</Text>
+            <Text style={styles.loadingText}>Loading tracking history...</Text>
           </View>
         </SafeAreaView>
       </LinearGradient>
@@ -632,7 +928,7 @@ const WellnessDetailsScreen = ({ navigation }: any) => {
           <View style={styles.errorContainer}>
             <Icon name="alert-circle" size={48} color="#FFFFFF" />
             <Text style={styles.errorText}>{error}</Text>
-            <TouchableOpacity style={styles.retryButton} onPress={fetchWellnessData}>
+            <TouchableOpacity style={styles.retryButton} onPress={() => fetchTrackingData(false)}>
               <Text style={styles.retryButtonText}>Tap to retry</Text>
             </TouchableOpacity>
           </View>
@@ -640,11 +936,6 @@ const WellnessDetailsScreen = ({ navigation }: any) => {
       </LinearGradient>
     );
   }
-
-  const overallScore = calculateOverallScore();
-  const wellnessMetrics = getWellnessMetrics();
-  const weeklyProgress = getWeeklyProgress();
-  const recommendations = getRecommendations();
 
   return (
     <LinearGradient
@@ -654,297 +945,90 @@ const WellnessDetailsScreen = ({ navigation }: any) => {
       <StatusBar barStyle="light-content" />
       <SafeAreaView style={styles.safeArea}>
         {/* Header */}
-        {/* <View style={styles.header}>
+        <View style={styles.header}>
           <TouchableOpacity
             style={styles.backButton}
             onPress={() => safeGoBack(navigation, 'Main')}
           >
             <Icon name="arrow-left" size={24} color="#FFFFFF" />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Wellness Dashboard</Text>
+          <Text style={styles.headerTitle}>Tracking History</Text>
           <View style={styles.headerSpacer} />
-        </View> */}
+        </View>
 
         <ScrollView
           style={styles.content}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.contentContainer}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              tintColor="#FFFFFF"
+              colors={["#FFFFFF"]}
+            />
+          }
         >
-          {/* Overall Wellness Score */}
-          <View style={styles.overallScoreContainer}>
-            <Text style={styles.sectionTitle}>Overall Wellness Score</Text>
-            <View style={styles.scoreCircleContainer}>
-              <ProgressRing
-                progress={overallScore}
-                size={150}
-                strokeWidth={15}
-                strokeColor="#FFFFFF"
-              >
-                <Text style={styles.overallScoreValue}>{overallScore}</Text>
-                <Text style={styles.overallScoreLabel}>
-                  {overallScore >= 80 ? "Excellent" : overallScore >= 60 ? "Good" : overallScore >= 40 ? "Fair" : "Poor"}
-                </Text>
-              </ProgressRing>
+          {/* Date Selector */}
+          <View style={styles.dateSelectorContainer}>
+            <TouchableOpacity
+              style={styles.dateSelectorButton}
+              onPress={() => setShowDatePicker(true)}
+            >
+              <Icon name="calendar" size={20} color="#FFFFFF" />
+              <Text style={styles.dateSelectorText}>{formatDate(selectedDate)}</Text>
+              <Icon name="chevron-down" size={20} color="#FFFFFF" />
+            </TouchableOpacity>
+          </View>
+
+          {/* Category Slider */}
+          {hasData && trackingCategories.length > 0 && <CategorySlider />}
+
+          {/* Content based on selected category */}
+          {hasData ? renderContent() : (
+            <View style={styles.noDataContainer}>
+              <Icon name="calendar-blank" size={64} color="rgba(255, 255, 255, 0.6)" />
+              <Text style={styles.noDataTitle}>No Tracking Data</Text>
+              <Text style={styles.noDataText}>
+                No tracking data found for {formatDate(selectedDate)}. 
+                Start tracking your wellness activities to see your history here.
+              </Text>
             </View>
-            <Text style={styles.scoreDescription}>
-              Your wellness score is based on multiple factors including activity completion,
-              mood tracking, points earned, and consistency streaks.
-            </Text>
-          </View>
+          )}
 
-          {/* Detailed Metrics */}
-          <View style={styles.metricsContainer}>
-            <Text style={styles.sectionTitle}>Detailed Metrics</Text>
-            {wellnessMetrics.map((metric) => (
-              <View key={metric.id} style={styles.metricCard}>
-                <View style={styles.metricHeader}>
-                  <View style={styles.metricIconContainer}>
-                    <Icon name={metric.icon} size={24} color={metric.color} />
-                  </View>
-                  <View style={styles.metricInfo}>
-                    <Text style={styles.metricTitle}>{metric.title}</Text>
-                    <Text style={styles.metricDetails}>{metric.details}</Text>
-                  </View>
-                  <View style={styles.metricScore}>
-                    <Text
-                      style={[styles.metricScoreValue, { color: metric.color }]}
-                    >
-                      {metric.score}
-                    </Text>
-                    <Text style={styles.metricScoreLabel}>/100</Text>
-                  </View>
-                </View>
-                <View style={styles.progressBarContainer}>
-                  <View style={styles.progressBarBackground}>
-                    <View
-                      style={[
-                        styles.progressBarFill,
-                        {
-                          width: `${metric.score}%`,
-                          backgroundColor: metric.color,
-                        },
-                      ]}
-                    />
-                  </View>
-                </View>
-              </View>
-            ))}
-          </View>
 
-          {/* Weekly Progress */}
-          <View style={styles.weeklyContainer}>
-            <Text style={styles.sectionTitle}>Weekly Progress</Text>
-            <View style={styles.weeklyChart}>
-              {weeklyProgress.map((item: any, index: number) => (
-                <View key={index} style={styles.weeklyBar}>
-                  <View style={styles.barContainer}>
-                    <View
-                      style={[
-                        styles.bar,
-                        {
-                          height: `${(item.score / 100) * 120}%`,
-                          backgroundColor:
-                            item.score >= 60 ? "#10B981" : "#F59E0B",
-                        },
-                      ]}
-                    />
-                  </View>
-                  <Text style={styles.barLabel}>{item.day}</Text>
-                </View>
-              ))}
-            </View>
-          </View>
-
-          {/* Workout Log Section */}
-          <View style={styles.workoutLogContainer}>
-            <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>Workout Log</Text>
-              <TouchableOpacity
-                style={styles.addWorkoutButton}
-                onPress={() => setShowWorkoutModal(true)}
-              >
-                <Icon name="plus" size={20} color="#FFFFFF" />
-                <Text style={styles.addWorkoutButtonText}>Log Workout</Text>
-              </TouchableOpacity>
-            </View>
-            <Text style={styles.workoutDescription}>
-              Track your workouts and automatically calculate calories burned based on your activity type and parameters.
-            </Text>
-          </View>
-
-          {/* Recommendations */}
-          <View style={styles.recommendationsContainer}>
-            <Text style={styles.sectionTitle}>Recommendations</Text>
-            {recommendations.map((recommendation: any, index: number) => (
-              <View key={index} style={styles.recommendationCard}>
-                <Icon name={recommendation.icon} size={24} color="#F59E0B" />
-                <Text style={styles.recommendationText}>
-                  {recommendation.text}
-                </Text>
-              </View>
-            ))}
-          </View>
         </ScrollView>
 
-        {/* Workout Log Modal */}
-        <Modal
-          visible={showWorkoutModal}
-          animationType="slide"
-          presentationStyle="pageSheet"
-        >
-          <LinearGradient
-            colors={[theme.colors.primary, theme.colors.secondary]}
-            style={styles.modalContainer}
-          >
-            <SafeAreaView style={styles.modalSafeArea}>
-              {/* Modal Header */}
-              <View style={styles.modalHeader}>
+        {/* Date Picker Modal */}
+        {showDatePicker && (
+          <View style={styles.datePickerModal}>
+            <View style={styles.datePickerContent}>
+              <Text style={styles.datePickerTitle}>Select Date</Text>
+              <DateTimePicker
+                value={selectedDate}
+                mode="date"
+                display="spinner"
+                onChange={handleDateChange}
+                maximumDate={new Date()}
+                style={styles.datePicker}
+              />
+              <View style={styles.datePickerButtons}>
                 <TouchableOpacity
-                  style={styles.modalCloseButton}
-                  onPress={() => {
-                    setShowWorkoutModal(false);
-                    resetWorkoutForm();
-                  }}
+                  style={styles.datePickerButton}
+                  onPress={() => setShowDatePicker(false)}
                 >
-                  <Icon name="close" size={24} color="#FFFFFF" />
+                  <Text style={styles.datePickerButtonText}>Cancel</Text>
                 </TouchableOpacity>
-                <Text style={styles.modalTitle}>Log Workout</Text>
-                <View style={styles.modalHeaderSpacer} />
+                <TouchableOpacity
+                  style={[styles.datePickerButton, styles.datePickerButtonPrimary]}
+                  onPress={() => setShowDatePicker(false)}
+                >
+                  <Text style={styles.datePickerButtonTextPrimary}>Confirm</Text>
+                </TouchableOpacity>
               </View>
-
-              <ScrollView style={styles.modalContent} showsVerticalScrollIndicator={false}>
-                {/* Step 1: Select Workout Type */}
-                <View style={styles.modalSection}>
-                  <Text style={styles.modalSectionTitle}>1. Select Workout Type</Text>
-                  <View style={styles.workoutTypeGrid}>
-                    {Object.keys(WORKOUT_TYPES).map((workoutType) => (
-                      <TouchableOpacity
-                        key={workoutType}
-                        style={[
-                          styles.workoutTypeCard,
-                          selectedWorkoutType === workoutType && styles.workoutTypeCardSelected
-                        ]}
-                        onPress={() => setSelectedWorkoutType(workoutType)}
-                      >
-                        <Icon 
-                          name={WORKOUT_TYPES[workoutType as keyof typeof WORKOUT_TYPES].icon} 
-                          size={32} 
-                          color={selectedWorkoutType === workoutType ? "#FFFFFF" : "#10B981"} 
-                        />
-                        <Text style={[
-                          styles.workoutTypeText,
-                          selectedWorkoutType === workoutType && styles.workoutTypeTextSelected
-                        ]}>
-                          {workoutType}
-                        </Text>
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-                </View>
-
-                {/* Step 2: Workout Parameters */}
-                {selectedWorkoutType && (
-                  <View style={styles.modalSection}>
-                    <Text style={styles.modalSectionTitle}>2. Workout Parameters</Text>
-                    {WORKOUT_TYPES[selectedWorkoutType as keyof typeof WORKOUT_TYPES].parameters.map((param) => (
-                      <View key={param.name} style={styles.parameterContainer}>
-                        <Text style={styles.parameterLabel}>{param.label}</Text>
-                        {param.type === "select" ? (
-                          <View style={styles.selectContainer}>
-                            {(param as any).options?.map((option: string) => (
-                              <TouchableOpacity
-                                key={option}
-                                style={[
-                                  styles.selectOption,
-                                  workoutParameters[param.name] === option && styles.selectOptionSelected
-                                ]}
-                                onPress={() => handleParameterChange(param.name, option)}
-                              >
-                                <Text style={[
-                                  styles.selectOptionText,
-                                  workoutParameters[param.name] === option && styles.selectOptionTextSelected
-                                ]}>
-                                  {option}
-                                </Text>
-                              </TouchableOpacity>
-                            ))}
-                          </View>
-                        ) : (
-                          <TextInput
-                            style={styles.parameterInput}
-                            placeholder={`Enter ${param.label.toLowerCase()}`}
-                            placeholderTextColor="#9CA3AF"
-                            value={workoutParameters[param.name] || ""}
-                            onChangeText={(value) => handleParameterChange(param.name, value)}
-                            keyboardType="numeric"
-                          />
-                        )}
-                      </View>
-                    ))}
-                  </View>
-                )}
-
-                {/* Step 3: Duration */}
-                <View style={styles.modalSection}>
-                  <Text style={styles.modalSectionTitle}>3. Duration</Text>
-                  <View style={styles.durationContainer}>
-                    <TextInput
-                      style={styles.durationInput}
-                      placeholder="Enter duration in minutes"
-                      placeholderTextColor="#9CA3AF"
-                      value={workoutDuration}
-                      onChangeText={setWorkoutDuration}
-                      keyboardType="numeric"
-                    />
-                    <Text style={styles.durationUnit}>minutes</Text>
-                  </View>
-                </View>
-
-                {/* Step 4: Calculated Calories */}
-                {calculatedCalories > 0 && (
-                  <View style={styles.modalSection}>
-                    <Text style={styles.modalSectionTitle}>4. Calories Burned</Text>
-                    <View style={styles.caloriesContainer}>
-                      <Text style={styles.caloriesValue}>{calculatedCalories}</Text>
-                      <Text style={styles.caloriesUnit}>calories</Text>
-                    </View>
-                    <Text style={styles.caloriesNote}>
-                      *Calculated based on your workout parameters and duration
-                    </Text>
-                  </View>
-                )}
-
-                {/* Notes */}
-                <View style={styles.modalSection}>
-                  <Text style={styles.modalSectionTitle}>Notes (Optional)</Text>
-                  <TextInput
-                    style={styles.notesInput}
-                    placeholder="Add any notes about your workout..."
-                    placeholderTextColor="#9CA3AF"
-                    value={workoutNotes}
-                    onChangeText={setWorkoutNotes}
-                    multiline
-                    numberOfLines={3}
-                  />
-                </View>
-
-                {/* Save Button */}
-                <View style={styles.modalSection}>
-                  <Button
-                    mode="contained"
-                    onPress={handleSaveWorkout}
-                    loading={savingWorkout}
-                    disabled={!selectedWorkoutType || !workoutDuration || savingWorkout}
-                    style={styles.saveButton}
-                    labelStyle={styles.saveButtonLabel}
-                  >
-                    {savingWorkout ? "Saving..." : "Save Workout"}
-                  </Button>
-                </View>
-              </ScrollView>
-            </SafeAreaView>
-          </LinearGradient>
-        </Modal>
+            </View>
+          </View>
+        )}
       </SafeAreaView>
     </LinearGradient>
   );
@@ -1018,66 +1102,74 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
     fontWeight: "600",
   },
-  overallScoreContainer: {
+  dateSelectorContainer: {
     paddingHorizontal: 20,
-    paddingVertical: 30,
+    paddingVertical: 20,
+  },
+  dateSelectorButton: {
+    flexDirection: "row",
     alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255, 255, 255, 0.2)",
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 25,
+    gap: 8,
+  },
+  dateSelectorText: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#FFFFFF",
+  },
+  noDataContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 40,
+    paddingVertical: 60,
+  },
+  noDataTitle: {
+    fontSize: 20,
+    fontWeight: "700",
+    color: "#FFFFFF",
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  noDataText: {
+    fontSize: 16,
+    color: "rgba(255, 255, 255, 0.8)",
+    textAlign: "center",
+    lineHeight: 24,
+  },
+  sectionContainer: {
+    paddingHorizontal: 20,
+    marginBottom: 30,
   },
   sectionTitle: {
     fontSize: 20,
     fontWeight: "800",
     color: "#FFFFFF",
-    marginBottom: 20,
+    marginBottom: 16,
     letterSpacing: -0.4,
   },
-  scoreCircleContainer: {
-    marginVertical: 20,
-  },
-  overallScoreValue: {
-    fontSize: 36,
-    fontWeight: "800",
-    color: "#FFFFFF",
-    letterSpacing: -1,
-  },
-  overallScoreLabel: {
-    fontSize: 16,
-    color: "#FFFFFF",
-    fontWeight: "600",
-    marginTop: 4,
-    opacity: 0.9,
-  },
-  scoreDescription: {
-    fontSize: 15,
-    color: "#FFFFFF",
-    textAlign: "center",
-    lineHeight: 22,
-    paddingHorizontal: 20,
-    fontWeight: "500",
-    opacity: 0.9,
-  },
-  metricsContainer: {
-    paddingHorizontal: 20,
-    marginBottom: 30,
-  },
-  metricCard: {
+  trackingCard: {
     backgroundColor: "#FFFFFF",
-    borderRadius: 20,
-    padding: 20,
-    marginBottom: 16,
+    borderRadius: 16,
+    marginBottom: 12,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.08,
     shadowRadius: 12,
-    elevation: 6,
+    elevation: 4,
     borderWidth: 1,
     borderColor: "#F1F5F9",
   },
-  metricHeader: {
+  trackingHeader: {
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: 15,
+    marginBottom: 12,
   },
-  metricIconContainer: {
+  trackingIconContainer: {
     width: 48,
     height: 48,
     borderRadius: 24,
@@ -1086,324 +1178,255 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginRight: 16,
   },
-  metricInfo: {
+  trackingInfo: {
     flex: 1,
   },
-  metricTitle: {
+  trackingTitle: {
     fontSize: 16,
     fontWeight: "700",
     color: "#1F2937",
     marginBottom: 4,
   },
-  metricDetails: {
-    fontSize: 13,
+  trackingSubtitle: {
+    fontSize: 14,
     color: "#64748B",
-    lineHeight: 18,
+    marginBottom: 2,
   },
-  metricScore: {
+  trackingTime: {
+    fontSize: 12,
+    color: "#9CA3AF",
+  },
+  trackingScore: {
     alignItems: "flex-end",
   },
-  metricScoreValue: {
-    fontSize: 24,
+  trackingScoreValue: {
+    fontSize: 20,
     fontWeight: "800",
     letterSpacing: -0.5,
   },
-  metricScoreLabel: {
+  trackingScoreLabel: {
     fontSize: 12,
     color: "#64748B",
     fontWeight: "500",
   },
-  progressBarContainer: {
-    marginTop: 10,
-  },
-  progressBarBackground: {
-    height: 8,
-    backgroundColor: "#E2E8F0",
-    borderRadius: 4,
-    overflow: "hidden",
-  },
-  progressBarFill: {
-    height: "100%",
-    borderRadius: 4,
-  },
-  weeklyContainer: {
-    paddingHorizontal: 20,
-    marginBottom: 30,
-  },
-  weeklyChart: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "flex-end",
-    height: 160,
-    paddingTop: 20,
-  },
-  weeklyBar: {
-    flex: 1,
-    alignItems: "center",
-    marginHorizontal: 4,
-  },
-  barContainer: {
-    width: 24,
-    height: 120,
-    backgroundColor: "rgba(255, 255, 255, 0.2)",
-    borderRadius: 12,
-    overflow: "hidden",
-    marginBottom: 8,
-  },
-  bar: {
-    position: "absolute",
-    bottom: 0,
-    width: "100%",
-    borderRadius: 12,
-  },
-  barLabel: {
-    fontSize: 12,
-    color: "#FFFFFF",
-    fontWeight: "500",
-  },
-  recommendationsContainer: {
-    paddingHorizontal: 20,
-  },
-  recommendationCard: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    backgroundColor: "#FFFFFF",
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 12,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    elevation: 4,
-    borderWidth: 1,
-    borderColor: "#F1F5F9",
-  },
-  recommendationText: {
-    flex: 1,
+  trackingNotes: {
     fontSize: 14,
-    color: "#374151",
-    lineHeight: 20,
-    marginLeft: 12,
-    fontWeight: "500",
+    color: "#64748B",
+    fontStyle: "italic",
+    marginTop: 8,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: "#E5E7EB",
   },
-  // Workout Log Styles
-  workoutLogContainer: {
-    paddingHorizontal: 20,
-    marginBottom: 30,
-  },
-  sectionHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 12,
-  },
-  addWorkoutButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "rgba(255, 255, 255, 0.2)",
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-  },
-  addWorkoutButtonText: {
-    fontSize: 14,
-    color: "#FFFFFF",
-    fontWeight: "600",
-    marginLeft: 6,
-  },
-  workoutDescription: {
-    fontSize: 14,
-    color: "#FFFFFF",
-    opacity: 0.9,
-    lineHeight: 20,
-  },
-  // Modal Styles
-  modalContainer: {
-    flex: 1,
-  },
-  modalSafeArea: {
-    flex: 1,
-  },
-  modalHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingHorizontal: 20,
-    paddingVertical: 15,
-  },
-  modalCloseButton: {
-    padding: 5,
-  },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: "#FFFFFF",
-    letterSpacing: -0.3,
-  },
-  modalHeaderSpacer: {
-    width: 34,
-  },
-  modalContent: {
-    flex: 1,
-    paddingHorizontal: 20,
-  },
-  modalSection: {
-    marginBottom: 30,
-  },
-  modalSectionTitle: {
-    fontSize: 16,
-    fontWeight: "700",
-    color: "#FFFFFF",
-    marginBottom: 16,
-    letterSpacing: -0.3,
-  },
-  workoutTypeGrid: {
+  fitnessDetails: {
     flexDirection: "row",
     flexWrap: "wrap",
-    justifyContent: "space-between",
+    gap: 12,
+    marginTop: 8,
   },
-  workoutTypeCard: {
-    width: (width - 60) / 2,
-    backgroundColor: "#FFFFFF",
-    borderRadius: 16,
-    padding: 20,
-    marginBottom: 12,
-    alignItems: "center",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    elevation: 4,
-    borderWidth: 1,
-    borderColor: "#F1F5F9",
+  fitnessDetail: {
+    fontSize: 12,
+    color: "#64748B",
+    backgroundColor: "#F1F5F9",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
   },
-  workoutTypeCardSelected: {
-    backgroundColor: "#10B981",
-    borderColor: "#10B981",
+  sleepDetails: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 12,
+    marginTop: 8,
   },
-  workoutTypeText: {
+  sleepDetail: {
+    fontSize: 12,
+    color: "#64748B",
+    backgroundColor: "#F1F5F9",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  mealDetails: {
+    marginTop: 8,
+  },
+  mealDetailTitle: {
     fontSize: 14,
     fontWeight: "600",
     color: "#374151",
-    marginTop: 8,
+    marginBottom: 4,
+  },
+  mealDetail: {
+    fontSize: 12,
+    color: "#64748B",
+    marginBottom: 2,
+  },
+  datePickerModal: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+    zIndex: 1000,
+  },
+  datePickerContent: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 20,
+    padding: 20,
+    width: width - 40,
+    maxWidth: 400,
+  },
+  datePickerTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#1F2937",
     textAlign: "center",
+    marginBottom: 20,
   },
-  workoutTypeTextSelected: {
-    color: "#FFFFFF",
+  datePicker: {
+    width: "100%",
   },
-  parameterContainer: {
-    marginBottom: 16,
+  datePickerButtons: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginTop: 20,
+    gap: 12,
   },
-  parameterLabel: {
-    fontSize: 14,
+  datePickerButton: {
+    flex: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 12,
+    backgroundColor: "#F3F4F6",
+    alignItems: "center",
+  },
+  datePickerButtonPrimary: {
+    backgroundColor: "#10B981",
+  },
+  datePickerButtonText: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#374151",
+  },
+  datePickerButtonTextPrimary: {
+    fontSize: 16,
     fontWeight: "600",
     color: "#FFFFFF",
-    marginBottom: 8,
   },
-  parameterInput: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 12,
+  // Category Slider Styles
+  categorySlider: {
+    marginVertical: 16,
+  },
+  categorySliderContent: {
+    paddingHorizontal: 20,
+    gap: 12,
+  },
+  categoryItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(255, 255, 255, 0.1)",
     paddingHorizontal: 16,
     paddingVertical: 12,
-    fontSize: 16,
+    borderRadius: 25,
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.2)",
+    gap: 8,
+    minWidth: 80,
+  },
+  categoryItemActive: {
+    backgroundColor: "rgba(255, 255, 255, 0.2)",
+    borderColor: "rgba(255, 255, 255, 0.4)",
+  },
+  categoryItemDisabled: {
+    opacity: 0.5,
+  },
+  categoryText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "rgba(255, 255, 255, 0.8)",
+  },
+  categoryTextActive: {
+    color: "#FFFFFF",
+  },
+  categoryTextDisabled: {
+    color: "rgba(255, 255, 255, 0.4)",
+  },
+  categoryBadge: {
+    position: "absolute",
+    top: -5,
+    right: -5,
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 4,
+  },
+  categoryBadgeText: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: "#FFFFFF",
+  },
+  // Food Items and Nutritional Content Styles
+  foodItemsContainer: {
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: "#E5E7EB",
+  },
+  foodItemsTitle: {
+    fontSize: 14,
+    fontWeight: "600",
     color: "#374151",
+    marginBottom: 8,
+  },
+  foodItem: {
+    marginBottom: 12,
+    padding: 12,
+    backgroundColor: "#F9FAFB",
+    borderRadius: 8,
     borderWidth: 1,
     borderColor: "#E5E7EB",
   },
-  selectContainer: {
+  foodItemHeader: {
     flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 8,
+  },
+  foodItemName: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#1F2937",
+    flex: 1,
+  },
+  foodItemQuantity: {
+    fontSize: 12,
+    color: "#6B7280",
+    fontWeight: "500",
+  },
+  nutritionInfo: {
+    flexDirection: "row",
+    justifyContent: "space-between",
     flexWrap: "wrap",
     gap: 8,
   },
-  selectOption: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 20,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
-  },
-  selectOptionSelected: {
-    backgroundColor: "#10B981",
-    borderColor: "#10B981",
-  },
-  selectOptionText: {
-    fontSize: 14,
-    fontWeight: "500",
-    color: "#374151",
-  },
-  selectOptionTextSelected: {
-    color: "#FFFFFF",
-  },
-  durationContainer: {
-    flexDirection: "row",
+  nutritionItem: {
     alignItems: "center",
+    minWidth: 60,
   },
-  durationInput: {
-    flex: 1,
-    backgroundColor: "#FFFFFF",
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    fontSize: 16,
-    color: "#374151",
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
-    marginRight: 12,
-  },
-  durationUnit: {
-    fontSize: 16,
-    color: "#FFFFFF",
+  nutritionLabel: {
+    fontSize: 10,
+    color: "#6B7280",
     fontWeight: "500",
+    marginBottom: 2,
   },
-  caloriesContainer: {
-    alignItems: "center",
-    backgroundColor: "#FFFFFF",
-    borderRadius: 16,
-    padding: 20,
-    marginBottom: 8,
-  },
-  caloriesValue: {
-    fontSize: 36,
-    fontWeight: "800",
-    color: "#10B981",
-    letterSpacing: -1,
-  },
-  caloriesUnit: {
-    fontSize: 16,
-    color: "#64748B",
-    fontWeight: "500",
-    marginTop: 4,
-  },
-  caloriesNote: {
+  nutritionValue: {
     fontSize: 12,
-    color: "#FFFFFF",
-    opacity: 0.8,
-    textAlign: "center",
-    fontStyle: "italic",
-  },
-  notesInput: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    fontSize: 16,
-    color: "#374151",
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
-    minHeight: 80,
-    textAlignVertical: "top",
-  },
-  saveButton: {
-    backgroundColor: "#10B981",
-    borderRadius: 12,
-    paddingVertical: 12,
-    marginTop: 20,
-  },
-  saveButtonLabel: {
-    fontSize: 16,
     fontWeight: "600",
+    color: "#374151",
   },
 });
 

@@ -1,167 +1,192 @@
-const mysql = require('mysql2/promise');
-require('dotenv').config();
+#!/usr/bin/env node
 
-// Database configuration
+/**
+ * Script to add sample wellness activities data
+ * This ensures the wellness activity card shows proper data
+ */
+
+const mysql = require('mysql2/promise');
+
 const dbConfig = {
-  host: process.env.DB_HOST || 'localhost',
-  user: process.env.DB_USER || 'root',
-  password: process.env.DB_PASSWORD || 'pr1k1t1w',
-  database: process.env.DB_NAME || 'phc_dashboard',
-  port: process.env.DB_PORT || 3306
+  host: 'localhost',
+  user: 'root',
+  password: 'pr1k1t1w',
+  database: 'phc_dashboard',
+  port: 3306
 };
 
 async function addSampleWellnessActivities() {
   let connection;
-  
+
   try {
-    console.log('🔗 Connecting to database...');
+    console.log('🔌 Connecting to database...');
     connection = await mysql.createConnection(dbConfig);
-    
-    // Check if wellness_activities table exists
+    console.log('✅ Connected to database');
+
+    // Check if available_wellness_activities table exists
     const [tables] = await connection.execute(`
-      SHOW TABLES LIKE 'wellness_activities'
+      SHOW TABLES LIKE 'available_wellness_activities'
     `);
-    
+
     if (tables.length === 0) {
-      console.log('❌ wellness_activities table does not exist. Please run the database initialization scripts first.');
+      console.log('❌ available_wellness_activities table does not exist');
       return;
     }
-    
-    // Check if there are already activities
-    const [existingActivities] = await connection.execute(`
-      SELECT COUNT(*) as count FROM wellness_activities
+
+    // Check if there are already wellness activities
+    const [existingCount] = await connection.execute(`
+      SELECT COUNT(*) as count FROM available_wellness_activities
     `);
-    
-    if (existingActivities[0].count > 0) {
-      console.log(`✅ Found ${existingActivities[0].count} existing wellness activities. Skipping sample data insertion.`);
-      return;
-    }
-    
-    // Sample wellness activities data
-    const sampleActivities = [
-      {
-        title: 'Morning Yoga',
-        description: 'Start your day with gentle yoga stretches to improve flexibility and reduce stress',
-        category: 'fitness',
-        duration_minutes: 15,
-        difficulty: 'easy',
-        points: 10,
-        is_active: true
-      },
-      {
-        title: 'Meditation',
-        description: 'Practice mindfulness meditation to improve mental clarity and reduce anxiety',
-        category: 'mental_health',
-        duration_minutes: 10,
-        difficulty: 'easy',
-        points: 8,
-        is_active: true
-      },
-      {
-        title: 'Walking',
-        description: 'Take a brisk walk outdoors to improve cardiovascular health and boost mood',
-        category: 'fitness',
-        duration_minutes: 30,
-        difficulty: 'medium',
-        points: 15,
-        is_active: true
-      },
-      {
-        title: 'Deep Breathing',
-        description: 'Practice deep breathing exercises to reduce stress and improve focus',
-        category: 'mental_health',
-        duration_minutes: 5,
-        difficulty: 'easy',
-        points: 5,
-        is_active: true
-      },
-      {
-        title: 'Stretching',
-        description: 'Full body stretching routine to improve flexibility and prevent injury',
-        category: 'fitness',
-        duration_minutes: 20,
-        difficulty: 'medium',
-        points: 12,
-        is_active: true
-      },
-      {
-        title: 'Journaling',
-        description: 'Write in your journal to process thoughts and improve emotional well-being',
-        category: 'mental_health',
-        duration_minutes: 15,
-        difficulty: 'easy',
-        points: 8,
-        is_active: true
-      },
-      {
-        title: 'Hydration Check',
-        description: 'Drink a glass of water and track your daily water intake',
-        category: 'nutrition',
-        duration_minutes: 1,
-        difficulty: 'easy',
-        points: 3,
-        is_active: true
-      },
-      {
-        title: 'Gratitude Practice',
-        description: 'Write down three things you are grateful for today',
-        category: 'mental_health',
-        duration_minutes: 5,
-        difficulty: 'easy',
-        points: 6,
-        is_active: true
-      },
-      {
-        title: 'Quick Workout',
-        description: 'Do a quick 10-minute bodyweight workout',
-        category: 'fitness',
-        duration_minutes: 10,
-        difficulty: 'medium',
-        points: 12,
-        is_active: true
-      },
-      {
-        title: 'Mindful Eating',
-        description: 'Eat a meal mindfully, focusing on taste, texture, and hunger cues',
-        category: 'nutrition',
-        duration_minutes: 20,
-        difficulty: 'medium',
-        points: 10,
-        is_active: true
+
+    if (existingCount[0].count > 0) {
+      console.log(`✅ Found ${existingCount[0].count} existing wellness activities`);
+    } else {
+      console.log('📋 Adding sample wellness activities...');
+
+      // Add sample wellness activities
+      const sampleActivities = [
+        {
+          title: 'Yoga Pagi',
+          description: 'Latihan yoga ringan untuk memulai hari dengan energi positif',
+          category: 'fitness',
+          duration_minutes: 15,
+          difficulty: 'easy',
+          points: 10,
+          is_active: 1
+        },
+        {
+          title: 'Meditasi',
+          description: 'Latihan meditasi untuk ketenangan pikiran',
+          category: 'mental_health',
+          duration_minutes: 10,
+          difficulty: 'easy',
+          points: 8,
+          is_active: 1
+        },
+        {
+          title: 'Jalan Kaki',
+          description: 'Jalan kaki santai untuk kesehatan jantung',
+          category: 'fitness',
+          duration_minutes: 30,
+          difficulty: 'easy',
+          points: 15,
+          is_active: 1
+        },
+        {
+          title: 'Stretching',
+          description: 'Latihan peregangan untuk fleksibilitas tubuh',
+          category: 'fitness',
+          duration_minutes: 20,
+          difficulty: 'medium',
+          points: 12,
+          is_active: 1
+        },
+        {
+          title: 'Minum Air',
+          description: 'Minum 8 gelas air putih setiap hari',
+          category: 'nutrition',
+          duration_minutes: 1,
+          difficulty: 'easy',
+          points: 5,
+          is_active: 1
+        }
+      ];
+
+      for (const activity of sampleActivities) {
+        await connection.execute(`
+          INSERT INTO available_wellness_activities (title, description, category, duration_minutes, difficulty, points, is_active)
+          VALUES (?, ?, ?, ?, ?, ?, ?)
+        `, [activity.title, activity.description, activity.category, activity.duration_minutes, activity.difficulty, activity.points, activity.is_active]);
       }
-    ];
-    
-    console.log('📝 Inserting sample wellness activities...');
-    
-    for (const activity of sampleActivities) {
-      await connection.execute(`
-        INSERT INTO wellness_activities (title, description, category, duration_minutes, difficulty, points, is_active)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-      `, [
-        activity.title,
-        activity.description,
-        activity.category,
-        activity.duration_minutes,
-        activity.difficulty,
-        activity.points,
-        activity.is_active
-      ]);
+
+      console.log('✅ Added 5 sample wellness activities');
     }
+
+    // Check if user_wellness_activities table exists
+    const [userTables] = await connection.execute(`
+      SHOW TABLES LIKE 'user_wellness_activities'
+    `);
+
+    if (userTables.length === 0) {
+      console.log('❌ user_wellness_activities table does not exist');
+      return;
+    }
+
+    // Check if there are any users
+    const [users] = await connection.execute(`
+      SELECT id FROM mobile_users LIMIT 1
+    `);
+
+    if (users.length === 0) {
+      console.log('❌ No users found in mobile_users table');
+      return;
+    }
+
+    const userId = users[0].id;
+    console.log(`👤 Using user ID: ${userId}`);
+
+    // Check if user has any completed wellness activities
+    const [userActivitiesCount] = await connection.execute(`
+      SELECT COUNT(*) as count FROM user_wellness_activities WHERE user_id = ?
+    `, [userId]);
+
+    if (userActivitiesCount[0].count > 0) {
+      console.log(`✅ User already has ${userActivitiesCount[0].count} wellness activities`);
+    } else {
+      console.log('📋 Adding sample user wellness activities...');
+
+      // Get wellness activity IDs
+      const [activities] = await connection.execute(`
+        SELECT id FROM available_wellness_activities WHERE is_active = 1 LIMIT 3
+      `);
+
+      if (activities.length > 0) {
+        // Add some completed activities for the user
+        for (let i = 0; i < Math.min(3, activities.length); i++) {
+          const activityId = activities[i].id;
+          const completedAt = new Date();
+          completedAt.setDate(completedAt.getDate() - i); // Different dates
+
+          await connection.execute(`
+            INSERT INTO user_wellness_activities (user_id, activity_id, completed_at, duration_minutes, notes)
+            VALUES (?, ?, ?, ?, ?)
+          `, [userId, activityId, completedAt, 30, 'Sample completed activity']);
+        }
+
+        console.log('✅ Added sample user wellness activities');
+      }
+    }
+
+    // Show final stats
+    console.log('\n📊 Final Statistics:');
     
-    console.log(`✅ Successfully added ${sampleActivities.length} sample wellness activities!`);
-    
-    // Verify the insertion
-    const [verification] = await connection.execute(`
-      SELECT COUNT(*) as count FROM wellness_activities
+    const [totalActivities] = await connection.execute(`
+      SELECT COUNT(*) as count FROM available_wellness_activities WHERE is_active = 1
     `);
     
-    console.log(`📊 Total wellness activities in database: ${verification[0].count}`);
+    const [userCompleted] = await connection.execute(`
+      SELECT COUNT(*) as count FROM user_wellness_activities WHERE user_id = ? AND completed_at IS NOT NULL
+    `, [userId]);
     
+    const [totalPoints] = await connection.execute(`
+      SELECT SUM(awa.points) as total FROM user_wellness_activities uwa
+      LEFT JOIN available_wellness_activities awa ON uwa.activity_id = awa.id
+      WHERE uwa.user_id = ? AND uwa.completed_at IS NOT NULL
+    `, [userId]);
+
+    console.log(`   Total Available Activities: ${totalActivities[0].count}`);
+    console.log(`   User Completed Activities: ${userCompleted[0].count}`);
+    console.log(`   Total Points Earned: ${totalPoints[0].total || 0}`);
+
+    console.log('\n✅ Sample wellness activities data added successfully!');
+
   } catch (error) {
-    console.error('❌ Error adding sample wellness activities:', error);
+    console.error('❌ Error:', error.message);
+    console.error('Stack:', error.stack);
   } finally {
     if (connection) {
       await connection.end();
+      console.log('🔌 Database connection closed');
     }
   }
 }
