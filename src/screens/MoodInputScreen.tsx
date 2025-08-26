@@ -16,6 +16,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { CustomTheme } from "../theme/theme";
 import { useAuth } from "../contexts/AuthContext";
 import apiService from "../services/api";
+
 import eventEmitter from "../utils/eventEmitter";
 import { safeGoBack } from "../utils/safeNavigation";
 import { getTodayDate } from "../utils/dateUtils";
@@ -76,15 +77,13 @@ const MoodInputScreen = ({ navigation, route }: MoodInputScreenProps) => {
   };
 
   const handleSaveMood = async () => {
-    console.log('🔍 MoodInputScreen: Starting save mood process');
-    console.log('🔍 MoodInputScreen: Selected mood:', selectedMood);
-    console.log('🔍 MoodInputScreen: Is authenticated:', isAuthenticated);
+
     
     // Test connection first
-    console.log('🔍 MoodInputScreen: Testing connection...');
+
     try {
       const connectionTest = await apiService.testConnection();
-      console.log('🔍 MoodInputScreen: Connection test result:', connectionTest);
+  
     } catch (error) {
       console.error('🔍 MoodInputScreen: Connection test failed:', error);
     }
@@ -114,27 +113,28 @@ const MoodInputScreen = ({ navigation, route }: MoodInputScreenProps) => {
         notes: `Mood: ${moods.find(m => m.id === selectedMood)?.label}, Stress Level: ${selectedStressLevel || 'Not specified'}`
       };
 
-      console.log('🔍 MoodInputScreen: Mood data to send:', moodData);
+  
 
       let response;
       if (isEditMode && existingMood) {
-        console.log('🔍 MoodInputScreen: Updating existing mood entry');
+        // For edit mode, use regular API
         response = await apiService.updateMoodEntry(existingMood.id, moodData);
       } else {
-        console.log('🔍 MoodInputScreen: Creating new mood entry');
+        // For new mood entry, use regular API
         response = await apiService.createMoodEntry(moodData);
       }
-
-      console.log('🔍 MoodInputScreen: API response:', response);
 
       if (response.success) {
         // Emit event to notify other components that mood data has been updated
         // Do this immediately after successful response, before showing alert
         eventEmitter.emitMoodLogged();
         
+        // Show success message
+        const successMessage = isEditMode ? "Mood updated successfully!" : "Mood data saved successfully!";
+        
         Alert.alert(
           "Success",
-          isEditMode ? "Mood updated successfully!" : "Mood data saved successfully!",
+          successMessage,
           [
             {
               text: "OK",

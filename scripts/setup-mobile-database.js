@@ -2,7 +2,7 @@ const mysql = require('mysql2/promise');
 
 // Database configuration - matching the dash-app settings
 const dbConfig = {
-  host: 'localhost',
+      host: 'dash.doctorphc.id',
   user: 'root',
   password: 'pr1k1t1w', // Updated password
   database: 'phc_dashboard',

@@ -23,7 +23,7 @@ const WelcomeScreen = ({ navigation }: any) => {
         <SafeAreaView style={styles.safeArea}>
           <View style={styles.content}>
             <View style={styles.logoContainer}>
-              <LogoPutih size="large" showText={true} />
+              <LogoPutih size={500} />
             </View>
 
             <View style={styles.textContainer}>
@@ -68,7 +68,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 30,
   },
   logoContainer: {
-    marginBottom: 60,
+      marginBottom: 10,
     alignItems: "center",
   },
   textContainer: {

@@ -1,6 +1,6 @@
 const axios = require('axios');
 
-const API_BASE_URL = 'http://localhost:3000/api/mobile';
+const API_BASE_URL = 'https://dash.doctorphc.id/api/mobile';
 
 // Test user credentials
 const testUser = {

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   View,
   Text,
@@ -8,6 +8,7 @@ import {
   SafeAreaView,
   Alert,
 } from "react-native";
+import { useFocusEffect } from "@react-navigation/native";
 import { LinearGradient } from "expo-linear-gradient";
 import Icon from "react-native-vector-icons/MaterialCommunityIcons";
 import { useAuth } from "../contexts/AuthContext";
@@ -15,7 +16,7 @@ import apiService from "../services/api";
 import { safeGoBack } from "../utils/safeNavigation";
 
 const ProfileScreen = ({ navigation }: any) => {
-  const { logout, user, isAuthenticated } = useAuth();
+  const { logout, user, isAuthenticated, refreshAuth } = useAuth();
   const [userStats, setUserStats] = useState({
     daysActive: 0,
     achievements: 0,
@@ -30,7 +31,18 @@ const ProfileScreen = ({ navigation }: any) => {
     program_cycles: 0,
     program_history: []
   });
+  const [wellnessStopHistory, setWellnessStopHistory] = useState({
+    total_cycles: 0,
+    stopped_count: 0,
+    last_stopped_date: null,
+    last_stop_reason: null,
+    stopped_programs: []
+  });
   const [loading, setLoading] = useState(true);
+  
+  // Use refs to prevent infinite loops
+  const refreshAuthRef = useRef(refreshAuth);
+  const lastRefreshRef = useRef(0);
 
   // Function to get initials from full name
   const getInitials = (name: string) => {
@@ -46,71 +58,150 @@ const ProfileScreen = ({ navigation }: any) => {
   };
 
   // Fetch user statistics and wellness program status from database
-  useEffect(() => {
-    const fetchUserData = async () => {
-      if (isAuthenticated && user) {
-        try {
-          setLoading(true);
+  const fetchUserData = async () => {
+    if (isAuthenticated && user) {
+      try {
+        setLoading(true);
+        
+        // Fetch wellness progress which includes user statistics
+        const wellnessResponse = await apiService.getWellnessProgress();
+        
+        if (wellnessResponse.success && wellnessResponse.progress) {
+          const progress = wellnessResponse.progress;
           
-          // Fetch wellness progress which includes user statistics
-          const wellnessResponse = await apiService.getWellnessProgress();
-          
-          if (wellnessResponse.success && wellnessResponse.progress) {
-            const progress = wellnessResponse.progress;
-            
-            // Calculate days active (days since user joined wellness program)
-            const joinDate = wellnessResponse.user?.wellness_join_date;
-            let daysActive = 0;
-            if (joinDate) {
-              const join = new Date(joinDate);
-              const today = new Date();
-              const diffTime = Math.abs(today.getTime() - join.getTime());
-              daysActive = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-            }
-            
-            // Calculate achievements (completed missions)
-            const achievements = progress.completedMissions || 0;
-            
-            // Calculate health score based on various factors
-            let healthScore = 0;
-            if (progress.completionRate > 0) {
-              healthScore = Math.min(100, Math.round(progress.completionRate));
-            } else {
-              // Fallback calculation based on wellness score
-              healthScore = Math.min(100, Math.round(progress.wellnessScore || 0));
-            }
-            
-            setUserStats({
-              daysActive: Math.max(daysActive, 1), // Minimum 1 day
-              achievements,
-              healthScore,
-            });
-          }
-
-          // Fetch wellness program status
-          const programStatusResponse = await apiService.checkWellnessProgramStatus();
-          if (programStatusResponse.success && programStatusResponse.data) {
-            setWellnessProgramStatus(programStatusResponse.data);
+          // Calculate days active (days since user joined wellness program)
+          const joinDate = wellnessResponse.user?.wellness_join_date;
+          let daysActive = 0;
+          if (joinDate) {
+            const join = new Date(joinDate);
+            const today = new Date();
+            const diffTime = Math.abs(today.getTime() - join.getTime());
+            daysActive = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
           }
           
-        } catch (error) {
-          console.error("Error fetching user data:", error);
-          // Use default values if API fails
+          // Calculate achievements (completed missions)
+          const achievements = progress.completedMissions || 0;
+          
+          // Calculate health score based on various factors
+          let healthScore = 0;
+          if (progress.completionRate > 0) {
+            healthScore = Math.min(100, Math.round(progress.completionRate));
+          } else {
+            // Fallback calculation based on wellness score
+            healthScore = Math.min(100, Math.round(progress.wellnessScore || 0));
+          }
+          
           setUserStats({
-            daysActive: 1,
-            achievements: 0,
-            healthScore: 0,
+            daysActive: Math.max(daysActive, 1), // Minimum 1 day
+            achievements,
+            healthScore,
           });
-        } finally {
-          setLoading(false);
         }
-      } else {
+
+        // Fetch wellness program status
+        const programStatusResponse = await apiService.checkWellnessProgramStatus();
+        console.log('🔍 Wellness program status response:', programStatusResponse);
+        if (programStatusResponse.success && programStatusResponse.data) {
+          console.log('🔍 Setting wellness program status:', programStatusResponse.data);
+          setWellnessProgramStatus(programStatusResponse.data);
+        }
+
+        // Fetch wellness program stop history
+        try {
+          const stopHistoryResponse = await apiService.getWellnessProgramStopHistory();
+          if (stopHistoryResponse.success && stopHistoryResponse.data) {
+            setWellnessStopHistory(stopHistoryResponse.data);
+          }
+        } catch (error) {
+          console.log("Wellness stop history not available:", error instanceof Error ? error.message : String(error));
+        }
+        
+      } catch (error) {
+        console.error("Error fetching user data:", error);
+        
+        // Check if it's an authentication error
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        const isAuthError = errorMessage.includes('Authentication failed') || 
+                           errorMessage.includes('401') ||
+                           errorMessage.includes('Unauthorized') ||
+                           errorMessage.includes('Token');
+        
+        if (isAuthError) {
+          console.log("🔐 ProfileScreen: Authentication error detected, but not logging out automatically");
+          // Don't logout automatically, let the user continue using cached data
+        }
+        
+        // Use default values if API fails
+        setUserStats({
+          daysActive: 1,
+          achievements: 0,
+          healthScore: 0,
+        });
+      } finally {
         setLoading(false);
       }
-    };
+    } else {
+      setLoading(false);
+    }
+  };
 
-    fetchUserData();
-  }, [isAuthenticated, user]);
+  useEffect(() => {
+    console.log('🔄 ProfileScreen: useEffect triggered', { isAuthenticated, userId: user?.id });
+    
+    fetchUserData().catch(error => {
+      console.error('Error in fetchUserData:', error);
+    });
+  }, [isAuthenticated, user?.id]); // Only depend on user ID, not the entire user object
+
+  // Update ref when refreshAuth changes
+  useEffect(() => {
+    refreshAuthRef.current = refreshAuth;
+  }, [refreshAuth]);
+
+  // Refresh user data when screen comes into focus (only if needed)
+  useFocusEffect(
+    React.useCallback(() => {
+      console.log('🔄 ProfileScreen: useFocusEffect triggered', { isAuthenticated, userId: user?.id });
+      
+      if (isAuthenticated && user?.id) {
+        // Only refresh if user data is stale (older than 5 minutes)
+        const now = Date.now();
+        const fiveMinutes = 5 * 60 * 1000;
+        
+        if (now - lastRefreshRef.current > fiveMinutes) {
+          console.log('🔄 ProfileScreen: Refreshing user data on focus');
+          lastRefreshRef.current = now;
+          
+          // Use try-catch to prevent logout on refresh errors
+          refreshAuthRef.current().catch(error => {
+            console.log('⚠️ ProfileScreen: Refresh failed, but not logging out:', error.message);
+          });
+        }
+      }
+    }, [isAuthenticated, user?.id]) // Remove refreshAuth from dependencies
+  );
+
+  // Function to format member since date
+  const formatMemberSince = (createdAt: string) => {
+    if (!createdAt) return "March 2024";
+    
+    try {
+      const date = new Date(createdAt);
+      if (isNaN(date.getTime())) return "March 2024";
+      
+      const months = [
+        "January", "February", "March", "April", "May", "June",
+        "July", "August", "September", "October", "November", "December"
+      ];
+      
+      const month = months[date.getMonth()];
+      const year = date.getFullYear();
+      
+      return `${month} ${year}`;
+    } catch (error) {
+      return "March 2024";
+    }
+  };
 
   // Use data from AuthContext if authenticated, otherwise use default
   const userProfile =
@@ -119,7 +210,7 @@ const ProfileScreen = ({ navigation }: any) => {
           name: user.name,
           email: user.email,
           avatar: getInitials(user.name),
-          memberSince: "March 2024", // You can add this field to User interface if needed
+          memberSince: formatMemberSince(user.created_at || ''),
           points: user.points,
           level: "Gold", // You can add this field to User interface if needed
         }
@@ -175,14 +266,22 @@ const ProfileScreen = ({ navigation }: any) => {
     },
     {
       id: "4",
-      title: "Pengaturan Privasi",
-      subtitle: "Kelola privasi dan keamanan Anda",
-      icon: "shield-account",
+      title: "Pengaturan PIN",
+      subtitle: "Kelola PIN keamanan aplikasi",
+      icon: "lock",
       color: "#EF4444",
-      screenName: "PrivacySettings",
+      screenName: "PinSettings",
     },
     {
       id: "5",
+      title: "Pengaturan Privasi",
+      subtitle: "Kelola privasi dan keamanan Anda",
+      icon: "shield-account",
+      color: "#8B5CF6",
+      screenName: "PrivacySettings",
+    },
+    {
+      id: "6",
       title: "Bantuan & Dukungan",
       subtitle: "Dapatkan bantuan dan hubungi dukungan",
       icon: "help-circle-outline",
@@ -190,23 +289,16 @@ const ProfileScreen = ({ navigation }: any) => {
       screenName: "HelpSupport",
     },
     {
-      id: "6",
+      id: "7",
       title: "Tentang Aplikasi",
-      subtitle: "Pelajari lebih lanjut tentang Wellness WeCare",
+      subtitle: "Pelajari lebih lanjut tentang Doctor PHC",
       icon: "information-outline",
       color: "#6366F1",
       screenName: "AboutApp",
     },
-    ...(isAuthenticated ? [{
-      id: "debug",
-      title: "Debug Wellness",
-      subtitle: "Diagnose wellness app issues",
-      icon: "bug",
-      color: "#F59E0B",
-      screenName: "WellnessDebug",
-    }] : []),
+
     {
-      id: "7",
+      id: "8",
       title: "Keluar",
       subtitle: "Keluar dari akun Anda",
       icon: "logout",
@@ -232,6 +324,66 @@ const ProfileScreen = ({ navigation }: any) => {
         },
       ]
     );
+  };
+
+  const handleStopProgram = () => {
+    console.log('🛑 Stop program button pressed');
+    console.log('Current wellness status:', wellnessProgramStatus);
+    
+    Alert.alert(
+      "Hentikan Program Wellness",
+      "Apakah Anda yakin ingin menghentikan program wellness saat ini? Program akan disimpan ke riwayat dan Anda dapat mendaftar ulang kapan saja.",
+      [
+        {
+          text: "Batal",
+          style: "cancel",
+        },
+        {
+          text: "Hentikan",
+          style: "destructive",
+          onPress: () => {
+            console.log('🛑 User confirmed stop program');
+            stopProgram('User stopped program');
+          },
+        },
+      ]
+    );
+  };
+
+  const stopProgram = async (reason: any) => {
+    try {
+      console.log('🛑 Starting stop program process...');
+      setLoading(true);
+      
+      console.log('🛑 Calling API stopWellnessProgram...');
+      const response = await apiService.stopWellnessProgram(reason);
+      console.log('🛑 API response:', response);
+      
+      if (response.success) {
+        console.log('🛑 Program stopped successfully');
+        Alert.alert(
+          "Program Dihentikan",
+          "Program wellness berhasil dihentikan. Anda dapat mendaftar ulang kapan saja.",
+          [
+            {
+              text: "OK",
+              onPress: () => {
+                console.log('🛑 Refreshing user data after stop');
+                fetchUserData();
+              },
+            },
+          ]
+        );
+      } else {
+        console.log('🛑 Failed to stop program:', response.message);
+        Alert.alert("Gagal", response.message || "Gagal menghentikan program wellness");
+      }
+    } catch (error) {
+      console.error("🛑 Error stopping wellness program:", error);
+      Alert.alert("Terjadi kesalahan", "Gagal menghentikan program wellness. Silakan coba lagi.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleMenuPress = (item: any) => {
@@ -322,42 +474,64 @@ const ProfileScreen = ({ navigation }: any) => {
           </LinearGradient>
         </View>
 
-        {/* Stats Cards */}
-        <View style={styles.statsContainer}>
-          <View style={styles.statCard}>
-            <View style={[styles.statIcon, { backgroundColor: "#10B98120" }]}>
-              <Icon name="calendar-check" size={20} color="#10B981" />
+        {/* User Statistics */}
+        {/* <View style={styles.statsContainer}>
+          <View style={styles.statsRow}>
+            <View style={styles.statCard}>
+              <View style={[styles.statIcon, { backgroundColor: "#10B98120" }]}>
+                <Icon name="calendar-clock" size={20} color="#10B981" />
+              </View>
+              <Text style={styles.statValue}>
+                {loading ? "..." : userStats.daysActive}
+              </Text>
+              <Text style={styles.statLabel}>Hari Aktif</Text>
             </View>
-            <Text style={styles.statValue}>
-              {loading ? "..." : userStats.daysActive}
-            </Text>
-            <Text style={styles.statLabel}>Hari Aktif</Text>
-          </View>
-          <View style={styles.statCard}>
-            <View style={[styles.statIcon, { backgroundColor: "#F59E0B20" }]}>
-              <Icon name="trophy" size={20} color="#F59E0B" />
+            <View style={styles.statCard}>
+              <View style={[styles.statIcon, { backgroundColor: "#F59E0B20" }]}>
+                <Icon name="trophy" size={20} color="#F59E0B" />
+              </View>
+              <Text style={styles.statValue}>
+                {loading ? "..." : userStats.achievements}
+              </Text>
+              <Text style={styles.statLabel}>Pencapaian</Text>
             </View>
-            <Text style={styles.statValue}>
-              {loading ? "..." : userStats.achievements}
-            </Text>
-            <Text style={styles.statLabel}>Pencapaian</Text>
           </View>
-          <View style={styles.statCard}>
-            <View style={[styles.statIcon, { backgroundColor: "#EF444420" }]}>
-              <Icon name="heart-pulse" size={20} color="#EF4444" />
+          <View style={styles.statsRow}>
+            <View style={styles.statCard}>
+              <View style={[styles.statIcon, { backgroundColor: "#3B82F620" }]}>
+                <Icon name="heart-pulse" size={20} color="#3B82F6" />
+              </View>
+              <Text style={styles.statValue}>
+                {loading ? "..." : userStats.healthScore}
+              </Text>
+              <Text style={styles.statLabel}>Skor Kesehatan</Text>
             </View>
-            <Text style={styles.statValue}>
-              {loading ? "..." : `${userStats.healthScore}%`}
-            </Text>
-            <Text style={styles.statLabel}>Skor Kesehatan</Text>
+            <View style={styles.statCard}>
+              <View style={[styles.statIcon, { backgroundColor: "#8B5CF620" }]}>
+                <Icon name="refresh" size={20} color="#8B5CF6" />
+              </View>
+              <Text style={styles.statValue}>
+                {loading ? "..." : wellnessProgramStatus.program_cycles || 0}
+              </Text>
+              <Text style={styles.statLabel}>Program Diikuti</Text>
+            </View>
           </View>
-        </View>
+        </View> */}
 
         {/* Wellness Program Status */}
         {wellnessProgramStatus.program_status !== 'not_joined' && (
           <View style={styles.wellnessStatusContainer}>
             <Text style={styles.sectionTitle}>Status Program Wellness</Text>
             <View style={styles.wellnessStatusCard}>
+              {/* Cycle Badge */}
+              {wellnessProgramStatus.program_status === 'active' && (
+                <View style={styles.cycleBadge}>
+                  <Text style={styles.cycleBadgeText}>
+                    #{wellnessProgramStatus.program_cycles || 1}
+                  </Text>
+                </View>
+              )}
+              
               <View style={styles.wellnessStatusHeader}>
                 <Icon 
                   name={wellnessProgramStatus.program_status === 'active' ? 'play-circle' : 'check-circle'} 
@@ -372,11 +546,23 @@ const ProfileScreen = ({ navigation }: any) => {
               {wellnessProgramStatus.program_status === 'active' && (
                 <View style={styles.wellnessProgressInfo}>
                   <Text style={styles.wellnessProgressText}>
-                    {wellnessProgramStatus.days_completed} dari {wellnessProgramStatus.program_duration} hari
+                    {wellnessProgramStatus.days_completed || 0} dari {wellnessProgramStatus.program_duration || 0} hari
                   </Text>
                   <Text style={styles.wellnessProgressText}>
-                    Sisa {wellnessProgramStatus.days_remaining} hari
+                    Sisa {wellnessProgramStatus.days_remaining || 0} hari
                   </Text>
+                  
+                  {/* Stop Program Button */}
+                  <TouchableOpacity
+                    style={styles.stopProgramButton}
+                    onPress={handleStopProgram}
+                    disabled={loading}
+                  >
+                    <Icon name="stop-circle" size={16} color="#EF4444" />
+                    <Text style={styles.stopProgramButtonText}>
+                      {loading ? 'Menghentikan...' : 'Hentikan Program'}
+                    </Text>
+                  </TouchableOpacity>
                 </View>
               )}
 
@@ -388,6 +574,20 @@ const ProfileScreen = ({ navigation }: any) => {
                   {wellnessProgramStatus.program_history.length > 0 && (
                     <Text style={styles.wellnessHistoryText}>
                       {wellnessProgramStatus.program_history.length} program sebelumnya
+                    </Text>
+                  )}
+                </View>
+              )}
+
+              {/* Show stop history if user has stopped programs */}
+              {wellnessStopHistory.stopped_count > 0 && (
+                <View style={styles.wellnessStopInfo}>
+                  <Text style={styles.wellnessStopText}>
+                    Program dihentikan: {wellnessStopHistory.stopped_count} kali
+                  </Text>
+                  {wellnessStopHistory.last_stop_reason && (
+                    <Text style={styles.wellnessStopReasonText}>
+                      Alasan terakhir: {wellnessStopHistory.last_stop_reason}
                     </Text>
                   )}
                 </View>
@@ -592,16 +792,19 @@ const styles = StyleSheet.create({
     marginLeft: 6,
   },
   statsContainer: {
-    flexDirection: "row",
     paddingHorizontal: 20,
     marginBottom: 32,
+  },
+  statsRow: {
+    flexDirection: "row",
     gap: 12,
+    marginBottom: 12,
   },
   statCard: {
     flex: 1,
     backgroundColor: "#FFFFFF",
     borderRadius: 20,
-    padding: 20,
+    padding: 16,
     alignItems: "center",
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 4 },
@@ -647,6 +850,22 @@ const styles = StyleSheet.create({
     elevation: 4,
     borderWidth: 1,
     borderColor: "#F1F5F9",
+    position: "relative",
+  },
+  cycleBadge: {
+    position: "absolute",
+    top: 12,
+    right: 12,
+    backgroundColor: "#10B981",
+    borderRadius: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    zIndex: 1,
+  },
+  cycleBadgeText: {
+    color: "#FFFFFF",
+    fontSize: 12,
+    fontWeight: "700",
   },
   wellnessStatusHeader: {
     flexDirection: "row",
@@ -682,6 +901,23 @@ const styles = StyleSheet.create({
     color: "#8B5CF6",
     fontWeight: "600",
   },
+  wellnessStopInfo: {
+    marginBottom: 16,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: "#F1F5F9",
+  },
+  wellnessStopText: {
+    fontSize: 12,
+    color: "#EF4444",
+    fontWeight: "600",
+    marginBottom: 2,
+  },
+  wellnessStopReasonText: {
+    fontSize: 11,
+    color: "#9CA3AF",
+    fontStyle: "italic",
+  },
   renewButton: {
     backgroundColor: "#8B5CF6",
     borderRadius: 12,
@@ -693,6 +929,24 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
     fontSize: 14,
     fontWeight: "600",
+  },
+  stopProgramButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#FEF2F2",
+    borderWidth: 1,
+    borderColor: "#FECACA",
+    borderRadius: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    marginTop: 12,
+    alignSelf: "flex-start",
+  },
+  stopProgramButtonText: {
+    color: "#EF4444",
+    fontSize: 12,
+    fontWeight: "600",
+    marginLeft: 4,
   },
   menuContainer: {
     paddingHorizontal: 20,

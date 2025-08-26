@@ -22,46 +22,51 @@ const AboutAppScreen = ({ navigation }: any) => {
 
 
   const appInfo = {
-    name: "Wellness WeCare",
-    version: "1.0.0",
-    buildNumber: "2024.03.15",
-    description: "Aplikasi kesehatan komprehensif yang membantu Anda mengelola dan memantau kesehatan dengan mudah.",
+    name: "DOCTOR PHC Indonesia",
+    version: "0.0.1",
+    buildNumber: "2025.08.25",
+    description: "Aplikasi kesehatan dan wellness komprehensif yang membantu Anda mengelola kesehatan harian, melacak aktivitas, dan mencapai tujuan kesehatan pribadi.",
     features: [
-      "Pelacakan Aktivitas Harian",
-      "Konsultasi dengan Dokter",
-      "Pengaturan Tujuan Kesehatan",
-      "Riwayat Medis",
-      "Tantangan Wellness",
-      "Edukasi Kesehatan",
+      "Pelacakan Nutrisi & Makanan",
+      "Pelacakan Aktivitas & Olahraga",
+      "Pelacakan Tidur & Kualitas Tidur",
+      "Pelacakan Air Minum",
+      "Pelacakan Mood & Kesehatan Mental",
+      "Program Wellness & Tantangan Harian",
+      "Pelacakan Antropometri & Berat Badan",
+      "Riwayat Kesehatan & Aktivitas",
+      "Grafik & Analisis Data Kesehatan",
+      "Konsultasi Dokter & Booking Klinik",
+      "Artikel Kesehatan & Edukasi",
       "Kalkulator Kesehatan",
-      "Notifikasi Kesehatan",
+      "Notifikasi & Pengingat Sehat",
     ],
     team: [
       {
-        name: "Tim Pengembangan",
-        role: "Developer",
-        description: "Mengembangkan fitur-fitur inovatif untuk kesehatan Anda",
+        name: "Tim Pengembangan PHC",
+        role: "Mobile Development",
+        description: "Mengembangkan aplikasi mobile yang inovatif dan user-friendly",
       },
       {
-        name: "Tim Desain",
-        role: "UI/UX Designer",
-        description: "Menciptakan pengalaman pengguna yang intuitif dan menyenangkan",
+        name: "Tim Kesehatan",
+        role: "Medical Advisory",
+        description: "Memastikan konten kesehatan yang akurat dan berbasis bukti",
       },
       {
-        name: "Tim Medis",
-        role: "Konsultan Medis",
-        description: "Memastikan informasi kesehatan yang akurat dan terpercaya",
+        name: "Tim UI/UX",
+        role: "Design & Experience",
+        description: "Menciptakan antarmuka yang intuitif dan pengalaman pengguna yang optimal",
       },
       {
         name: "Tim Dukungan",
-        role: "Customer Support",
-        description: "Memberikan bantuan dan dukungan terbaik untuk pengguna",
+        role: "Customer Care",
+        description: "Memberikan dukungan teknis dan bantuan pengguna 24/7",
       },
     ],
     contact: {
-      email: "info@wellnesswecare.com",
-      website: "https://wellnesswecare.com",
-      phone: "+62 812-3456-7890",
+      email: "support@phc-indonesia.com",
+      website: "https://phc-indonesia.com",
+      phone: "+62 21-1234-5678",
       address: "Jakarta, Indonesia",
     },
   };
@@ -86,7 +91,7 @@ const AboutAppScreen = ({ navigation }: any) => {
   const handleShareApp = () => {
     Alert.alert(
       "Bagikan Aplikasi",
-      "Bagikan aplikasi Wellness WeCare dengan teman dan keluarga Anda!",
+      "Bagikan aplikasi Doctor PHC dengan teman dan keluarga Anda!",
       [{ text: "OK" }]
     );
   };
@@ -192,7 +197,7 @@ const AboutAppScreen = ({ navigation }: any) => {
                   <Text style={styles.missionTitle}>Misi</Text>
                 </View>
                 <Text style={styles.missionText}>
-                  Memberikan akses mudah ke layanan kesehatan berkualitas untuk semua orang
+                  Memberikan akses mudah ke layanan kesehatan berkualitas dan mempromosikan gaya hidup sehat melalui teknologi digital yang inovatif
                 </Text>
               </Card.Content>
             </Card>
@@ -204,7 +209,7 @@ const AboutAppScreen = ({ navigation }: any) => {
                   <Text style={styles.missionTitle}>Visi</Text>
                 </View>
                 <Text style={styles.missionText}>
-                  Menjadi platform kesehatan digital terdepan yang memberdayakan masyarakat untuk hidup lebih sehat
+                  Menjadi platform kesehatan digital terdepan di Indonesia yang memberdayakan masyarakat untuk mengelola kesehatan secara proaktif dan berkelanjutan
                 </Text>
               </Card.Content>
             </Card>
@@ -297,7 +302,7 @@ const AboutAppScreen = ({ navigation }: any) => {
 
         {/* Footer */}
         <View style={styles.footer}>
-          <Text style={styles.footerText}>© 2024 Wellness WeCare</Text>
+          <Text style={styles.footerText}>© 2025 DOCTOR PHC Indonesia</Text>
           <Text style={styles.footerText}>Dibuat dengan ❤️ di Indonesia</Text>
           <Text style={styles.footerText}>Build: {appInfo.buildNumber}</Text>
         </View>

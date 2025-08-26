@@ -16,9 +16,11 @@ import Icon from "react-native-vector-icons/MaterialCommunityIcons";
 import { LinearGradient } from "expo-linear-gradient";
 import { CustomTheme } from "../theme/theme";
 import apiService from "../services/api";
+
 import eventEmitter from "../utils/eventEmitter";
 import dateChangeDetector from "../utils/dateChangeDetector";
 import { safeGoBack } from "../utils/safeNavigation";
+import { getTodayDate, formatDateToLocalYYYYMMDD } from "../utils/dateUtils";
 
 const { width, height } = Dimensions.get("window");
 
@@ -52,50 +54,50 @@ const WaterTrackingScreen = ({ navigation }: any) => {
   const [isLoadingWeekly, setIsLoadingWeekly] = useState(false);
 
   const waterIntakeOptions = [
-    { amount: 200, label: "Small Glass", icon: "cup-water", color: "#3B82F6" },
-    { amount: 300, label: "Medium Glass", icon: "cup", color: "#10B981" },
-    { amount: 500, label: "Large Glass", icon: "bottle-soda", color: "#F59E0B" },
-    { amount: 1000, label: "Bottle", icon: "bottle-soda-classic", color: "#8B5CF6" },
+    { amount: 200, label: "Gelas Kecil", icon: "cup-water", color: "#3B82F6" },
+    { amount: 300, label: "Gelas Sedang", icon: "cup", color: "#10B981" },
+    { amount: 500, label: "Gelas Besar", icon: "bottle-soda", color: "#F59E0B" },
+    { amount: 1000, label: "Botol", icon: "bottle-soda-classic", color: "#8B5CF6" },
   ];
 
   const activityLevels = [
-    { value: "low", label: "Low Activity", description: "Sedentary lifestyle", icon: "walk", color: "#6B7280" },
-    { value: "moderate", label: "Moderate Activity", description: "Light exercise 1-3 days/week", icon: "run", color: "#3B82F6" },
-    { value: "high", label: "High Activity", description: "Moderate exercise 3-5 days/week", icon: "bike", color: "#10B981" },
+    { value: "low", label: "Tidak Aktif", description: "Lifestyle tidak aktif", icon: "walk", color: "#6B7280" },
+    { value: "moderate", label: "Aktif", description: "Lifestyle aktif", icon: "run", color: "#3B82F6" },
+    { value: "high", label: "Sangat Aktif", description: "Lifestyle sangat aktif", icon: "bike", color: "#10B981" },
   ];
 
   const climateFactors = [
-    { value: "normal", label: "Normal Climate", description: "Temperate weather", icon: "weather-partly-cloudy", color: "#6B7280" },
-    { value: "hot", label: "Hot Climate", description: "Warm weather", icon: "weather-sunny", color: "#F59E0B" },
-    { value: "very_hot", label: "Very Hot Climate", description: "Extreme heat", icon: "weather-sunny", color: "#EF4444" },
+    { value: "normal", label: "Normal", description: "Cuaca normal", icon: "weather-partly-cloudy", color: "#6B7280" },
+    { value: "hot", label: "Panas", description: "Cuaca panas", icon: "weather-sunny", color: "#F59E0B" },
+    { value: "very_hot", label: "Sangat Panas", description: "Cuaca sangat panas", icon: "weather-sunny", color: "#EF4444" },
   ];
 
   const hydrationTips = [
     {
       id: "1",
-      title: "Start Your Day Right",
-      description: "Drink a glass of water first thing in the morning",
+      title: "Mulai Hari Anda Dengan Baik",
+      description: "Minum segelas air pertama kali pagi",
       icon: "weather-sunny",
       color: "#F59E0B",
     },
     {
       id: "2",
-      title: "Set Reminders",
-      description: "Use notifications to stay hydrated throughout the day",
+      title: "Atur Pengingat",
+      description: "Gunakan notifikasi untuk tetap terhidrasi sepanjang hari",
       icon: "bell-ring",
       color: "#3B82F6",
     },
     {
       id: "3",
-      title: "Eat Water-Rich Foods",
-      description: "Include fruits and vegetables with high water content",
+      title: "Makan Makanan Berair",
+      description: "Sertakan buah dan sayur dengan kandungan air tinggi",
       icon: "food-apple",
       color: "#10B981",
     },
     {
       id: "4",
-      title: "Monitor Your Urine",
-      description: "Light yellow urine indicates good hydration",
+      title: "Monitor Urine Anda",
+      description: "Urine berwarna kuning muda menunjukkan konsumsi air yang baik",
       icon: "eye",
       color: "#8B5CF6",
     },
@@ -103,13 +105,13 @@ const WaterTrackingScreen = ({ navigation }: any) => {
 
   // Default weekly progress (will be replaced with database data)
   const defaultWeeklyProgress = [
-    { day: "Mon", intake: 0, goal: 2500 },
-    { day: "Tue", intake: 0, goal: 2500 },
-    { day: "Wed", intake: 0, goal: 2500 },
-    { day: "Thu", intake: 0, goal: 2500 },
-    { day: "Fri", intake: 0, goal: 2500 },
-    { day: "Sat", intake: 0, goal: 2500 },
-    { day: "Sun", intake: 0, goal: 2500 },
+    { day: "Sen", intake: 0, goal: 2500 },
+    { day: "Sel", intake: 0, goal: 2500 },
+    { day: "Rab", intake: 0, goal: 2500 },
+    { day: "Kam", intake: 0, goal: 2500 },
+    { day: "Jum", intake: 0, goal: 2500 },
+    { day: "Sab", intake: 0, goal: 2500 },
+    { day: "Min", intake: 0, goal: 2500 },
   ];
 
   // Load water settings and today's intake
@@ -134,15 +136,51 @@ const WaterTrackingScreen = ({ navigation }: any) => {
       loadTodayWaterIntake();
       loadWeeklyWaterIntake();
     };
+
+    // Listen for cache cleared events
+    const handleCacheCleared = () => {
+      console.log('WaterTrackingScreen - Cache cleared event detected, refreshing water data...');
+      setTimeout(() => {
+        loadWaterSettings();
+        loadTodayWaterIntake();
+        loadWeeklyWaterIntake();
+      }, 200);
+    };
+
+    // Listen for force refresh events
+    const handleForceRefreshAllData = () => {
+      console.log('WaterTrackingScreen - Force refresh all data event detected...');
+      setTimeout(() => {
+        loadWaterSettings();
+        loadTodayWaterIntake();
+        loadWeeklyWaterIntake();
+      }, 300);
+    };
+
+    // Listen for cache refreshed events
+    const handleCacheRefreshed = () => {
+      console.log('WaterTrackingScreen - Cache refreshed event detected...');
+      setTimeout(() => {
+        loadWaterSettings();
+        loadTodayWaterIntake();
+        loadWeeklyWaterIntake();
+      }, 150);
+    };
     
     // Add event listeners
     eventEmitter.on('dailyReset', handleDailyReset);
     eventEmitter.on('waterLogged', handleWaterLogged);
+    eventEmitter.on('cacheCleared', handleCacheCleared);
+    eventEmitter.on('forceRefreshAllData', handleForceRefreshAllData);
+    eventEmitter.on('cacheRefreshed', handleCacheRefreshed);
     
     return () => {
       // Remove event listeners
       eventEmitter.off('dailyReset', handleDailyReset);
       eventEmitter.off('waterLogged', handleWaterLogged);
+      eventEmitter.off('cacheCleared', handleCacheCleared);
+      eventEmitter.off('forceRefreshAllData', handleForceRefreshAllData);
+      eventEmitter.off('cacheRefreshed', handleCacheRefreshed);
     };
   }, []);
 
@@ -249,8 +287,8 @@ const WaterTrackingScreen = ({ navigation }: any) => {
         for (let i = 6; i >= 0; i--) {
           const date = new Date(today);
           date.setDate(date.getDate() - i);
-          const dateStr = date.toISOString().split('T')[0];
-          const dayName = date.toLocaleDateString('en-US', { weekday: 'short' });
+          const dateStr = formatDateToLocalYYYYMMDD(date);
+          const dayName = date.toLocaleDateString('id-ID', { weekday: 'short' });
           
           // Find matching data from API response
           const dayData = response.data.daily_breakdown.find((day: any) => day.date === dateStr);
@@ -353,10 +391,11 @@ const WaterTrackingScreen = ({ navigation }: any) => {
     
     // Fallback calculation
     let baseIntake = weight * 33;
-    if (activity === "low") baseIntake *= 0.9;
+    if (activity === "low") baseIntake *= 0.8;
+    if (activity === "moderate") baseIntake *= 1.0;
     if (activity === "high") baseIntake *= 1.2;
     if (climate === "hot") baseIntake *= 1.1;
-    if (climate === "very_hot") baseIntake *= 1.2;
+    if (climate === "very_hot") baseIntake *= 1.3;
     
     return Math.round(baseIntake);
   };
@@ -430,7 +469,7 @@ const WaterTrackingScreen = ({ navigation }: any) => {
       }),
     ]).start();
 
-    // Save to database first
+    // Save to database
     try {
       const userId = await apiService.getUserId();
       if (!userId) {
@@ -438,12 +477,13 @@ const WaterTrackingScreen = ({ navigation }: any) => {
         return;
       }
 
-      const response = await apiService.createWaterEntry({
+      // Create water tracking entry
+      const waterResponse = await apiService.createWaterEntry({
         amount_ml: amount,
-        tracking_date: new Date().toISOString().split("T")[0],
+        tracking_date: getTodayDate(),
       });
       
-      if (response.success) {
+      if (waterResponse.success) {
         // Update local state with new total
         const newIntake = currentIntake + amount;
         setCurrentIntake(newIntake);
@@ -454,8 +494,15 @@ const WaterTrackingScreen = ({ navigation }: any) => {
         
         // Emit event to notify other components that water data has been updated
         eventEmitter.emitWaterLogged();
+        
+        // Show success message
+        Alert.alert(
+          "✅ Success!",
+          `Water intake recorded: ${amount}ml`,
+          [{ text: "OK", style: "default" }]
+        );
       } else {
-        console.error("Failed to save water entry:", response.message);
+        console.error("Failed to save water entry:", waterResponse.message);
         Alert.alert("Error", "Failed to save water intake. Please try again.");
       }
     } catch (error) {
@@ -533,7 +580,7 @@ const WaterTrackingScreen = ({ navigation }: any) => {
             >
               <Icon name="arrow-left" size={24} color="#FFFFFF" />
             </TouchableOpacity>
-            <Text style={styles.headerTitle}>Water Tracking</Text>
+            <Text style={styles.headerTitle}>Pencatatan Air</Text>
             <TouchableOpacity 
               style={styles.settingsButton}
               onPress={openSettingsModal}
@@ -547,7 +594,7 @@ const WaterTrackingScreen = ({ navigation }: any) => {
             {isLoadingWaterData ? (
               <View style={styles.loadingContainer}>
                 <ActivityIndicator size="large" color="#FFFFFF" />
-                <Text style={styles.loadingText}>Loading water data...</Text>
+                <Text style={styles.loadingText}>Memuat data air...</Text>
               </View>
             ) : (
               <View>
@@ -587,7 +634,7 @@ const WaterTrackingScreen = ({ navigation }: any) => {
 
           {/* Quick Add Water */}
           <View style={styles.quickAddContainer}>
-            <Text style={styles.sectionTitle}>Quick Add</Text>
+            <Text style={styles.sectionTitle}>Tambah Cepat</Text>
             <View style={styles.waterIntakeGrid}>
               {waterIntakeOptions.map((option, index) => (
                 <TouchableOpacity
@@ -614,7 +661,7 @@ const WaterTrackingScreen = ({ navigation }: any) => {
 
           {/* Weekly Progress */}
           <View style={styles.weeklyProgressContainer}>
-            <Text style={styles.sectionTitle}>This Week</Text>
+            <Text style={styles.sectionTitle}>Minggu Ini</Text>
             <View style={styles.weeklyChart}>
               {Array.isArray(weeklyProgress) && weeklyProgress.map((item, index) => (
                 <View key={index} style={styles.weeklyBarContainer}>
@@ -640,7 +687,7 @@ const WaterTrackingScreen = ({ navigation }: any) => {
 
           {/* Hydration Tips */}
           <View style={styles.hydrationTipsContainer}>
-            <Text style={styles.sectionTitle}>Hydration Tips</Text>
+            <Text style={styles.sectionTitle}>Tips Penyerapan Air</Text>
             <View style={styles.hydrationTipsList}>
               {hydrationTips.map((tip) => (
                 <View key={tip.id} style={styles.hydrationTipCard}>
@@ -673,7 +720,7 @@ const WaterTrackingScreen = ({ navigation }: any) => {
           >
             <ScrollView style={styles.modalContent}>
               <View style={styles.modalHeader}>
-                <Text style={styles.modalTitle}>Water Settings</Text>
+                <Text style={styles.modalTitle}>Pengaturan Air</Text>
                 <TouchableOpacity onPress={closeSettingsModal}>
                   <Icon name="close" size={24} color="#6B7280" />
                 </TouchableOpacity>
@@ -681,19 +728,19 @@ const WaterTrackingScreen = ({ navigation }: any) => {
               
               {/* Weight - Moved to first position */}
               <View style={styles.settingSection}>
-                <Text style={styles.settingLabel}>Weight (kg)</Text>
+                <Text style={styles.settingLabel}>Berat (kg)</Text>
                 <TextInput
                   style={styles.settingInput}
                   value={tempSettings?.weight_kg?.toString() || ""}
                   onChangeText={handleWeightChange}
                   keyboardType="numeric"
-                  placeholder="Enter your weight"
+                  placeholder="Masukkan berat Anda"
                 />
               </View>
 
               {/* Activity Level */}
               <View style={styles.settingSection}>
-                <Text style={styles.settingLabel}>Activity Level</Text>
+                <Text style={styles.settingLabel}>Tingkat Aktivitas</Text>
                 {activityLevels.map((level) => (
                   <TouchableOpacity
                     key={level.value}
@@ -726,7 +773,7 @@ const WaterTrackingScreen = ({ navigation }: any) => {
 
               {/* Climate Factor */}
               <View style={styles.settingSection}>
-                <Text style={styles.settingLabel}>Climate Factor</Text>
+                <Text style={styles.settingLabel}>Faktor Iklim</Text>
                 {climateFactors.map((climate) => (
                   <TouchableOpacity
                     key={climate.value}
@@ -759,7 +806,7 @@ const WaterTrackingScreen = ({ navigation }: any) => {
 
               {/* Daily Goal - Moved after weight, activity, and climate */}
               <View style={styles.settingSection}>
-                <Text style={styles.settingLabel}>Daily Water Goal (ml)</Text>
+                <Text style={styles.settingLabel}>Target Air Harian (ml)</Text>
                 <TextInput
                   style={[
                     styles.settingInput, 
@@ -780,7 +827,7 @@ const WaterTrackingScreen = ({ navigation }: any) => {
                 />
                 {tempSettings?.weight_kg && tempSettings?.activity_level && tempSettings?.climate_factor && (
                   <Text style={styles.formulaText}>
-                    Calculated: {tempSettings.weight_kg}kg × 33ml 
+                    Dihitung: {tempSettings.weight_kg}kg × 33ml 
                     {tempSettings.activity_level !== "moderate" && ` × ${tempSettings.activity_level === "high" ? "1.2" : "0.9"} (${tempSettings.activity_level})`} 
                     {tempSettings.climate_factor !== "normal" && ` × ${tempSettings.climate_factor === "hot" ? "1.1" : "1.2"} (${tempSettings.climate_factor})`}
                   </Text>
@@ -792,7 +839,7 @@ const WaterTrackingScreen = ({ navigation }: any) => {
                 <View style={styles.infoCard}>
                   <Icon name="information" size={20} color="#3B82F6" />
                   <Text style={styles.infoCardText}>
-                    Water intake is automatically calculated based on your weight and settings
+                    Konsumsi air secara otomatis dihitung berdasarkan berat badan dan pengaturan
                   </Text>
                 </View>
               ) : (
@@ -801,15 +848,15 @@ const WaterTrackingScreen = ({ navigation }: any) => {
                   onPress={calculateRecommended}
                 >
                   <Icon name="calculator" size={20} color="#FFFFFF" />
-                  <Text style={styles.calculateButtonText}>Calculate Recommended Intake</Text>
+                  <Text style={styles.calculateButtonText}>Hitung Konsumsi Air</Text>
                 </TouchableOpacity>
               )}
 
               {/* Reminder Settings */}
               <View style={styles.settingSection}>
-                <Text style={styles.settingLabel}>Reminder Settings</Text>
+                <Text style={styles.settingLabel}>Pengingat</Text>
                                   <View style={styles.reminderRow}>
-                    <Text style={styles.reminderLabel}>Enable Reminders</Text>
+                    <Text style={styles.reminderLabel}>Aktifkan Pengingat</Text>
                     <TouchableOpacity
                       style={[
                         styles.toggleButton,
@@ -826,7 +873,7 @@ const WaterTrackingScreen = ({ navigation }: any) => {
                   
                   {tempSettings?.reminder_enabled && (
                   <>
-                    <Text style={styles.settingSubLabel}>Reminder Interval (minutes)</Text>
+                    <Text style={styles.settingSubLabel}>Interval Pengingat (menit)</Text>
                     <TextInput
                       style={styles.settingInput}
                       value={tempSettings?.reminder_interval_minutes?.toString() || "60"}
@@ -844,11 +891,11 @@ const WaterTrackingScreen = ({ navigation }: any) => {
               {/* Doctor Recommendation */}
               {tempSettings?.doctor_recommended_ml && (
                 <View style={styles.settingSection}>
-                  <Text style={styles.settingLabel}>Doctor Recommendation</Text>
+                  <Text style={styles.settingLabel}>Rekomendasi Dokter</Text>
                   <View style={styles.doctorRecommendation}>
                     <Icon name="stethoscope" size={20} color="#3B82F6" />
                     <Text style={styles.doctorRecommendationText}>
-                      {tempSettings.doctor_recommended_ml}ml daily
+                      {tempSettings.doctor_recommended_ml}ml per hari
                     </Text>
                   </View>
                 </View>
@@ -862,7 +909,7 @@ const WaterTrackingScreen = ({ navigation }: any) => {
                   style={styles.modalButton}
                   textColor="#6B7280"
                 >
-                  Cancel
+                  Batal
                 </Button>
                 <Button
                   mode="contained"
@@ -871,7 +918,7 @@ const WaterTrackingScreen = ({ navigation }: any) => {
                   buttonColor="#E22345"
                   loading={isLoadingSettings}
                 >
-                  Save Settings
+                  Simpan Pengaturan
                 </Button>
               </View>
               

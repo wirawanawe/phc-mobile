@@ -160,12 +160,12 @@ function improveDailyMissionScreenErrorHandling() {
   console.log('✅ Improved error handling in DailyMissionScreen.tsx');
 }
 
-// Function to improve error handling in MissionDetailScreen
+// Function to improve error handling in MissionDetailScreenNew
 function improveMissionDetailScreenErrorHandling() {
-  const filePath = 'src/screens/MissionDetailScreen.tsx';
+  const filePath = 'src/screens/MissionDetailScreenNew.tsx';
   
   if (!fs.existsSync(filePath)) {
-    console.log('❌ MissionDetailScreen.tsx not found');
+    console.log('❌ MissionDetailScreenNew.tsx not found');
     return;
   }
   
@@ -174,7 +174,7 @@ function improveMissionDetailScreenErrorHandling() {
   // Find the handleAcceptMission function
   const functionStart = content.indexOf('const handleAcceptMission = async () => {');
   if (functionStart === -1) {
-    console.log('❌ handleAcceptMission function not found in MissionDetailScreen');
+    console.log('❌ handleAcceptMission function not found in MissionDetailScreenNew');
     return;
   }
   
@@ -203,7 +203,7 @@ function improveMissionDetailScreenErrorHandling() {
   
   // Check if the improved error handling is already there
   if (currentFunction.includes('MISSION_ALREADY_COMPLETED')) {
-    console.log('✅ Error handling already improved in MissionDetailScreen');
+    console.log('✅ Error handling already improved in MissionDetailScreenNew');
     return;
   }
   
@@ -390,7 +390,7 @@ function improveMissionDetailScreenErrorHandling() {
   
   // Write back to file
   fs.writeFileSync(filePath, newContent);
-  console.log('✅ Improved error handling in MissionDetailScreen.tsx');
+  console.log('✅ Improved error handling in MissionDetailScreenNew.tsx');
 }
 
 // Main function

@@ -11,7 +11,7 @@ async function addWiwaweUser() {
 
   // Database configuration
   const dbConfig = {
-    host: 'localhost',
+    host: 'dash.doctorphc.id',
     user: 'root',
     password: '',
     database: 'phc_dashboard'

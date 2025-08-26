@@ -143,7 +143,7 @@ const ActivityCompletionScreen = ({ route, navigation }: ActivityCompletionScree
             {
               text: 'Continue',
               onPress: () => {
-                safeGoBack(navigation, 'Main');
+                navigation.goBack();
               }
             }
           ]
@@ -375,7 +375,7 @@ const ActivityCompletionScreen = ({ route, navigation }: ActivityCompletionScree
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity
-          onPress={() => safeGoBack(navigation, 'Main')}
+          onPress={() => navigation.goBack()}
           style={styles.backButton}
         >
           <Icon name="arrow-left" size={24} color="#1F2937" />

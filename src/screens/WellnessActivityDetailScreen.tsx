@@ -79,7 +79,7 @@ const WellnessActivityDetailScreen = ({ route, navigation }: WellnessActivityDet
             {
               text: 'OK',
               onPress: () => {
-                safeGoBack(navigation, 'Main');
+                navigation.goBack();
               },
             },
           ]
@@ -144,7 +144,7 @@ const WellnessActivityDetailScreen = ({ route, navigation }: WellnessActivityDet
       <View style={styles.header}>
         <TouchableOpacity
           style={styles.backButton}
-          onPress={() => safeGoBack(navigation, 'Main')}
+          onPress={() => navigation.goBack()}
         >
           <Icon name="arrow-left" size={24} color="#1F2937" />
         </TouchableOpacity>

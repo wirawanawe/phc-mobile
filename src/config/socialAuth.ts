@@ -2,9 +2,11 @@
 export const SOCIAL_AUTH_CONFIG = {
   // Google Sign-In Configuration
   GOOGLE: {
-    webClientId: 'YOUR_GOOGLE_WEB_CLIENT_ID.apps.googleusercontent.com',
-    iosClientId: 'YOUR_GOOGLE_IOS_CLIENT_ID.apps.googleusercontent.com',
-    androidClientId: 'YOUR_GOOGLE_ANDROID_CLIENT_ID.apps.googleusercontent.com',
+    // TODO: Replace with your actual Google OAuth client IDs
+    // Get these from Google Cloud Console: https://console.cloud.google.com/
+    webClientId: 'YOUR_WEB_CLIENT_ID.apps.googleusercontent.com',
+    iosClientId: 'YOUR_IOS_CLIENT_ID.apps.googleusercontent.com',
+    androidClientId: 'YOUR_ANDROID_CLIENT_ID.apps.googleusercontent.com',
     offlineAccess: true,
     hostedDomain: '',
     forceCodeForRefreshToken: true,
@@ -12,11 +14,11 @@ export const SOCIAL_AUTH_CONFIG = {
 
   // Facebook Configuration
   FACEBOOK: {
-    appId: 'YOUR_FACEBOOK_APP_ID',
+    appId: '123456789012345',
     appName: 'PHC Mobile',
-    clientToken: 'YOUR_FACEBOOK_CLIENT_TOKEN',
+    clientToken: 'abcdefghijklmnopqrstuvwxyz123456',
     displayName: 'PHC Mobile',
-    scheme: 'fbYOUR_FACEBOOK_APP_ID',
+    scheme: 'fb123456789012345',
     autoLogAppEventsEnabled: false,
     autoInitEnabled: true,
   },
@@ -29,8 +31,8 @@ export const SOCIAL_AUTH_CONFIG = {
 
   // WhatsApp Business API Configuration (for OTP)
   WHATSAPP: {
-    phoneNumberId: 'YOUR_WHATSAPP_PHONE_NUMBER_ID',
-    accessToken: 'YOUR_WHATSAPP_ACCESS_TOKEN',
+    phoneNumberId: '123456789012345',
+    accessToken: 'EAA...', // Facebook access token for WhatsApp Business API
     templateName: 'phc_mobile_otp',
     templateLanguage: 'en_US',
   },
@@ -38,7 +40,7 @@ export const SOCIAL_AUTH_CONFIG = {
   // Email Service Configuration (for notifications)
   EMAIL: {
     service: 'sendgrid', // or 'mailgun', 'aws-ses'
-    apiKey: 'YOUR_EMAIL_SERVICE_API_KEY',
+    apiKey: 'SG.abcdefghijklmnopqrstuvwxyz123456',
     fromEmail: 'noreply@phcmobile.com',
     fromName: 'PHC Mobile',
   },
@@ -58,4 +60,19 @@ export const DEV_CONFIG = {
   showAlerts: __DEV__,
   // Mock OTP for testing
   mockOTP: __DEV__ ? '123456' : null,
+  // Development server URL - will be set dynamically based on platform
+  get serverUrl() {
+    if (__DEV__) {
+      // Import Platform dynamically to avoid issues
+      const { Platform } = require('react-native');
+      if (Platform.OS === 'android') {
+        return 'http://10.242.90.103:3000';
+      } else {
+        return 'http://localhost:3000';
+      }
+    }
+    return 'https://dash.doctorphc.id';
+  },
+  // Enable real Google sign-in in development
+  enableRealGoogleSignIn: true, // Set to true to use real Google sign-in
 }; 

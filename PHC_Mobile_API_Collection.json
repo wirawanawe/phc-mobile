@@ -8,7 +8,7 @@
   "variable": [
     {
       "key": "base_url",
-      "value": "http://localhost:3000/api",
+              "value": "https://dash.doctorphc.id/api",
       "type": "string"
     },
     {

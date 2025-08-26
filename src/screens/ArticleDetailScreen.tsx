@@ -10,6 +10,7 @@ import {
   Alert,
   Share,
   Dimensions,
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -162,12 +163,22 @@ const ArticleDetailScreen: React.FC<ArticleDetailScreenProps> = ({ navigation, r
 
         {/* Article Image/Icon */}
         <View style={styles.imageSection}>
-          <LinearGradient
-            colors={[article.bgColor, article.color + '20']}
-            style={styles.imageContainer}
-          >
-            <Icon name={article.image} size={80} color={article.color} />
-          </LinearGradient>
+          {article.imageUrl ? (
+            <View style={styles.imageContainer}>
+              <Image
+                source={{ uri: article.imageUrl }}
+                style={styles.articleDetailImage}
+                resizeMode="cover"
+              />
+            </View>
+          ) : (
+            <LinearGradient
+              colors={[article.bgColor, article.color + '20']}
+              style={styles.imageContainer}
+            >
+              <Icon name={article.image} size={80} color={article.color} />
+            </LinearGradient>
+          )}
         </View>
 
         {/* Article Content */}
@@ -330,6 +341,12 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.15,
     shadowRadius: 24,
     elevation: 8,
+    overflow: 'hidden',
+  },
+  articleDetailImage: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 80,
   },
   content: {
     paddingHorizontal: 20,

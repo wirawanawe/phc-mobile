@@ -1,81 +1,115 @@
 # 🔐 Login Troubleshooting Guide
 
-## Issue: "Invalid credentials" error when trying to login
+## ✅ Current Status
+- ✅ Backend server is running on localhost:3000
+- ✅ Mobile login endpoint is working correctly
+- ✅ Test user credentials are valid
+- ✅ JWT tokens are being generated properly
+- ✅ Health endpoint is responding
 
-### ✅ What I've Fixed
+## 🎯 Solution
 
-1. **Fixed test credentials mismatch**: Updated `john@example.com` to `john.doe@example.com` in LoginScreen
-2. **Updated API configuration**: Set the correct IP address for physical device testing
-3. **Added debugging logs**: Enhanced error logging to help identify issues
-4. **Verified backend functionality**: Confirmed the backend is working correctly
+### Working Credentials
+Use these credentials to login to the mobile app:
+```
+Email: mobile@test.com
+Password: mobile123
+```
 
-### 🧪 Test Credentials
+### Steps to Fix Login Issues
 
-Use these credentials to test login:
-
-- **John Doe**: `john.doe@example.com` / `password123`
-- **Jane Smith**: `jane.smith@example.com` / `password123`
-- **Admin User**: `admin@phc.com` / `password123`
-
-### 🔧 API Configuration
-
-The API is now configured to use:
-- **iOS Simulator**: `http://localhost:5432/api`
-- **Android Emulator**: `http://10.0.2.2:5432/api`
-- **Physical Device**: `http://192.168.18.30:5432/api`
-
-### 🚀 How to Test
-
-1. **Restart your React Native app** to pick up the new configuration
-2. **Use the test credentials** from the login screen (tap the test credential buttons)
-3. **Check the console logs** for debugging information
-
-### 🔍 Debugging Steps
-
-If you still get "Invalid credentials":
-
-1. **Check the console logs** for:
-   - `🔐 Attempting login with:` - Shows the email and API URL being used
-   - `🏥 Health check response:` - Shows if the server is reachable
-   - `❌ Login failed:` - Shows detailed error information
-
-2. **Verify network connectivity**:
+1. **Ensure Backend is Running**
    ```bash
-   node scripts/test-api-connection.js
-   ```
-
-3. **Test the API directly**:
-   ```bash
-   curl -X POST -H "Content-Type: application/json" \
-     -d '{"email":"john.doe@example.com","password":"password123"}' \
-     http://192.168.18.30:5432/api/auth/login
-   ```
-
-### 📱 Platform-Specific Notes
-
-- **iOS Simulator**: Should work with `localhost`
-- **Android Emulator**: Should work with `10.0.2.2`
-- **Physical Device**: Must use your computer's IP address (currently set to `192.168.18.30`)
-
-### 🔄 If Still Not Working
-
-1. **Check if you're on the same network** as your development machine
-2. **Try a different IP address** from the test results:
-   - `10.242.90.103`
-   - `192.168.193.150`
-3. **Restart the backend server**:
-   ```bash
-   cd backend
+   cd dash-app
    npm run dev
    ```
-4. **Clear React Native cache**:
+   The server should be running on http://localhost:3000
+
+2. **Test Backend Connection**
    ```bash
-   npx react-native start --reset-cache
+   curl http://localhost:3000/api/health
+   ```
+   Should return: `{"success":true,"message":"PHC Mobile API is running"}`
+
+3. **Test Login Endpoint**
+   ```bash
+   curl -X POST http://localhost:3000/api/mobile/auth/login \
+     -H "Content-Type: application/json" \
+     -d '{"email":"mobile@test.com","password":"mobile123"}'
    ```
 
-### 📞 Support
+4. **Mobile App Configuration**
+   - Make sure the mobile app is running: `expo start`
+   - The app should automatically detect the correct API URL
+   - For iOS Simulator: uses `localhost:3000`
+   - For Android Emulator: uses `10.0.2.2:3000`
+   - For physical devices: uses `10.242.90.103:3000`
 
-If the issue persists, please provide:
-1. The console logs from the login attempt
-2. Your device/platform (iOS/Android, simulator/physical)
-3. The network you're connected to 
+## 🔧 Common Issues & Solutions
+
+### Issue 1: "Email atau password salah"
+**Solution**: Use the correct credentials:
+- Email: `mobile@test.com`
+- Password: `mobile123`
+
+### Issue 2: Network Connection Failed
+**Solutions**:
+1. Check if backend is running: `lsof -i :3000`
+2. Restart backend: `cd dash-app && npm run dev`
+3. Check firewall settings
+4. Ensure mobile device/simulator is on the same network
+
+### Issue 3: Timeout Errors
+**Solutions**:
+1. Check network connectivity
+2. Increase timeout in API service
+3. Try different network URLs (localhost, 127.0.0.1, machine IP)
+
+### Issue 4: CORS Errors
+**Solution**: Backend is already configured with CORS headers for mobile access
+
+## 📱 Mobile App Testing
+
+1. **Start the mobile app**:
+   ```bash
+   expo start
+   ```
+
+2. **Use the test credentials**:
+   - Email: `mobile@test.com`
+   - Password: `mobile123`
+
+3. **Check console logs** for any network errors
+
+4. **If still failing**, check:
+   - Network connectivity
+   - Backend server status
+   - Mobile app console for specific error messages
+
+## 🚀 Quick Fix Commands
+
+```bash
+# 1. Start backend server
+cd dash-app && npm run dev
+
+# 2. Test backend health
+curl http://localhost:3000/api/health
+
+# 3. Test login
+curl -X POST http://localhost:3000/api/mobile/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"mobile@test.com","password":"mobile123"}'
+
+# 4. Start mobile app
+expo start
+```
+
+## 📊 Test Results
+- ✅ Health endpoint: Working
+- ✅ Login endpoint: Working
+- ✅ Token generation: Working
+- ✅ Token validation: Working
+- ✅ Multiple network URLs: Working (except 10.0.2.2 which is Android emulator specific)
+
+## 🎉 Expected Outcome
+After following these steps, you should be able to login successfully to the mobile app using the provided credentials.

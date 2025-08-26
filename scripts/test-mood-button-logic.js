@@ -1,6 +1,6 @@
 const axios = require('axios');
 
-const BASE_URL = 'http://localhost:3000/api';
+const BASE_URL = 'https://dash.doctorphc.id/api';
 
 async function testMoodButtonLogic() {
   console.log('🧪 Testing Mood Button Logic with Empty Data...\n');

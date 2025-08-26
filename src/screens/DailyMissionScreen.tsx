@@ -17,10 +17,12 @@ import { useFocusEffect } from "@react-navigation/native";
 import { CustomTheme } from "../theme/theme";
 import { useAuth } from "../contexts/AuthContext";
 import api from "../services/api";
+import { getTodayDate } from "../utils/dateUtils";
 import { handleError } from "../utils/errorHandler";
 import { Mission, UserMission } from "../types";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { safeGoBack } from "../utils/safeNavigation";
+import { eventEmitter } from "../utils/eventEmitter";
 
 const { width } = Dimensions.get("window");
 
@@ -35,6 +37,7 @@ const DailyMissionScreen = ({ navigation }: any) => {
   const [acceptingMission, setAcceptingMission] = useState<number | null>(null);
   const [updatingProgress, setUpdatingProgress] = useState<number | null>(null);
   const [usingMockData, setUsingMockData] = useState(false);
+  const [activeTab, setActiveTab] = useState<'available' | 'history'>('available');
   const [stats, setStats] = useState({
     totalMissions: 0,
     completedMissions: 0,
@@ -60,15 +63,148 @@ const DailyMissionScreen = ({ navigation }: any) => {
     }
   }, [refreshKey, isAuthenticated]);
 
-  // Remove automatic focus refresh - manual refresh only
-  // useFocusEffect(
-  //   React.useCallback(() => {
-  //     if (isAuthenticated) {
-  //       console.log('🔄 DailyMissionScreen: Refreshing mission data on focus');
-  //       loadData();
-  //     }
-  //   }, [isAuthenticated])
-  // );
+  // Add event listeners for real-time updates
+  useEffect(() => {
+    if (!isAuthenticated) return;
+
+    // Listen for mission updates from tracking
+    const handleMissionUpdated = (missionData: any) => {
+      console.log('🔄 DailyMissionScreen: Mission updated from tracking:', missionData);
+      // Refresh mission data after a short delay to ensure backend is updated
+      setTimeout(() => {
+        setRefreshKey(prev => prev + 1);
+      }, 1000);
+    };
+
+    // Listen for mission refresh requests
+    const handleMissionRefresh = () => {
+      console.log('🔄 DailyMissionScreen: Mission refresh requested');
+      setRefreshKey(prev => prev + 1);
+    };
+
+    // Listen for force refresh events
+    const handleForceRefreshMissions = () => {
+      console.log('🔄 DailyMissionScreen: Force refresh missions requested');
+      setRefreshKey(prev => prev + 1);
+    };
+
+    // Listen for mission stats updates
+    const handleUpdateMissionStats = () => {
+      console.log('📊 DailyMissionScreen: Mission stats update requested');
+      loadData();
+    };
+
+    // Listen for user missions updates
+    const handleUpdateUserMissions = () => {
+      console.log('👤 DailyMissionScreen: User missions update requested');
+      loadData();
+    };
+
+    // Listen for tracking events that might affect missions
+    const handleWaterLogged = () => {
+      console.log('💧 DailyMissionScreen: Water logged, refreshing missions');
+      setTimeout(() => setRefreshKey(prev => prev + 1), 1000);
+    };
+
+    const handleFitnessLogged = () => {
+      console.log('🏃 DailyMissionScreen: Fitness logged, refreshing missions');
+      setTimeout(() => setRefreshKey(prev => prev + 1), 1000);
+    };
+
+    const handleSleepLogged = () => {
+      console.log('😴 DailyMissionScreen: Sleep logged, refreshing missions');
+      setTimeout(() => setRefreshKey(prev => prev + 1), 1000);
+    };
+
+    const handleMoodLogged = () => {
+      console.log('😊 DailyMissionScreen: Mood logged, refreshing missions');
+      setTimeout(() => setRefreshKey(prev => prev + 1), 1000);
+    };
+
+    const handleNutritionLogged = () => {
+      console.log('🍽️ DailyMissionScreen: Nutrition logged, refreshing missions');
+      setTimeout(() => setRefreshKey(prev => prev + 1), 1000);
+    };
+
+    // Listen for authentication errors
+    const handleAuthError = () => {
+      console.log('🔐 DailyMissionScreen: Authentication error detected');
+      Alert.alert(
+        '🔐 Authentication Error',
+        'Your session has expired. Please login again.',
+        [
+          {
+            text: 'OK',
+            onPress: () => {
+              // The AuthContext should handle logout automatically
+              console.log('User acknowledged auth error');
+            }
+          }
+        ]
+      );
+    };
+
+    // Listen for network errors
+    const handleNetworkError = () => {
+      console.log('🌐 DailyMissionScreen: Network error detected');
+      Alert.alert(
+        '🌐 Connection Error',
+        'Network connection issue detected. Please check your internet connection.',
+        [
+          {
+            text: 'Retry',
+            onPress: () => {
+              setRefreshKey(prev => prev + 1);
+            }
+          },
+          {
+            text: 'OK',
+            style: 'cancel'
+          }
+        ]
+      );
+    };
+
+    // Add event listeners
+    eventEmitter.on('missionUpdated', handleMissionUpdated);
+    eventEmitter.on('refreshMissions', handleMissionRefresh);
+    eventEmitter.on('forceRefreshMissions', handleForceRefreshMissions);
+    eventEmitter.on('updateMissionStats', handleUpdateMissionStats);
+    eventEmitter.on('updateUserMissions', handleUpdateUserMissions);
+    eventEmitter.on('waterLogged', handleWaterLogged);
+    eventEmitter.on('fitnessLogged', handleFitnessLogged);
+    eventEmitter.on('sleepLogged', handleSleepLogged);
+    eventEmitter.on('moodLogged', handleMoodLogged);
+    eventEmitter.on('nutritionLogged', handleNutritionLogged);
+    eventEmitter.on('authError', handleAuthError);
+    eventEmitter.on('networkError', handleNetworkError);
+
+    // Cleanup event listeners on unmount
+    return () => {
+      eventEmitter.off('missionUpdated', handleMissionUpdated);
+      eventEmitter.off('refreshMissions', handleMissionRefresh);
+      eventEmitter.off('forceRefreshMissions', handleForceRefreshMissions);
+      eventEmitter.off('updateMissionStats', handleUpdateMissionStats);
+      eventEmitter.off('updateUserMissions', handleUpdateUserMissions);
+      eventEmitter.off('waterLogged', handleWaterLogged);
+      eventEmitter.off('fitnessLogged', handleFitnessLogged);
+      eventEmitter.off('sleepLogged', handleSleepLogged);
+      eventEmitter.off('moodLogged', handleMoodLogged);
+      eventEmitter.off('nutritionLogged', handleNutritionLogged);
+      eventEmitter.off('authError', handleAuthError);
+      eventEmitter.off('networkError', handleNetworkError);
+    };
+  }, [isAuthenticated]);
+
+  // Refresh data when screen comes into focus (e.g., returning from MissionDetail)
+  useFocusEffect(
+    React.useCallback(() => {
+      if (isAuthenticated) {
+        console.log('🔄 DailyMissionScreen: Refreshing mission data on focus');
+        loadData();
+      }
+    }, [isAuthenticated])
+  );
 
   // Timer for cooldown countdown in mission cards
   useEffect(() => {
@@ -100,13 +236,13 @@ const DailyMissionScreen = ({ navigation }: any) => {
     const timeRemaining = twentyFourHours - timeElapsed;
     
     if (timeRemaining <= 0) {
-      return { canReactivate: true, timeRemaining: 0 };
+      return { canReactivate: true, hoursRemaining: 0, minutesRemaining: 0 };
     }
     
-    const hours = Math.floor(timeRemaining / (60 * 60 * 1000));
-    const minutes = Math.floor((timeRemaining % (60 * 60 * 1000)) / (60 * 1000));
+    const hoursRemaining = Math.floor(timeRemaining / (1000 * 60 * 60));
+    const minutesRemaining = Math.floor((timeRemaining % (1000 * 60 * 60)) / (1000 * 60));
     
-    return { canReactivate: false, timeRemaining, hours, minutes };
+    return { canReactivate: false, hoursRemaining, minutesRemaining };
   };
 
   // Process mission data to handle missing fields
@@ -138,21 +274,24 @@ const DailyMissionScreen = ({ navigation }: any) => {
   };
 
   const loadData = useCallback(async () => {
+    if (!isAuthenticated) return;
+
     try {
       setLoading(true);
       setUsingMockData(false);
+      console.log('🔄 DailyMissionScreen: Loading mission data...');
       
-      console.log('🔍 DailyMissionScreen: Starting to load mission data...');
+  
       
       const [missionsResponse, userMissionsResponse, statsResponse] =
         await Promise.all([
           api.getMissions(),
           api.getMyMissions(),
-          api.getMissionStats({ date: new Date().toISOString().split('T')[0] }),
+          api.getMissionStats({ date: getTodayDate() }),
         ]);
 
       console.log('📊 DailyMissionScreen: API Responses:');
-      console.log('- Missions:', missionsResponse.success ? 'SUCCESS' : 'FAILED', missionsResponse.missions?.length || 0, 'missions');
+      console.log('- Missions:', missionsResponse.success ? 'SUCCESS' : 'FAILED', missionsResponse.data?.length || 0, 'missions');
       console.log('- User Missions:', userMissionsResponse.success ? 'SUCCESS' : 'FAILED', userMissionsResponse.data?.length || 0, 'user missions');
       console.log('- Stats:', statsResponse.success ? 'SUCCESS' : 'FAILED');
 
@@ -176,8 +315,8 @@ const DailyMissionScreen = ({ navigation }: any) => {
       }
 
       // Process and set data
-      if (missionsResponse.success && missionsResponse.missions) {
-        const processedMissions = processMissionData(missionsResponse.missions);
+      if (missionsResponse.success && missionsResponse.data) {
+        const processedMissions = processMissionData(missionsResponse.data);
         setMissions(processedMissions);
         console.log('✅ DailyMissionScreen: Set', processedMissions.length, 'missions');
       } else {
@@ -226,39 +365,63 @@ const DailyMissionScreen = ({ navigation }: any) => {
       setLoading(false);
       console.log('🏁 DailyMissionScreen: Finished loading data');
     }
-  }, []);
+  }, [isAuthenticated]);
 
-  const onRefresh = async () => {
+  const onRefresh = useCallback(async () => {
+    if (!isAuthenticated) return;
+
     setRefreshing(true);
-    await loadData();
-    setRefreshing(false);
-  };
+    try {
+      await loadData();
+    } catch (error) {
+      console.error('❌ Error refreshing mission data:', error);
+    } finally {
+      setRefreshing(false);
+    }
+  }, [isAuthenticated, loadData]);
 
   const handleAcceptMission = async (missionId: number, missionDate?: string) => {
     try {
       setAcceptingMission(missionId);
       
-      const response = await api.acceptMission(missionId, missionDate || null);
+      const response = await api.acceptMission(missionId, missionDate as any);
       
       if (response.success) {
-        Alert.alert(
-          "✅ Mission Accepted!", 
-          "Mission has been successfully added to your active missions.",
-          [
-            { 
-              text: "Great!", 
-              onPress: async () => {
-                // Refresh data to show updated state
-                await loadData();
-                // Force a re-render by updating state
-                setRefreshKey(prev => prev + 1);
-                // Add a small delay to ensure UI updates
-                setTimeout(() => {
-                }, 200);
-              }
-            }
-          ]
-        );
+        // Immediately refresh data to show updated state
+        console.log('🔄 DailyMissionScreen: Refreshing data after mission acceptance');
+        
+        // Force immediate refresh by updating refresh key first
+        setRefreshKey(prev => prev + 1);
+        
+        // Then load fresh data
+        await loadData();
+        
+        // Additional refresh to ensure UI is updated
+        setTimeout(() => {
+          setRefreshKey(prev => prev + 1);
+        }, 100);
+        
+        // Emit mission accepted event for real-time updates
+        eventEmitter.emit('missionAccepted', response.data);
+        
+        // Navigate to mission detail screen
+        if (response.data && response.data.user_mission_id) {
+          // Find the mission data to pass to detail screen
+          const missionData = missions.find(m => m.id === missionId);
+          if (missionData) {
+            navigation.navigate('MissionDetail', {
+              mission: missionData,
+              userMission: response.data
+            });
+          }
+        } else {
+          // Fallback: just show success message
+          Alert.alert(
+            "✅ Mission Accepted!", 
+            "Mission has been successfully added to your active missions.",
+            [{ text: "Great!" }]
+          );
+        }
       } else {
         // Handle API response that indicates failure
         Alert.alert(
@@ -268,8 +431,71 @@ const DailyMissionScreen = ({ navigation }: any) => {
         );
       }
     } catch (error) {
+      console.error('❌ Error accepting mission:', error);
       Alert.alert(
         "❌ Error accepting mission:",
+        "An unexpected error occurred. Please try again later.",
+        [{ text: "OK", style: "default" }]
+      );
+    } finally {
+      setAcceptingMission(null);
+    }
+  };
+
+  const handleReactivateMission = async (userMissionId: number, missionId: number) => {
+    try {
+      setAcceptingMission(missionId); // Reuse the same loading state
+      
+      const response = await api.reactivateMission(userMissionId);
+      
+      if (response.success) {
+        // Immediately refresh data to show updated state
+        console.log('🔄 DailyMissionScreen: Refreshing data after mission reactivation');
+        
+        // Force immediate refresh by updating refresh key first
+        setRefreshKey(prev => prev + 1);
+        
+        // Then load fresh data
+        await loadData();
+        
+        // Additional refresh to ensure UI is updated
+        setTimeout(() => {
+          setRefreshKey(prev => prev + 1);
+        }, 100);
+        
+        // Emit mission reactivated event for real-time updates
+        eventEmitter.emit('missionReactivated', response.data);
+        
+        // Navigate to mission detail screen
+        if (response.data && response.data.user_mission_id) {
+          // Find the mission data to pass to detail screen
+          const missionData = missions.find(m => m.id === missionId);
+          if (missionData) {
+            navigation.navigate('MissionDetail', {
+              mission: missionData,
+              userMission: response.data
+            });
+          }
+        } else {
+          // Fallback: just show success message
+          Alert.alert(
+            "✅ Mission Reactivated!", 
+            "Mission has been successfully reactivated and added to your active missions.",
+            [{ text: "Great!" }]
+          );
+        }
+      } else {
+        // Handle API response that indicates failure
+        Alert.alert(
+          "⚠️ Unable to Reactivate Mission",
+          response.message || "Please try again later.",
+          [{ text: "OK", style: "default" }]
+        );
+      }
+    } catch (error) {
+      console.error('❌ Error reactivating mission:', error);
+      Alert.alert(
+        "❌ Error reactivating mission:",
         "An unexpected error occurred. Please try again later.",
         [{ text: "OK", style: "default" }]
       );
@@ -383,6 +609,11 @@ const DailyMissionScreen = ({ navigation }: any) => {
     );
   };
 
+  // Handle tab change
+  const handleTabChange = (tab: 'available' | 'history') => {
+    setActiveTab(tab);
+  };
+
   const categories = [
     { id: "all", title: "All", icon: "view-grid" },
     { id: "health_tracking", title: "Health Tracking", icon: "heart-pulse" },
@@ -452,294 +683,367 @@ const DailyMissionScreen = ({ navigation }: any) => {
           </View>
         ) : (
           <>
-            {/* Progress Stats */}
-            <View style={styles.progressContainer}>
-              <LinearGradient
-                colors={["#E53E3E", "#C53030"]}
-                style={styles.progressCardModern}
-              >
-                <View style={styles.progressHeaderModern}>
-                  <View style={styles.progressIconContainer}>
-                    <Icon name="flag-checkered" size={28} color="#FFFFFF" />
-                  </View>
-                  <View style={styles.progressInfoModern}>
-                    <Text style={styles.progressTitleModern}>Mission Progress</Text>
-                    <Text style={styles.progressSubtitleModern}>
-                      {usingMockData ? "Demo Mode - Using Sample Data" : "Track your wellness journey"}
-                    </Text>
-                  </View>
-                </View>
-                
-                {usingMockData && (
-                  <View style={styles.mockDataIndicator}>
-                    <Icon name="wifi-off" size={16} color="#F59E0B" />
-                    <Text style={styles.mockDataText}>Demo Mode</Text>
-                    <TouchableOpacity 
-                      style={styles.retryButton}
-                      onPress={loadData}
-                    >
-                      <Icon name="refresh" size={14} color="#F59E0B" />
-                      <Text style={styles.retryText}>Retry</Text>
-                    </TouchableOpacity>
-                  </View>
-                )}
-
-                <View style={styles.progressStatsModern}>
-                  <View style={styles.statItemModern}>
-                    <Text style={styles.statValueModern}>{stats.totalMissions}</Text>
-                    <Text style={styles.statLabelModern}>Total Missions</Text>
-                  </View>
-                  <View style={styles.statDividerModern} />
-                  <View style={styles.statItemModern}>
-                    <Text style={styles.statValueModern}>{stats.completedMissions}</Text>
-                    <Text style={styles.statLabelModern}>Completed</Text>
-                  </View>
-                  <View style={styles.statDividerModern} />
-                  <View style={styles.statItemModern}>
-                    <Text style={styles.statValueModern}>{stats.totalPoints}</Text>
-                    <Text style={styles.statLabelModern}>Points Earned</Text>
-                  </View>
-                </View>
-              </LinearGradient>
-            </View>
-
-            {/* Categories */}
-            <View style={styles.categoriesContainer}>
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.categoriesScroll}
-              >
-                {categories.map((category) => (
-                  <TouchableOpacity
-                    key={category.id}
-                    style={[
-                      styles.categoryButton,
-                      selectedCategory === category.id &&
-                        styles.categoryButtonActive,
-                    ]}
-                    onPress={() => setSelectedCategory(category.id)}
+            {/* Demo Mode Indicator */}
+            {usingMockData && (
+              <View style={styles.mockDataContainer}>
+                <View style={styles.mockDataIndicator}>
+                  <Icon name="wifi-off" size={16} color="#F59E0B" />
+                  <Text style={styles.mockDataText}>Demo Mode</Text>
+                  <TouchableOpacity 
+                    style={styles.retryButton}
+                    onPress={loadData}
                   >
-                    <Icon
-                      name={category.icon}
-                      size={20}
-                      color={
-                        selectedCategory === category.id ? "#FFFFFF" : "#64748B"
-                      }
-                    />
-                    <Text
-                      style={[
-                        styles.categoryButtonText,
-                        selectedCategory === category.id &&
-                          styles.categoryButtonTextActive,
-                      ]}
-                    >
-                      {category.title}
-                    </Text>
+                    <Icon name="refresh" size={14} color="#F59E0B" />
+                    <Text style={styles.retryText}>Retry</Text>
                   </TouchableOpacity>
-                ))}
-              </ScrollView>
+                </View>
+              </View>
+            )}
+
+            {/* Tab Navigation */}
+            <View style={styles.tabContainer}>
+              <TouchableOpacity
+                style={[styles.tabButton, activeTab === 'available' && styles.activeTabButton]}
+                onPress={() => handleTabChange('available')}
+              >
+                <Text style={[styles.tabButtonText, activeTab === 'available' && styles.activeTabButtonText]}>
+                  Available Missions
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.tabButton, activeTab === 'history' && styles.activeTabButton]}
+                onPress={() => handleTabChange('history')}
+              >
+                <Text style={[styles.tabButtonText, activeTab === 'history' && styles.activeTabButtonText]}>
+                  Riwayat
+                </Text>
+              </TouchableOpacity>
             </View>
 
-            {/* Missions */}
-            <View style={styles.missionsContainer}>
-              <Text style={styles.sectionTitle}>Available Missions</Text>
-              {filteredMissions.length === 0 ? (
-                <View style={styles.emptyStateContainer}>
-                  <Text style={styles.emptyStateText}>No missions available</Text>
-                  <Text style={styles.emptyStateSubtext}>Check back later for new missions</Text>
-                </View>
-              ) : (
-                <>
-                  {filteredMissions.map((mission) => {
-                    // Skip if mission is invalid
-                    if (!mission || !mission.id) {
-                      return null;
-                    }
-                    
-                    const userMission = userMissions.find(
-                      (um) => um.mission_id === mission.id
-                    );
-
-                return (
-                  <TouchableOpacity
-                    key={mission.id}
-                    style={styles.missionCardModern}
-                    onPress={() => {
-                      
-                      // Prevent navigation for completed missions
-                      if (userMission && userMission.status === "completed") {
-                        Alert.alert(
-                          "Mission Completed",
-                          "This mission has been completed. You cannot update completed missions.",
-                          [{ text: "OK" }]
-                        );
-                        return;
-                      }
-                      
-                      navigation.navigate("MissionDetail", {
-                        mission,
-                        userMission: userMission || null, // Ensure it's null instead of undefined
-                        onMissionUpdate: loadData,
-                      });
-                    }}
+            {activeTab === 'available' ? (
+              <>
+                {/* Categories */}
+                <View style={styles.categoriesContainer}>
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={styles.categoriesScroll}
                   >
-                    <LinearGradient
-                      colors={["#FFFFFF", "#F8FAFC"]}
-                      style={styles.missionCardGradient}
-                    >
-                      <View style={styles.missionHeaderModern}>
-                        <LinearGradient
-                          colors={[(mission.color || "#64748B") + "20", (mission.color || "#64748B") + "10"]}
-                          style={styles.missionIconModern}
+                    {categories.map((category) => (
+                      <TouchableOpacity
+                        key={category.id}
+                        style={[
+                          styles.categoryButton,
+                          selectedCategory === category.id &&
+                            styles.categoryButtonActive,
+                        ]}
+                        onPress={() => setSelectedCategory(category.id)}
+                      >
+                        <Icon
+                          name={category.icon}
+                          size={20}
+                          color={
+                            selectedCategory === category.id ? "#FFFFFF" : "#64748B"
+                          }
+                        />
+                        <Text
+                          style={[
+                            styles.categoryButtonText,
+                            selectedCategory === category.id &&
+                              styles.categoryButtonTextActive,
+                          ]}
                         >
-                          <Icon
-                            name={mission.icon || "help-circle"}
-                            size={24}
-                            color={mission.color || "#64748B"}
-                          />
-                        </LinearGradient>
-                        <View style={styles.missionInfoModern}>
-                          <Text style={styles.missionTitleModern}>{mission.title || "Untitled Mission"}</Text>
-                          <View style={styles.missionDescriptionRow}>
-                            <Text style={styles.missionDescriptionModern}>
-                              {mission.description || "No description available"}
-                            </Text>
-                            <View style={styles.missionRewardModern}>
-                              {userMission && userMission.status === "completed" ? (
-                                <View style={styles.completedRewardContainerModern}>
-                                  <Text style={styles.completedRewardTextModern}>
-                                    +{userMission.points_earned}
-                                  </Text>
-                                                                <Icon
-                                name="check-circle"
-                                size={14}
-                                color="#10B981"
+                          {category.title}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </ScrollView>
+                </View>
+
+                {/* Available Missions */}
+                <View style={styles.missionsContainer}>
+                  <Text style={styles.sectionTitle}>Available Missions</Text>
+                  {filteredMissions.length === 0 ? (
+                    <View style={styles.emptyStateContainer}>
+                      <Text style={styles.emptyStateText}>No missions available</Text>
+                      <Text style={styles.emptyStateSubtext}>Check back later for new missions</Text>
+                    </View>
+                  ) : (
+                    <>
+                      {filteredMissions.map((mission) => {
+                        // Skip if mission is invalid
+                        if (!mission || !mission.id) {
+                          return null;
+                        }
+                        
+                        const userMission = userMissions.find(
+                          (um) => um.mission_id === mission.id
+                        );
+
+                    return (
+                      <TouchableOpacity
+                        key={mission.id}
+                        style={styles.missionCardModern}
+                        onPress={() => {
+                          
+                          // Prevent navigation for completed missions
+                          if (userMission && userMission.status === "completed") {
+                            Alert.alert(
+                              "Mission Completed",
+                              "This mission has been completed. You cannot update completed missions.",
+                              [{ text: "OK" }]
+                            );
+                            return;
+                          }
+                          
+                          navigation.navigate("MissionDetail", {
+                            mission,
+                            userMission: userMission || null,
+                          });
+                        }}
+                      >
+                        <LinearGradient
+                          colors={["#FFFFFF", "#F8FAFC"]}
+                          style={styles.missionCardGradient}
+                        >
+                          <View style={styles.missionHeaderModern}>
+                            <LinearGradient
+                              colors={[(mission.color || "#64748B") + "20", (mission.color || "#64748B") + "10"]}
+                              style={styles.missionIconModern}
+                            >
+                              <Icon
+                                name={mission.icon || "help-circle"}
+                                size={24}
+                                color={mission.color || "#64748B"}
                               />
+                            </LinearGradient>
+                            <View style={styles.missionInfoModern}>
+                              <Text style={styles.missionTitleModern}>{mission.title || "Untitled Mission"}</Text>
+                              <View style={styles.missionDescriptionRow}>
+                                <Text style={styles.missionDescriptionModern}>
+                                  {mission.description || "No description available"}
+                                </Text>
+                                <View style={styles.missionRewardModern}>
+                                  {userMission && userMission.status === "completed" ? (
+                                    <View style={styles.completedRewardContainerModern}>
+                                      <Text style={styles.completedRewardTextModern}>
+                                        +{userMission.points_earned}
+                                      </Text>
+                                                                      <Icon
+                                      name="check-circle"
+                                      size={14}
+                                      color="#10B981"
+                                    />
+                                    </View>
+                                  ) : (
+                                    <View style={styles.rewardContainerModern}>
+                                      <Text style={styles.rewardValueModern}>
+                                        {mission.points || 0}
+                                      </Text>
+                                      <Text style={styles.rewardLabelModern}>pts</Text>
+                                    </View>
+                                  )}
+                                </View>
+                              </View>
+                            </View>
+                          </View>
+
+                          <View style={styles.missionFooterModern}>
+                            <View style={styles.difficultyContainerModern}>
+                              <View
+                                style={[
+                                  styles.difficultyBadgeModern,
+                                  {
+                                    backgroundColor:
+                                      mission.difficulty === "easy"
+                                        ? "#10B981"
+                                        : mission.difficulty === "medium"
+                                        ? "#F59E0B"
+                                        : mission.difficulty === "hard"
+                                        ? "#EF4444"
+                                        : "#64748B",
+                                  },
+                                ]}
+                              >
+                                <Text style={styles.difficultyTextModern}>
+                                  {mission.difficulty ? mission.difficulty.charAt(0).toUpperCase() +
+                                    mission.difficulty.slice(1) : "Unknown"}
+                                </Text>
+                              </View>
+                            </View>
+
+                            <View style={styles.missionProgressContainerModern}>
+                              <View style={styles.progressBarModern}>
+                                <LinearGradient
+                                  colors={[(mission.color || "#E53E3E"), (mission.color || "#E53E3E") + "80"]}
+                                  style={[
+                                    styles.progressFillModern,
+                                    {
+                                      width: `${
+                                        userMission && userMission.progress !== undefined
+                                          ? Math.min(userMission.progress, 100)
+                                          : 0
+                                      }%`,
+                                    },
+                                  ]}
+                                />
+                              </View>
+                              <Text style={styles.progressTextModern}>
+                                {userMission && userMission.progress !== undefined
+                                  ? Math.round(userMission.progress)
+                                  : 0}
+                                %
+                              </Text>
+                            </View>
+                          </View>
+                        </LinearGradient>
+
+                        {userMission && userMission.status === "completed" && (
+                          <View style={styles.completedBadgeModern}>
+                            <Text style={styles.completedTextModern}>Completed</Text>
+                          </View>
+                        )}
+                        {userMission && userMission.status === "active" && (
+                          <View style={styles.activeBadgeModern}>
+                            <Icon name="play-circle" size={18} color="#3B82F6" />
+                            <Text style={styles.activeTextModern}>Active</Text>
+                          </View>
+                        )}
+                        {userMission && userMission.status === "cancelled" && (
+                          <View style={styles.cancelledBadgeModern}>
+                            <Icon name="close-circle" size={18} color="#EF4444" />
+                            <Text style={styles.cancelledTextModern}>Cancelled</Text>
+                          </View>
+                        )}
+                        {userMission && userMission.status === "cancelled" && (userMission as any).cancelled_at && (() => {
+                          const timeInfo = calculateTimeRemaining((userMission as any).cancelled_at);
+                          const forceUpdate = cooldownTimer; // Force re-render
+                          return (
+                            <View style={styles.cooldownInfoContainer}>
+                              {timeInfo.canReactivate ? (
+                                <View style={styles.reactivateAvailableContainer}>
+                                  <Icon name="refresh" size={16} color="#10B981" />
+                                  <Text style={styles.reactivateAvailableText}>Dapat diaktifkan kembali</Text>
+                                  <TouchableOpacity
+                                    style={styles.reactivateButton}
+                                    onPress={() => handleReactivateMission(userMission.id, mission.id)}
+                                    disabled={acceptingMission === mission.id}
+                                  >
+                                    <Text style={styles.reactivateButtonText}>
+                                      {acceptingMission === mission.id ? "Mengaktifkan..." : "Aktifkan Kembali"}
+                                    </Text>
+                                  </TouchableOpacity>
                                 </View>
                               ) : (
-                                <View style={styles.rewardContainerModern}>
-                                  <Text style={styles.rewardValueModern}>
-                                    {mission.points || 0}
+                                <View style={styles.cooldownInfoContainer}>
+                                  <Icon name="clock-outline" size={16} color="#F59E0B" />
+                                  <Text style={styles.cooldownInfoText}>
+                                    {timeInfo.hoursRemaining}j {timeInfo.minutesRemaining}m lagi
                                   </Text>
-                                  <Text style={styles.rewardLabelModern}>pts</Text>
                                 </View>
                               )}
                             </View>
-                          </View>
-                        </View>
-                      </View>
-
-                      <View style={styles.missionFooterModern}>
-                        <View style={styles.difficultyContainerModern}>
-                          <View
-                            style={[
-                              styles.difficultyBadgeModern,
-                              {
-                                backgroundColor:
-                                  mission.difficulty === "easy"
-                                    ? "#10B981"
-                                    : mission.difficulty === "medium"
-                                    ? "#F59E0B"
-                                    : mission.difficulty === "hard"
-                                    ? "#EF4444"
-                                    : "#64748B",
-                              },
-                            ]}
-                          >
-                            <Text style={styles.difficultyTextModern}>
-                              {mission.difficulty ? mission.difficulty.charAt(0).toUpperCase() +
-                                mission.difficulty.slice(1) : "Unknown"}
-                            </Text>
-                          </View>
-                        </View>
-
-                        <View style={styles.missionProgressContainerModern}>
-                          <View style={styles.progressBarModern}>
-                            <LinearGradient
-                              colors={[(mission.color || "#E53E3E"), (mission.color || "#E53E3E") + "80"]}
-                              style={[
-                                styles.progressFillModern,
-                                {
-                                  width: `${
-                                    userMission && mission.target_value
-                                      ? Math.min(
-                                          Math.round(
-                                            (userMission.current_value /
-                                              mission.target_value) *
-                                              100
-                                          ),
-                                          100
-                                        )
-                                      : 0
-                                  }%`,
-                                },
-                              ]}
-                            />
-                          </View>
-                          <Text style={styles.progressTextModern}>
-                            {userMission && mission.target_value
-                              ? Math.min(
-                                  Math.round(
-                                    (userMission.current_value /
-                                      mission.target_value) *
-                                      100
-                                  ),
-                                  100
-                                )
-                              : 0}
-                            %
+                          );
+                        })()}
+                      </TouchableOpacity>
+                    );
+                  })}
+                    </>
+                  )}
+                </View>
+              </>
+            ) : (
+              /* History Tab */
+              <View style={styles.missionsContainer}>
+                <Text style={styles.sectionTitle}>Riwayat Mission</Text>
+                {completedMissions.length > 0 ? (
+                  <>
+                    {/* History Summary */}
+                    <View style={styles.historySummaryContainer}>
+                      <View style={styles.historySummaryCard}>
+                        <Icon name="star" size={24} color="#10B981" />
+                        <View style={styles.historySummaryInfo}>
+                          <Text style={styles.historySummaryTitle}>
+                            {totalRewards}
                           </Text>
+                          <Text style={styles.historySummarySubtitle}>Total Poin</Text>
                         </View>
                       </View>
-                    </LinearGradient>
+                      <View style={styles.historySummaryCard}>
+                        <Icon name="calendar-check" size={24} color="#F59E0B" />
+                        <View style={styles.historySummaryInfo}>
+                          <Text style={styles.historySummaryTitle}>{completedMissions.length}</Text>
+                          <Text style={styles.historySummarySubtitle}>Mission</Text>
+                        </View>
+                      </View>
+                    </View>
 
-                    {userMission && userMission.status === "completed" && (
-                      <View style={styles.completedBadgeModern}>
-                        <Text style={styles.completedTextModern}>Completed</Text>
-                      </View>
-                    )}
-                    {userMission && userMission.status === "active" && (
-                      <View style={styles.activeBadgeModern}>
-                        <Icon name="play-circle" size={18} color="#3B82F6" />
-                        <Text style={styles.activeTextModern}>Active</Text>
-                      </View>
-                    )}
-                    {userMission && userMission.status === "cancelled" && (
-                      <View style={styles.cancelledBadgeModern}>
-                        <Icon name="close-circle" size={18} color="#EF4444" />
-                        <Text style={styles.cancelledTextModern}>Cancelled</Text>
-                      </View>
-                    )}
-                    {userMission && userMission.status === "cancelled" && (userMission as any).cancelled_at && (() => {
-                      const timeInfo = calculateTimeRemaining((userMission as any).cancelled_at);
-                      const forceUpdate = cooldownTimer; // Force re-render
+                    {/* Completed Missions List */}
+                    {completedMissions.map((userMission) => {
+                      const mission = missions.find(m => m.id === userMission.mission_id);
+                      if (!mission) return null;
+
                       return (
-                        <View style={styles.cooldownInfoContainer}>
-                          {timeInfo.canReactivate ? (
-                            <View style={styles.reactivateAvailableContainer}>
-                              <Icon name="refresh" size={16} color="#10B981" />
-                              <Text style={styles.reactivateAvailableText}>Dapat diaktifkan kembali</Text>
+                        <View key={userMission.id} style={styles.completedMissionCard}>
+                          <View style={styles.completedMissionHeader}>
+                            <View style={styles.completedMissionIconContainer}>
+                              <Icon name="check-circle" size={20} color="#10B981" />
                             </View>
-                          ) : (
-                            <View style={styles.cooldownInfoContainer}>
-                              <Icon name="clock-outline" size={16} color="#F59E0B" />
-                              <Text style={styles.cooldownInfoText}>
-                                {timeInfo.hours}j {timeInfo.minutes}m lagi
-                              </Text>
+                            <View style={styles.completedMissionInfo}>
+                              <Text style={styles.completedMissionTitle}>{mission.title}</Text>
+                                                             <Text style={styles.completedMissionDate}>
+                                 {new Date(userMission.completed_date || userMission.start_date).toLocaleDateString('id-ID', {
+                                   weekday: 'long',
+                                   year: 'numeric',
+                                   month: 'long',
+                                   day: 'numeric',
+                                   hour: '2-digit',
+                                   minute: '2-digit'
+                                 })}
+                               </Text>
                             </View>
-                          )}
+                            <View style={styles.completedMissionPoints}>
+                              <Icon name="star" size={16} color="#FFFFFF" />
+                              <Text style={styles.completedMissionPointsText}>+{userMission.points_earned || 0}</Text>
+                              <Text style={styles.completedMissionPointsLabel}>points</Text>
+                            </View>
+                          </View>
+                          <View style={styles.completedMissionDetails}>
+                            <Text style={styles.completedMissionDescription}>{mission.description}</Text>
+                            <View style={styles.completedMissionStats}>
+                              <View style={styles.completedMissionStatItem}>
+                                <Icon name="target" size={14} color="#6B7280" />
+                                <Text style={styles.completedMissionStat}>
+                                  {mission.difficulty ? mission.difficulty.charAt(0).toUpperCase() + mission.difficulty.slice(1) : "Unknown"} Level
+                                </Text>
+                              </View>
+                              <View style={styles.completedMissionStatItem}>
+                                <Icon name="fire" size={14} color="#6B7280" />
+                                <Text style={styles.completedMissionStat}>{mission.points || 0} base points</Text>
+                              </View>
+                            </View>
+                          </View>
                         </View>
                       );
-                    })()}
-                  </TouchableOpacity>
-                );
-              })}
-                </>
-              )}
-            </View>
-
-            
+                    })}
+                  </>
+                ) : (
+                  <View style={styles.emptyHistoryContainer}>
+                    <View style={styles.emptyHistoryIconContainer}>
+                      <Icon name="history" size={48} color="#9CA3AF" />
+                    </View>
+                    <Text style={styles.emptyHistoryText}>Belum ada riwayat mission</Text>
+                    <Text style={styles.emptyHistorySubtext}>Mulai lakukan mission untuk melihat riwayat Anda</Text>
+                    <TouchableOpacity
+                      style={styles.emptyHistoryButton}
+                      onPress={() => setActiveTab('available')}
+                    >
+                      <Text style={styles.emptyHistoryButtonText}>Mulai Mission</Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
+              </View>
+            )}
           </>
         )}
       </ScrollView>
@@ -1169,6 +1473,20 @@ const styles = StyleSheet.create({
     color: "#10B981",
     marginLeft: 4,
   },
+  reactivateButton: {
+    marginLeft: 8,
+    backgroundColor: "#10B981",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: "#10B981",
+  },
+  reactivateButtonText: {
+    fontSize: 10,
+    fontWeight: "600",
+    color: "#FFFFFF",
+  },
   cooldownInfoText: {
     fontSize: 10,
     fontWeight: "600",
@@ -1491,7 +1809,220 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: "#F59E0B",
     marginLeft: 4,
+  },
+  historyButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255, 255, 255, 0.2)",
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    marginTop: 16,
+    alignSelf: "center",
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.3)",
+  },
+  historyButtonText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#FFFFFF",
+    marginLeft: 8,
     letterSpacing: -0.2,
+  },
+  // Tab styles
+  mockDataContainer: {
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+  },
+  tabContainer: {
+    flexDirection: "row",
+    backgroundColor: "#FFFFFF",
+    marginHorizontal: 20,
+    marginVertical: 10,
+    borderRadius: 12,
+    padding: 4,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  tabButton: {
+    flex: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  activeTabButton: {
+    backgroundColor: "#E53E3E",
+  },
+  tabButtonText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#64748B",
+  },
+  activeTabButtonText: {
+    color: "#FFFFFF",
+  },
+  // History styles
+  historySummaryContainer: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: 20,
+  },
+  historySummaryCard: {
+    flex: 1,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 16,
+    padding: 16,
+    marginHorizontal: 4,
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  historySummaryInfo: {
+    alignItems: "center",
+    marginTop: 8,
+  },
+  historySummaryTitle: {
+    fontSize: 20,
+    fontWeight: "800",
+    color: "#1F2937",
+    letterSpacing: -0.5,
+  },
+  historySummarySubtitle: {
+    fontSize: 12,
+    color: "#64748B",
+    fontWeight: "600",
+    marginTop: 2,
+  },
+  completedMissionCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 12,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  completedMissionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 12,
+  },
+  completedMissionIconContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "#F0FDF4",
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 12,
+  },
+  completedMissionInfo: {
+    flex: 1,
+  },
+  completedMissionTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#1F2937",
+    marginBottom: 4,
+  },
+  completedMissionDate: {
+    fontSize: 12,
+    color: "#64748B",
+    fontWeight: "500",
+  },
+  completedMissionPoints: {
+    alignItems: "center",
+    backgroundColor: "#10B981",
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  completedMissionPointsText: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: "#FFFFFF",
+    letterSpacing: -0.5,
+  },
+  completedMissionPointsLabel: {
+    fontSize: 10,
+    color: "#FFFFFF",
+    fontWeight: "600",
+    opacity: 0.9,
+  },
+  completedMissionDetails: {
+    borderTopWidth: 1,
+    borderTopColor: "#F1F5F9",
+    paddingTop: 12,
+  },
+  completedMissionDescription: {
+    fontSize: 14,
+    color: "#64748B",
+    lineHeight: 20,
+    marginBottom: 8,
+  },
+  completedMissionStats: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+  },
+  completedMissionStatItem: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  completedMissionStat: {
+    fontSize: 12,
+    color: "#64748B",
+    fontWeight: "600",
+    marginLeft: 4,
+  },
+  emptyHistoryContainer: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 40,
+    paddingHorizontal: 20,
+  },
+  emptyHistoryIconContainer: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: "#F3F4F6",
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 16,
+  },
+  emptyHistoryText: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#6B7280",
+    textAlign: "center",
+    marginBottom: 8,
+  },
+  emptyHistorySubtext: {
+    fontSize: 14,
+    color: "#9CA3AF",
+    textAlign: "center",
+    marginBottom: 24,
+  },
+  emptyHistoryButton: {
+    backgroundColor: "#E53E3E",
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 20,
+  },
+  emptyHistoryButtonText: {
+    color: "#FFFFFF",
+    fontSize: 16,
+    fontWeight: "600",
   },
 });
 

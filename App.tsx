@@ -27,18 +27,23 @@ import ProfileScreen from "./src/screens/ProfileScreen";
 import CalculatorScreen from "./src/screens/CalculatorScreen";
 import AllCalculatorsScreen from "./src/screens/AllCalculatorsScreen";
 import PersonalInformationScreen from "./src/screens/PersonalInformationScreen";
-import MissionDetailScreen from "./src/screens/MissionDetailScreen";
+import MissionDetailScreen from "./src/screens/MissionDetailScreenNew";
+
 import NotificationScreen from "./src/screens/NotificationScreen";
 import ChatAssistantScreen from "./src/screens/ChatAssistantScreen";
 
 import ChatDetailScreen from "./src/screens/ChatDetailScreen";
 import LoginScreen from "./src/screens/LoginScreen";
 import RegisterScreen from "./src/screens/RegisterScreen";
+import ForgotPasswordScreen from "./src/screens/ForgotPasswordScreen";
+import ResetPasswordScreen from "./src/screens/ResetPasswordScreen";
+import ForgotPinScreen from "./src/screens/ForgotPinScreen";
 import MoodTrackingScreen from "./src/screens/MoodTrackingScreen";
 import MoodInputScreen from "./src/screens/MoodInputScreen";
 import HealthInsightsScreen from "./src/screens/HealthInsightsScreen";
 import WaterTrackingScreen from "./src/screens/WaterTrackingScreen";
 import SleepTrackingScreen from "./src/screens/SleepTrackingScreen";
+import SleepHistoryScreen from "./src/screens/SleepHistoryScreen";
 import MealLoggingScreen from "./src/screens/MealLoggingScreen";
 import FitnessTrackingScreen from "./src/screens/FitnessTrackingScreen";
 import RealtimeFitnessScreen from "./src/screens/RealtimeFitnessScreen";
@@ -55,10 +60,10 @@ import ConsultationDetailScreen from "./src/screens/ConsultationDetailScreen";
 import ConsultationHistoryScreen from "./src/screens/ConsultationHistoryScreen";
 
 // Import new separated apps
-import WellnessApp, { TestWellnessApp } from "./src/screens/WellnessApp";
-import WellnessDebugScreen from "./src/screens/WellnessDebugScreen";
+import WellnessApp from "./src/screens/WellnessApp";
 // import ClinicsApp from "./src/screens/ClinicsApp"; // Temporarily commented out
 import ActivityScreen from "./src/screens/ActivityScreen";
+import HabitActivityScreen from "./src/screens/HabitActivityScreen";
 import WellnessActivityDetailScreen from "./src/screens/WellnessActivityDetailScreen";
 import WellnessActivityCompletionScreen from "./src/screens/WellnessActivityCompletionScreen";
 import AnthropometryScreen from "./src/screens/AnthropometryScreen";
@@ -69,20 +74,23 @@ import HealthGoalsScreen from "./src/screens/HealthGoalsScreen";
 import MedicalHistoryScreen from "./src/screens/MedicalHistoryScreen";
 import WellnessHistoryScreen from "./src/screens/WellnessHistoryScreen";
 import PrivacySettingsScreen from "./src/screens/PrivacySettingsScreen";
+import PinSettingsScreen from "./src/screens/PinSettingsScreen";
 import HelpSupportScreen from "./src/screens/HelpSupportScreen";
 import AboutAppScreen from "./src/screens/AboutAppScreen";
-import DebugScreen from "./src/screens/DebugScreen";
+
 
 // Import theme and context
 import { theme } from "./src/theme/theme";
 import { AuthProvider, useAuth } from "./src/contexts/AuthContext";
+import { PinProvider, usePin } from "./src/contexts/PinContext";
 import { RootStackParamList } from "./src/types/navigation";
+import PinOverlay from "./src/components/PinOverlay";
 
 
 const Stack = createStackNavigator<RootStackParamList>();
 
 function AppContent() {
-  const { isLoading, isAuthenticated } = useAuth();
+  const { isLoading, isAuthenticated, setNavigation } = useAuth();
   const [isFirstLaunch, setIsFirstLaunch] = React.useState<boolean | null>(
     null
   );
@@ -137,10 +145,15 @@ function AppContent() {
 
   // If first launch, show welcome
   if (isFirstLaunch) {
-    console.log("App: Showing first launch flow");
-    return (
-      <PaperProvider theme={theme}>
-        <NavigationContainer key="first-launch">
+      return (
+    <PaperProvider theme={theme}>
+      <PinOverlay>
+        <NavigationContainer 
+          key="first-launch"
+          onReady={(navigationRef: any) => {
+            setNavigation(navigationRef);
+          }}
+        >
           <StatusBar style="light" backgroundColor="#D32F2F" />
           <Stack.Navigator>
             <Stack.Screen
@@ -167,28 +180,33 @@ function AppContent() {
             />
           </Stack.Navigator>
         </NavigationContainer>
-      </PaperProvider>
-    );
+      </PinOverlay>
+    </PaperProvider>
+  );
   }
 
   // Show main app with proper navigation
-  console.log("App: Showing main app with proper navigation");
-
   return (
     <PaperProvider theme={theme}>
-      <NavigationContainer key="main-app">
-        <StatusBar style="light" backgroundColor="#D32F2F" />
-        <Stack.Navigator
-          screenOptions={{
-            headerStyle: {
-              backgroundColor: "#D32F2F",
-            },
-            headerTintColor: "#fff",
-            headerTitleStyle: {
-              fontWeight: "bold",
-            },
+      <PinOverlay>
+        <NavigationContainer 
+          key="main-app"
+          onReady={(navigationRef: any) => {
+            setNavigation(navigationRef);
           }}
         >
+          <StatusBar style="light" backgroundColor="#D32F2F" />
+          <Stack.Navigator
+            screenOptions={{
+              headerStyle: {
+                backgroundColor: "#D32F2F",
+              },
+              headerTintColor: "#fff",
+              headerTitleStyle: {
+                fontWeight: "bold",
+              },
+            }}
+          >
           {/* Main app screens - accessible without authentication */}
           <Stack.Screen
             name="Main"
@@ -212,6 +230,21 @@ function AppContent() {
           <Stack.Screen
             name="Register"
             component={RegisterScreen}
+            options={{ headerShown: false }}
+          />
+          <Stack.Screen
+            name="ForgotPassword"
+            component={ForgotPasswordScreen}
+            options={{ headerShown: false }}
+          />
+          <Stack.Screen
+            name="ResetPassword"
+            component={ResetPasswordScreen}
+            options={{ headerShown: false }}
+          />
+          <Stack.Screen
+            name="ForgotPin"
+            component={ForgotPinScreen}
             options={{ headerShown: false }}
           />
 
@@ -239,6 +272,11 @@ function AppContent() {
             name="Activity"
             component={ActivityScreen}
             options={{ title: "Activity Tracking" }}
+          />
+          <Stack.Screen
+            name="HabitActivity"
+            component={HabitActivityScreen}
+            options={{ title: "Habit Activities" }}
           />
           <Stack.Screen
             name="WellnessActivityDetail"
@@ -337,6 +375,11 @@ function AppContent() {
             options={{ title: "Sleep Tracking" }}
           />
           <Stack.Screen
+            name="SleepHistory"
+            component={SleepHistoryScreen}
+            options={{ title: "Sleep History" }}
+          />
+          <Stack.Screen
             name="MealLogging"
             component={MealLoggingScreen}
             options={{ title: "Log Meal" }}
@@ -375,6 +418,7 @@ function AppContent() {
                 component={DailyMissionScreen}
                 options={{ title: "Daily Mission" }}
               />
+
               <Stack.Screen
                 name="Profile"
                 component={ProfileScreen}
@@ -396,6 +440,11 @@ function AppContent() {
                 options={{ title: "Wellness History" }}
               />
               <Stack.Screen
+                name="PinSettings"
+                component={PinSettingsScreen}
+                options={{ headerShown: false }}
+              />
+              <Stack.Screen
                 name="PrivacySettings"
                 component={PrivacySettingsScreen}
                 options={{ title: "Privacy Settings" }}
@@ -410,11 +459,7 @@ function AppContent() {
                 component={AboutAppScreen}
                 options={{ title: "About App" }}
               />
-              <Stack.Screen
-                name="Debug"
-                component={DebugScreen}
-                options={{ title: "Debug Tools" }}
-              />
+
               <Stack.Screen
                 name="PersonalInformation"
                 component={PersonalInformationScreen}
@@ -480,11 +525,6 @@ function AppContent() {
                 component={WellnessApp}
                 options={{ headerShown: false }}
               />
-              <Stack.Screen
-                name="WellnessDebug"
-                component={WellnessDebugScreen}
-                options={{ headerShown: false }}
-              />
               {/* ClinicsApp and related screens - temporarily commented out */}
               {/* <Stack.Screen
                 name="ClinicsApp"
@@ -506,6 +546,7 @@ function AppContent() {
           )}
         </Stack.Navigator>
       </NavigationContainer>
+      </PinOverlay>
     </PaperProvider>
   );
 }
@@ -513,7 +554,9 @@ function AppContent() {
 export default function App() {
   return (
     <AuthProvider>
-      <AppContent />
+      <PinProvider>
+        <AppContent />
+      </PinProvider>
     </AuthProvider>
   );
 }

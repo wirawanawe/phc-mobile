@@ -216,7 +216,7 @@ const PrivacySettingsScreen = ({ navigation }: any) => {
         </View>
 
         {/* Privacy Settings Section */}
-        <View style={styles.section}>
+        {/* <View style={styles.section}>
           <Text style={styles.sectionTitle}>Pengaturan Privasi</Text>
           <Card style={styles.card}>
             <Card.Content>
@@ -274,7 +274,7 @@ const PrivacySettingsScreen = ({ navigation }: any) => {
               )}
             </Card.Content>
           </Card>
-        </View>
+        </View> */}
 
         {/* Account Management Section */}
         <View style={styles.section}>

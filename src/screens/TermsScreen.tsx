@@ -48,7 +48,7 @@ const TermsScreen = ({ navigation, onTermsAccepted }: any) => {
         <SafeAreaView style={styles.safeArea}>
           <View style={styles.header}>
             <View style={styles.logoContainer}>
-              <LogoPutih size="medium" showText={true} />
+              <LogoPutih size={400} />
             </View>
             <View style={styles.headerText}>
               <Text style={styles.title}>Syarat & Ketentuan</Text>
@@ -177,7 +177,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
   },
   logoContainer: {
-    marginBottom: 20,
   },
   headerText: {
     alignItems: "center",
@@ -203,7 +202,6 @@ const styles = StyleSheet.create({
   },
   cardsContainer: {
     paddingHorizontal: 20,
-    paddingTop: 10,
   },
   termsCard: {
     marginBottom: 16,

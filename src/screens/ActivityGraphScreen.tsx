@@ -20,6 +20,7 @@ import { useAuth } from "../contexts/AuthContext";
 import { useFocusEffect } from "@react-navigation/native";
 import apiService from "../services/api";
 import { safeGoBack } from "../utils/safeNavigation";
+import { formatDateToLocalYYYYMMDD } from "../utils/dateUtils";
 import eventEmitter from "../utils/eventEmitter";
 
 const { width } = Dimensions.get("window");
@@ -68,7 +69,7 @@ const ActivityGraphScreen = ({ navigation }: any) => {
       date.setDate(date.getDate() - i);
       
       data.push({
-        date: date.toISOString().split('T')[0],
+        date: formatDateToLocalYYYYMMDD(date),
         steps: Math.floor(Math.random() * 9000) + 1000, // 1000-10000 steps
         waterIntake: Math.floor(Math.random() * 4000) + 1000, // 1000-5000 ml
         sleepHours: Math.random() * 11 + 1, // 1-12 hours
@@ -92,18 +93,19 @@ const ActivityGraphScreen = ({ navigation }: any) => {
       // Prepare 7-day window
       const end = new Date();
       const start = new Date(Date.now() - 6 * 24 * 60 * 60 * 1000);
-      const endDateStr = end.toISOString().split("T")[0];
-      const startDateStr = start.toISOString().split("T")[0];
+          const endDateStr = formatDateToLocalYYYYMMDD(end);
+    const startDateStr = formatDateToLocalYYYYMMDD(start);
 
       // Fetch weekly summary (includes fitness, water, sleep, nutrition, and mood)
       const weeklySummaryRes = await apiService.getWeeklySummary();
+      console.log('📈 Weekly summary response:', weeklySummaryRes);
 
       // Build index maps per date
       const dates: string[] = [];
       for (let i = 6; i >= 0; i--) {
         const d = new Date(end);
         d.setDate(end.getDate() - i);
-        dates.push(d.toISOString().split("T")[0]);
+        dates.push(formatDateToLocalYYYYMMDD(d));
       }
 
       const fitnessByDate: Record<string, { steps: number; exercise_minutes: number; calories?: number }> = {};
@@ -118,10 +120,11 @@ const ActivityGraphScreen = ({ navigation }: any) => {
         const water = breakdown.water || [];
         const sleep = breakdown.sleep || [];
         const nutrition = breakdown.nutrition || [];
+        console.log('🍽️ Nutrition breakdown:', nutrition);
         const mood = breakdown.mood || [];
 
         fitness.forEach((row: any) => {
-          const dateKey = new Date(row.date).toISOString().split('T')[0];
+          const dateKey = formatDateToLocalYYYYMMDD(new Date(row.date));
           fitnessByDate[dateKey] = {
             steps: Number(row.total_steps || 0),
             exercise_minutes: Number(row.total_exercise_minutes || 0),
@@ -129,23 +132,25 @@ const ActivityGraphScreen = ({ navigation }: any) => {
         });
 
         water.forEach((row: any) => {
-          const dateKey = new Date(row.date).toISOString().split('T')[0];
+          const dateKey = formatDateToLocalYYYYMMDD(new Date(row.date));
           waterByDate[dateKey] = Number(row.total_ml || 0);
         });
 
         sleep.forEach((row: any) => {
-          const dateKey = new Date(row.date).toISOString().split('T')[0];
+          const dateKey = formatDateToLocalYYYYMMDD(new Date(row.date));
           sleepByDate[dateKey] = Number(row.total_hours || 0);
         });
 
         nutrition.forEach((row: any) => {
-          const dateKey = new Date(row.date).toISOString().split('T')[0];
-          caloriesByDate[dateKey] = Number(row.total_calories || 0);
+          const dateKey = formatDateToLocalYYYYMMDD(new Date(row.date));
+          const calories = Number(row.total_calories || 0);
+          caloriesByDate[dateKey] = calories;
+          console.log(`🍽️ Calories for ${dateKey}: ${calories}`);
         });
         
         // Mood: average mood score per day from weekly summary
         mood.forEach((row: any) => {
-          const dateKey = new Date(row.date).toISOString().split('T')[0];
+          const dateKey = formatDateToLocalYYYYMMDD(new Date(row.date));
           moodByDate[dateKey] = Number(row.avg_mood_score || 0);
         });
       }
@@ -154,6 +159,8 @@ const ActivityGraphScreen = ({ navigation }: any) => {
 
       const realData: WeeklyData[] = dates.map((date) => {
         const fitness = fitnessByDate[date] || { steps: 0, exercise_minutes: 0 };
+        const calories = caloriesByDate[date] ?? 0;
+        console.log(`📊 Final data for ${date}: calories = ${calories}`);
         return {
           date,
           steps: fitness.steps,
@@ -161,7 +168,7 @@ const ActivityGraphScreen = ({ navigation }: any) => {
           sleepHours: sleepByDate[date] ?? 0,
           moodScore: moodByDate[date] ?? 0,
           exerciseMinutes: fitness.exercise_minutes,
-          calories: caloriesByDate[date] ?? 0,
+          calories: calories,
         };
       });
 
@@ -182,7 +189,7 @@ const ActivityGraphScreen = ({ navigation }: any) => {
       for (let i = 6; i >= 0; i--) {
         const d = new Date(end);
         d.setDate(end.getDate() - i);
-        dates.push(d.toISOString().split("T")[0]);
+        dates.push(formatDateToLocalYYYYMMDD(d));
       }
       setWeeklyData(
         dates.map((date) => ({
@@ -557,7 +564,7 @@ const ActivityGraphScreen = ({ navigation }: any) => {
           
           {weeklyData.map((item, index) => {
             const dateObj = new Date(item.date);
-            const labelDow = dateObj.toLocaleDateString('en-US', { weekday: 'short' });
+            const labelDow = dateObj.toLocaleDateString('id-ID', { weekday: 'short' });
             const labelDate = dateObj.getDate().toString().padStart(2, '0');
             const value = chartData.datasets[0].data[index];
             const maxValueForChart = getMaxValue();

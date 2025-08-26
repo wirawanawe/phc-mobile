@@ -17,6 +17,8 @@ import { CustomTheme } from "../theme/theme";
 import apiService from "../services/api";
 import { useAuth } from "../contexts/AuthContext";
 import { safeGoBack } from "../utils/safeNavigation";
+import SimpleDatePicker from "../components/SimpleDatePicker";
+import eventEmitter from "../utils/eventEmitter";
 
 const { width, height } = Dimensions.get("window");
 
@@ -48,8 +50,9 @@ const AnthropometryScreen = ({ navigation }: any) => {
   const [initialData, setInitialData] = useState<any>(null);
   const [inputWeight, setInputWeight] = useState("");
   const [inputHeight, setInputHeight] = useState("");
-
-
+  
+  // Date filter state
+  const [selectedDate, setSelectedDate] = useState(new Date());
 
   useEffect(() => {
     loadAnthropometryData();
@@ -57,7 +60,12 @@ const AnthropometryScreen = ({ navigation }: any) => {
     loadProgressData();
   }, []);
 
-
+  // Reload data when selected date changes
+  useEffect(() => {
+    loadAnthropometryData();
+    loadHistoryData();
+    loadProgressData(); // This will filter by measured_date
+  }, [selectedDate]);
 
   // Update input fields when anthropometry data changes
   useEffect(() => {
@@ -74,9 +82,14 @@ const AnthropometryScreen = ({ navigation }: any) => {
     
     try {
       setIsLoading(true);
+      // Convert selected date to string format for API
+      const dateString = selectedDate.toLocaleDateString('en-CA'); // YYYY-MM-DD format
+  
+      
       const response = await apiService.getHealthData({ 
         user_id: user.id,
-        data_type: "weight,height"
+        data_type: "weight,height",
+        date: dateString
       });
 
       if (response.success && response.summary?.latest_entries) {
@@ -101,9 +114,13 @@ const AnthropometryScreen = ({ navigation }: any) => {
     
     try {
       setIsLoadingHistory(true);
+      // Convert selected date to string format for API
+      const dateString = selectedDate.toLocaleDateString('en-CA'); // YYYY-MM-DD format
+      
       const response = await apiService.getHealthData({ 
         user_id: user.id,
-        limit: 50
+        limit: 50,
+        date: dateString
       });
 
       if (response.success && response.data) {
@@ -121,17 +138,34 @@ const AnthropometryScreen = ({ navigation }: any) => {
     
     try {
       setIsLoadingProgress(true);
+      // Convert selected date to string format for API
+      const dateString = selectedDate.toLocaleDateString('en-CA'); // YYYY-MM-DD format
+  
+      
+      // Load anthropometry progress data filtered by measured_date
       const response = await apiService.getAnthropometryProgress({ 
         user_id: user.id,
-        limit: 30
+        limit: 30,
+        measured_date: dateString // Filter by measured_date field in anthropometry_progress table
       });
 
       if (response.success && response.data) {
-        setProgressData(response.data);
+        // Additional client-side filtering to ensure we only show data for the exact measured_date
+        const filteredData = response.data.filter((entry: any) => {
+          const entryDate = new Date(entry.measured_date);
+          const entryDateString = entryDate.toLocaleDateString('en-CA');
+          return entryDateString === dateString;
+        });
+        
+    
+        setProgressData(filteredData);
         setInitialData(response.summary?.initial_data);
+      } else {
+        setProgressData([]);
       }
     } catch (error) {
       console.error("Error loading progress data:", error);
+      setProgressData([]);
     } finally {
       setIsLoadingProgress(false);
     }
@@ -247,6 +281,9 @@ const AnthropometryScreen = ({ navigation }: any) => {
         [{ text: "OK" }]
       );
       
+      // Emit event for tracking history update
+      eventEmitter.emit('anthropometryLogged');
+      
       // Reload data
       loadAnthropometryData();
       loadHistoryData();
@@ -279,6 +316,10 @@ const AnthropometryScreen = ({ navigation }: any) => {
     });
   };
 
+  const handleDateChange = (date: Date) => {
+    setSelectedDate(date);
+  };
+
     return (
     <SafeAreaView style={styles.safeArea}>
       <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
@@ -301,6 +342,7 @@ const AnthropometryScreen = ({ navigation }: any) => {
             onPress={() => {
               loadAnthropometryData();
               loadHistoryData();
+              loadProgressData();
             }}
             disabled={isLoading}
           >
@@ -396,10 +438,13 @@ const AnthropometryScreen = ({ navigation }: any) => {
           {initialData && (
             <View style={styles.progressSection}>
               <Text style={styles.progressTitle}>Progress Summary</Text>
+              <Text style={styles.progressSubtitle}>
+                Perbandingan data awal dengan data terbaru
+              </Text>
               <View style={styles.progressCard}>
                 <View style={styles.progressHeader}>
-                  <Text style={styles.progressSubtitle}>Data Awal</Text>
-                  <Text style={styles.progressSubtitle}>Data Terbaru</Text>
+                  <Text style={styles.progressHeaderSubtitle}>Data Awal</Text>
+                  <Text style={styles.progressHeaderSubtitle}>Data Terbaru</Text>
                 </View>
                 <View style={styles.progressRow}>
                   <View style={styles.progressItem}>
@@ -433,7 +478,38 @@ const AnthropometryScreen = ({ navigation }: any) => {
 
           {/* Recent Progress */}
           <View style={styles.historySection}>
-            <Text style={styles.historyTitle}>Recent Progress</Text>
+            <View style={styles.historyHeader}>
+              <View style={styles.historyTitleContainer}>
+                <Text style={styles.historyTitle}>Progress Data</Text>
+                <Text style={styles.historySubtitle}>
+                  Data pengukuran untuk tanggal {selectedDate.toLocaleDateString('id-ID', {
+                    weekday: 'long',
+                    year: 'numeric',
+                    month: 'long',
+                    day: 'numeric',
+                  })}
+                </Text>
+              </View>
+              <TouchableOpacity
+                style={styles.refreshProgressButton}
+                onPress={() => loadProgressData()}
+                disabled={isLoadingProgress}
+              >
+                <Icon name="refresh" size={20} color="#6B7280" />
+              </TouchableOpacity>
+            </View>
+            
+            {/* Date Filter for Progress Data */}
+            <View style={styles.dateFilterContainer}>
+              <Text style={styles.dateFilterLabel}>Filter berdasarkan Tanggal Pengukuran:</Text>
+              <SimpleDatePicker
+                selectedDate={selectedDate}
+                onDateChange={handleDateChange}
+                theme={theme}
+                title="Pilih Tanggal Pengukuran"
+                variant="light"
+              />
+            </View>
             {isLoadingProgress ? (
               <View style={styles.loadingContainer}>
                 <ActivityIndicator size="large" color="#3B82F6" />
@@ -475,9 +551,13 @@ const AnthropometryScreen = ({ navigation }: any) => {
             ) : (
               <View style={styles.emptyState}>
                 <Icon name="trending-up" size={48} color="#9CA3AF" />
-                <Text style={styles.emptyStateTitle}>No progress data yet</Text>
+                <Text style={styles.emptyStateTitle}>Tidak ada data pengukuran</Text>
                 <Text style={styles.emptyStateSubtitle}>
-                  Start tracking your daily measurements
+                  Tidak ada data pengukuran untuk tanggal {selectedDate.toLocaleDateString('id-ID', {
+                    day: '2-digit',
+                    month: 'short',
+                    year: 'numeric',
+                  })}
                 </Text>
               </View>
             )}
@@ -528,6 +608,15 @@ const styles = StyleSheet.create({
   },
   refreshButton: {
     padding: 5,
+  },
+  dateFilterContainer: {
+    marginBottom: 16,
+  },
+  dateFilterLabel: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#374151",
+    marginBottom: 8,
   },
   scrollView: {
     flex: 1,
@@ -663,7 +752,25 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "700",
     color: "#1F2937",
+    marginBottom: 8,
+  },
+  historySubtitle: {
+    fontSize: 14,
+    color: "#6B7280",
     marginBottom: 16,
+  },
+  historyHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    marginBottom: 16,
+  },
+  historyTitleContainer: {
+    flex: 1,
+  },
+  refreshProgressButton: {
+    padding: 8,
+    marginLeft: 12,
   },
   bmiCard: {
     margin: 20,
@@ -848,6 +955,11 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "700",
     color: "#1F2937",
+    marginBottom: 8,
+  },
+  progressSubtitle: {
+    fontSize: 14,
+    color: "#6B7280",
     marginBottom: 16,
   },
   progressCard: {
@@ -860,7 +972,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     marginBottom: 12,
   },
-  progressSubtitle: {
+  progressHeaderSubtitle: {
     fontSize: 14,
     fontWeight: "600",
     color: "#6B7280",

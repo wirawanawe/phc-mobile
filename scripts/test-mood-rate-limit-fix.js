@@ -1,6 +1,6 @@
 const axios = require('axios');
 
-const BASE_URL = 'http://localhost:3000/api';
+const BASE_URL = 'https://dash.doctorphc.id/api';
 
 async function testMoodRateLimitFix() {
   console.log('🧪 Testing Mood Tracking Rate Limit Fix...\n');

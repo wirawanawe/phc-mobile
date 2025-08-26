@@ -1,7 +1,7 @@
 const axios = require('axios');
 
 // Test configuration
-const BASE_URL = 'http://localhost:3000/api/mobile';
+const BASE_URL = 'https://dash.doctorphc.id/api/mobile';
 const TEST_USER_ID = 1; // Assuming user ID 1 exists
 
 // Mock authentication token (you may need to get a real token)
@@ -118,7 +118,7 @@ async function testDatabaseConnection() {
     const mysql = require('mysql2/promise');
     
     const dbConfig = {
-      host: 'localhost',
+      host: 'dash.doctorphc.id',
       user: 'root',
       password: 'your_password_here', // Replace with your actual password
       database: 'phc_dashboard'

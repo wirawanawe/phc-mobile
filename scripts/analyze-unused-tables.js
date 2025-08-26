@@ -1,227 +1,195 @@
 const mysql = require('mysql2/promise');
-const fs = require('fs');
-const path = require('path');
 
-// Database configuration
+// Database configuration - update these values based on your setup
 const dbConfig = {
-  host: process.env.DB_HOST || 'localhost',
-  user: process.env.DB_USER || 'root',
-  password: process.env.DB_PASSWORD || '',
-  database: process.env.DB_NAME || 'phc_dashboard',
-  port: process.env.DB_PORT || 3306
+  host: 'localhost',
+  user: 'root',
+  password: '', // Update this if you have a password
+  database: 'phc_dashboard',
+  port: 3306
 };
 
-// Tables that are definitely used (based on codebase analysis)
-const USED_TABLES = [
-  // Core user tables
-  'users',
-  'mobile_users',
+// Tables that are actively used in the application (based on codebase analysis)
+const ACTIVE_TABLES = {
+  // Dashboard tables
+  'users': 'User authentication and management',
+  'clinics': 'Clinic information',
+  'doctors': 'Doctor information',
+  'polyclinics': 'Polyclinic information',
+  'insurances': 'Insurance information',
+  'companies': 'Company information',
+  'treatments': 'Treatment information',
+  'icd': 'ICD codes',
+  'patients': 'Patient information',
+  'visits': 'Visit information',
+  'examinations': 'Examination information',
+  'medicines': 'Medicine inventory',
+  'clinic_rooms': 'Clinic room management',
+  'clinic_polyclinics': 'Clinic-polyclinic relationships',
+  'phc_office_admin': 'Admin information',
+  'postal_codes': 'Postal code information',
+  'services': 'Service information',
+  'bookings': 'Booking information',
+  'consultations': 'Consultation information',
+  'assessments': 'Assessment information',
+  'chats': 'Chat information',
+  'chat_messages': 'Chat message information',
+  'user_cache': 'User cache information',
+  'user_imports': 'User import information',
+  'help_content': 'Help content',
+  'education_content': 'Education content',
+  'available_wellness_activities': 'Wellness activities',
+  'available_habit_activities': 'Habit activities',
+  'user_habit_activities': 'User habit activities',
+  'user_wellness_activities': 'User wellness activities',
+  'mobile_visits': 'Mobile visit information',
+  'anthropometry_progress': 'Anthropometry progress',
   
-  // Tracking tables (actively used)
-  'fitness_tracking',
-  'mood_tracking', 
-  'water_tracking',
-  'sleep_tracking',
-  'meal_tracking',
-    'meal_foods',
-  
-  // Wellness tables
-  'wellness_activities',
-  'user_wellness_activities',
-  'user_missions',
-  'user_quick_foods',
-  
-  // Communication tables
-  'chats',
-  'chat_messages',
-  
-  // Booking/Consultation tables
-  'consultations',
-  'bookings',
-  
-  // Health data
-  'health_data',
-  
-  // Master data tables (referenced in code)
-  'doctors',
-  'clinics',
-  'services',
-  'polyclinics',
-  'companies',
-  'insurances',
-  'treatments',
-  'medicines',
-  'patients',
-  'visits',
-  'examinations',
-  'assessments',
-  'icd',
-  'food_database',
-  'missions',
-  'available_wellness_activities',
-  'clinic_polyclinics',
-  'clinic_rooms',
-  'doctor_specializations',
-  'phc_office_admin',
-  'user_water_settings',
-  'v_medicine_with_clinic'
-];
+  // Mobile tables
+  'mobile_users': 'Mobile user information',
+  'food_database': 'Food database',
+  'missions': 'Mission information',
+  'user_missions': 'User mission tracking',
+  'wellness_activities': 'Wellness activities',
+  'mood_tracking': 'Mood tracking',
+  'water_tracking': 'Water tracking',
+  'user_water_settings': 'User water settings',
+  'sleep_tracking': 'Sleep tracking',
+  'meal_tracking': 'Meal tracking',
+  'meal_foods': 'Meal food items',
+  'fitness_tracking': 'Fitness tracking',
+  'user_quick_foods': 'User quick foods',
+  'health_data': 'Health data'
+};
 
-// Tables that should NOT be dropped (system tables, views, etc.)
-const PROTECTED_TABLES = [
-  'information_schema',
-  'mysql',
-  'performance_schema',
-  'sys',
-  'v_medicine_with_clinic' // This is a view
-];
-
-async function analyzeUnusedTables() {
+async function analyzeDatabase() {
   let connection;
   
   try {
-    console.log('🔍 Menganalisis tabel yang tidak digunakan...');
-    console.log('=' .repeat(60));
+    console.log('🔍 Analyzing database for unused tables...\n');
+    console.log('Database config:', {
+      host: dbConfig.host,
+      user: dbConfig.user,
+      database: dbConfig.database,
+      port: dbConfig.port
+    });
     
     // Connect to database
     connection = await mysql.createConnection(dbConfig);
-    console.log('✅ Terhubung ke database:', dbConfig.database);
+    console.log('✅ Connected to database successfully');
     
-    // Get all tables in database
+    // Get all tables in the database
     const [tables] = await connection.execute(`
       SELECT TABLE_NAME 
       FROM INFORMATION_SCHEMA.TABLES 
-      WHERE TABLE_SCHEMA = ? 
-      AND TABLE_TYPE = 'BASE TABLE'
+      WHERE TABLE_SCHEMA = 'phc_dashboard' 
       ORDER BY TABLE_NAME
-    `, [dbConfig.database]);
+    `);
     
-    console.log(`📊 Total tabel di database: ${tables.length}`);
+    const existingTables = tables.map(row => row.TABLE_NAME);
     
-    // Analyze which tables are used
-    const usedTables = new Set(USED_TABLES);
-    const protectedTables = new Set(PROTECTED_TABLES);
+    console.log(`📊 Found ${existingTables.length} tables in database:\n`);
     
+    // Categorize tables
+    const activeTables = [];
     const unusedTables = [];
-    const usedTablesFound = [];
-    const protectedTablesFound = [];
+    const unknownTables = [];
     
-    for (const table of tables) {
-      const tableName = table.TABLE_NAME;
-      
-      if (protectedTables.has(tableName)) {
-        protectedTablesFound.push(tableName);
-      } else if (usedTables.has(tableName)) {
-        usedTablesFound.push(tableName);
+    existingTables.forEach(tableName => {
+      if (ACTIVE_TABLES[tableName]) {
+        activeTables.push({
+          name: tableName,
+          description: ACTIVE_TABLES[tableName]
+        });
       } else {
-        unusedTables.push(tableName);
+        // Check if it might be a system table or temporary table
+        if (tableName.startsWith('__') || 
+            tableName.includes('temp') || 
+            tableName.includes('backup') ||
+            tableName.includes('old_') ||
+            tableName.includes('test_')) {
+          unusedTables.push({
+            name: tableName,
+            reason: 'System/temporary table'
+          });
+        } else {
+          unknownTables.push({
+            name: tableName,
+            reason: 'Not found in active tables list'
+          });
+        }
       }
-    }
+    });
     
     // Display results
-    console.log('\n📋 HASIL ANALISIS:');
-    console.log('=' .repeat(60));
-    
-    console.log(`✅ Tabel yang digunakan (${usedTablesFound.length}):`);
-    usedTablesFound.forEach(table => {
-      console.log(`   - ${table}`);
+    console.log('✅ ACTIVE TABLES (Keep):');
+    console.log('=' .repeat(50));
+    activeTables.forEach(table => {
+      console.log(`  • ${table.name.padEnd(30)} - ${table.description}`);
     });
     
-    console.log(`🛡️  Tabel yang dilindungi (${protectedTablesFound.length}):`);
-    protectedTablesFound.forEach(table => {
-      console.log(`   - ${table}`);
-    });
+    console.log(`\n📈 Total active tables: ${activeTables.length}\n`);
     
-    console.log(`🗑️  Tabel yang tidak digunakan (${unusedTables.length}):`);
     if (unusedTables.length > 0) {
+      console.log('🗑️  UNUSED TABLES (Safe to remove):');
+      console.log('=' .repeat(50));
       unusedTables.forEach(table => {
-        console.log(`   - ${table}`);
+        console.log(`  • ${table.name.padEnd(30)} - ${table.reason}`);
       });
-    } else {
-      console.log('   Tidak ada tabel yang tidak digunakan!');
+      console.log(`\n📉 Total unused tables: ${unusedTables.length}\n`);
     }
     
-    // Generate SQL script for dropping unused tables
-    if (unusedTables.length > 0) {
-      const dropScript = generateDropScript(unusedTables);
-      const scriptPath = 'scripts/drop-unused-tables.sql';
-      
-      fs.writeFileSync(scriptPath, dropScript);
-      console.log(`\n📄 Script drop table disimpan ke: ${scriptPath}`);
-      
-      // Also generate backup script
-      const backupScript = generateBackupScript(unusedTables);
-      const backupPath = 'scripts/backup-before-drop.sql';
-      
-      fs.writeFileSync(backupPath, backupScript);
-      console.log(`📄 Script backup disimpan ke: ${backupPath}`);
+    if (unknownTables.length > 0) {
+      console.log('❓ UNKNOWN TABLES (Verify before removing):');
+      console.log('=' .repeat(50));
+      unknownTables.forEach(table => {
+        console.log(`  • ${table.name.padEnd(30)} - ${table.reason}`);
+      });
+      console.log(`\n❓ Total unknown tables: ${unknownTables.length}\n`);
     }
     
-    console.log('\n💡 Rekomendasi:');
+    // Generate removal script
     if (unusedTables.length > 0) {
-      console.log('1. Review tabel yang akan di-drop');
-      console.log('2. Jalankan backup terlebih dahulu');
-      console.log('3. Test di environment development');
-      console.log('4. Jalankan script drop dengan hati-hati');
-    } else {
-      console.log('✅ Semua tabel masih digunakan, tidak perlu di-drop');
+      console.log('📝 GENERATED REMOVAL SCRIPT:');
+      console.log('=' .repeat(50));
+      console.log('-- Remove unused tables');
+      console.log('-- Generated on: ' + new Date().toISOString());
+      console.log('');
+      
+      unusedTables.forEach(table => {
+        console.log(`DROP TABLE IF EXISTS ${table.name}; -- ${table.reason}`);
+      });
+      
+      console.log('\n-- Verification query:');
+      console.log("SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = 'phc_dashboard' ORDER BY TABLE_NAME;");
+    }
+    
+    // Summary
+    console.log('\n📋 SUMMARY:');
+    console.log('=' .repeat(50));
+    console.log(`Total tables in database: ${existingTables.length}`);
+    console.log(`Active tables (keep): ${activeTables.length}`);
+    console.log(`Unused tables (safe to remove): ${unusedTables.length}`);
+    console.log(`Unknown tables (verify): ${unknownTables.length}`);
+    
+    if (unknownTables.length > 0) {
+      console.log('\n⚠️  WARNING: There are unknown tables that should be verified before removal!');
+      console.log('Please check if these tables are used in any part of the application.');
     }
     
   } catch (error) {
-    console.error('❌ Error saat menganalisis tabel:', error.message);
+    console.error('❌ Error analyzing database:', error.message);
+    console.log('\n💡 Troubleshooting tips:');
+    console.log('1. Make sure MySQL is running');
+    console.log('2. Check database credentials in the script');
+    console.log('3. Ensure the database "phc_dashboard" exists');
+    console.log('4. Verify user permissions');
   } finally {
     if (connection) {
       await connection.end();
-      console.log('\n🔌 Koneksi database ditutup');
     }
   }
 }
 
-function generateDropScript(unusedTables) {
-  const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-  
-  return `-- Script untuk drop tabel yang tidak digunakan
--- Generated on: ${new Date().toISOString()}
--- WARNING: Jalankan script ini dengan hati-hati!
-
--- Disable foreign key checks
-SET FOREIGN_KEY_CHECKS = 0;
-
--- Drop unused tables
-${unusedTables.map(table => `DROP TABLE IF EXISTS \`${table}\`;`).join('\n')}
-
--- Re-enable foreign key checks
-SET FOREIGN_KEY_CHECKS = 1;
-
--- Verification
-SELECT 'Tabel yang berhasil di-drop:' as message;
-${unusedTables.map(table => `SELECT '${table}' as dropped_table;`).join('\n')}
-
-SELECT 'Drop unused tables completed successfully!' as message;
-`;
-}
-
-function generateBackupScript(unusedTables) {
-  const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-  
-  return `-- Script backup sebelum drop tabel
--- Generated on: ${new Date().toISOString()}
--- Jalankan script ini sebelum drop tabel untuk backup data
-
--- Create backup tables
-${unusedTables.map(table => `
--- Backup table: ${table}
-CREATE TABLE IF NOT EXISTS \`backup_${table}_${timestamp}\` AS 
-SELECT * FROM \`${table}\`;
-
--- Show backup info
-SELECT '${table}' as table_name, COUNT(*) as backup_count 
-FROM \`backup_${table}_${timestamp}\`;
-`).join('\n')}
-
-SELECT 'Backup completed successfully!' as message;
-`;
-}
-
 // Run the analysis
-analyzeUnusedTables();
+analyzeDatabase();

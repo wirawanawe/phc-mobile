@@ -17,12 +17,14 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import Icon from "react-native-vector-icons/MaterialCommunityIcons";
 import { LinearGradient } from "expo-linear-gradient";
-import DateTimePicker from "@react-native-community/datetimepicker";
+import SimpleDatePicker from "../components/SimpleDatePicker";
+import DateRangePicker from "../components/DateRangePicker";
 import { CustomTheme } from "../theme/theme";
 import ProgressRing from "../components/ProgressRing";
 import MissionPromptCard from "../components/MissionPromptCard";
 import ActivityDetectionService from "../services/ActivityDetectionService";
 import { useAuth } from "../contexts/AuthContext";
+import eventEmitter from "../utils/eventEmitter";
 
 import { useFocusEffect } from "@react-navigation/native";
 import apiService from "../services/api";
@@ -31,7 +33,9 @@ import TodaySummaryCard from "../components/TodaySummaryCard";
 import WellnessActivityCard from "../components/WellnessActivityCard";
 import ActivityGraphScreen from "./ActivityGraphScreen";
 import ActivityScreen from "./ActivityScreen";
+import HabitActivityScreen from "./HabitActivityScreen";
 import { safeGoBack } from "../utils/safeNavigation";
+import { getTodayDate, formatDateToLocalYYYYMMDD } from "../utils/dateUtils";
 
 const { width } = Dimensions.get("window");
 const Tab = createBottomTabNavigator();
@@ -86,6 +90,7 @@ class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundarySta
 
 interface MissionStats {
   totalMissions: number;
+  activeMissions: number;
   completedMissions: number;
   totalPoints: number;
 }
@@ -128,6 +133,7 @@ interface UserProfile {
   fitness_goal?: string;
   wellness_program_joined?: boolean;
   wellness_join_date?: string;
+  wellness_program_duration?: number;
 }
 
 // Onboarding Component
@@ -140,6 +146,12 @@ const OnboardingScreen = ({ navigation, onProfileSaved }: any) => {
     activity_level: "",
     fitness_goal: "weight_loss",
     program_duration: 30, // Default 30 days
+  });
+  const [programStartDate, setProgramStartDate] = useState(new Date());
+  const [programEndDate, setProgramEndDate] = useState(() => {
+    const endDate = new Date();
+    endDate.setDate(endDate.getDate() + 30);
+    return endDate;
   });
   const [userAge, setUserAge] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
@@ -179,8 +191,17 @@ const OnboardingScreen = ({ navigation, onProfileSaved }: any) => {
   }, []);
 
   const handleSaveProfile = async () => {
-    if (!formData.weight || !formData.height || !formData.gender || !formData.activity_level || !formData.fitness_goal || !formData.program_duration) {
+    if (!formData.weight || !formData.height || !formData.gender || !formData.activity_level || !formData.fitness_goal) {
       Alert.alert("Error", "Mohon lengkapi semua data");
+      return;
+    }
+
+    // Calculate duration from date range
+    const diffTime = Math.abs(programEndDate.getTime() - programStartDate.getTime());
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    
+    if (diffDays < 7 || diffDays > 365) {
+      Alert.alert("Error", "Durasi program harus antara 7-365 hari");
       return;
     }
 
@@ -201,7 +222,7 @@ const OnboardingScreen = ({ navigation, onProfileSaved }: any) => {
         gender: formData.gender,
         activity_level: activityLevelMap[formData.activity_level as keyof typeof activityLevelMap] || 'moderately_active',
         fitness_goal: formData.fitness_goal,
-        program_duration: parseInt(formData.program_duration.toString()),
+        program_duration: diffDays,
       };
 
       const response = await apiService.setupWellness(wellnessData);
@@ -226,7 +247,7 @@ const OnboardingScreen = ({ navigation, onProfileSaved }: any) => {
         <ScrollView contentContainerStyle={styles.onboardingContainer}>
           <TouchableOpacity
             style={styles.backButton}
-            onPress={() => safeGoBack(navigation, 'Main')}
+            onPress={() => safeGoBack(navigation)}
           >
             <Icon name="arrow-left" size={24} color="#FFFFFF" />
           </TouchableOpacity>
@@ -408,23 +429,18 @@ const OnboardingScreen = ({ navigation, onProfileSaved }: any) => {
             </View>
 
             <View style={styles.selectionGroup}>
-              <Text style={styles.selectionLabel}>Durasi Program (Hari)</Text>
-              <View style={styles.durationContainer}>
-                <TextInput
-                  value={formData.program_duration.toString()}
-                  onChangeText={(text) => {
-                    const value = parseInt(text) || 0;
-                    if (value >= 7 && value <= 365) {
-                      setFormData({ ...formData, program_duration: value });
-                    }
-                  }}
-                  keyboardType="numeric"
-                  style={styles.durationInput}
-                  placeholder="30"
-                  placeholderTextColor="#9CA3AF"
-                />
-                <Text style={styles.durationHint}>Min: 7 hari, Max: 365 hari</Text>
-              </View>
+              <Text style={styles.selectionLabel}>Durasi Program</Text>
+              <DateRangePicker
+                startDate={programStartDate}
+                endDate={programEndDate}
+                onDateRangeChange={(startDate, endDate) => {
+                  setProgramStartDate(startDate);
+                  setProgramEndDate(endDate);
+                }}
+                variant="light"
+                title="Pilih Durasi Program Wellness"
+              />
+              <Text style={styles.durationHint}>Min: 7 hari, Max: 365 hari</Text>
             </View>
 
             <TouchableOpacity
@@ -450,8 +466,116 @@ const OnboardingScreen = ({ navigation, onProfileSaved }: any) => {
 const DashboardTab = ({ navigation, offlineMode = false }: any) => {
   const theme = useTheme<CustomTheme>();
   const { user, isAuthenticated } = useAuth();
+  
+
+  
+  // Function to calculate days since joining wellness program
+  const calculateDaysSinceJoining = () => {
+    if (!user) return 0;
+    
+    // First try to use wellness join date
+    if ((user as any).wellness_join_date) {
+      try {
+        const joinDate = new Date((user as any).wellness_join_date);
+        const today = new Date();
+        const diffTime = Math.abs(today.getTime() - joinDate.getTime());
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        return diffDays;
+      } catch (error) {
+        console.error('Error calculating days since joining wellness program:', error);
+      }
+    }
+    
+    // Fallback to account creation date if wellness join date is not available
+    if ((user as any).created_at) {
+      try {
+        const registrationDate = new Date((user as any).created_at);
+        const today = new Date();
+        const diffTime = Math.abs(today.getTime() - registrationDate.getTime());
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        return diffDays;
+      } catch (error) {
+        console.error('Error calculating days since registration:', error);
+      }
+    }
+    
+    return 0;
+  };
+  
+  // Function to get target days from wellness program
+  const getTargetDays = () => {
+    if (!(user as any)?.wellness_program_joined) return 0; // Not joined yet
+    return (user as any)?.wellness_program_duration || 30; // Default to 30 days if not set
+  };
+  
+  const [wellnessProgramStatus, setWellnessProgramStatus] = useState({
+    has_joined: false,
+    join_date: null,
+    program_duration: 30,
+    days_since_joining: 0,
+    days_remaining: 0,
+    fitness_goal: null,
+    activity_level: null,
+    has_missions: false,
+    mission_count: 0,
+    profile_complete: false,
+    needs_onboarding: true,
+    age: null
+  });
+
+  // Load wellness program status from API
+  useEffect(() => {
+    const loadWellnessStatus = async () => {
+      try {
+        const response = await apiService.getWellnessProgramStatus();
+        if (response.success && response.data) {
+          setWellnessProgramStatus(response.data);
+          console.log('Wellness program status loaded:', response.data);
+        }
+      } catch (error) {
+        console.error('Error loading wellness status:', error);
+      }
+    };
+
+    loadWellnessStatus();
+  }, []);
+
+  // Refresh wellness status when component comes into focus
+  useFocusEffect(
+    useCallback(() => {
+      const loadWellnessStatus = async () => {
+        try {
+          const response = await apiService.getWellnessProgramStatus();
+          if (response.success && response.data) {
+            setWellnessProgramStatus(response.data);
+            console.log('Wellness program status refreshed:', response.data);
+          }
+        } catch (error) {
+          console.error('Error refreshing wellness status:', error);
+        }
+      };
+
+      loadWellnessStatus();
+    }, [])
+  );
+
+  // Use API data if available, otherwise fallback to local calculation
+  const daysSinceJoining = wellnessProgramStatus.days_since_joining > 0 
+    ? wellnessProgramStatus.days_since_joining 
+    : calculateDaysSinceJoining();
+  const targetDays = wellnessProgramStatus.program_duration || getTargetDays();
+  
+  // Debug logging
+  console.log('WellnessApp Debug Info:', {
+    wellnessProgramStatus,
+    daysSinceJoining,
+    targetDays,
+    userWellnessJoinDate: (user as any)?.wellness_join_date,
+    userWellnessDuration: (user as any)?.wellness_program_duration
+  });
   const [missionStats, setMissionStats] = useState<MissionStats>({
     totalMissions: 0,
+    activeMissions: 0,
     completedMissions: 0,
     totalPoints: 0,
   });
@@ -471,8 +595,7 @@ const DashboardTab = ({ navigation, offlineMode = false }: any) => {
     const today = new Date();
     return today.toISOString().split('T')[0];
   });
-  const [showDatePicker, setShowDatePicker] = useState(false);
-  const [datePickerDate, setDatePickerDate] = useState(new Date());
+
 
   const loadMissionDataRef = useRef<() => Promise<void> | undefined>(undefined);
   const loadWeeklyProgressRef = useRef<() => Promise<void> | undefined>(undefined);
@@ -480,10 +603,6 @@ const DashboardTab = ({ navigation, offlineMode = false }: any) => {
   // Handle date change and reload data
   useEffect(() => {
     if (selectedDate) {
-      // Update datePickerDate when selectedDate changes
-      const newDate = new Date(selectedDate);
-      setDatePickerDate(newDate);
-      
       // Reload data for the selected date
       loadMissionData();
     }
@@ -495,24 +614,30 @@ const DashboardTab = ({ navigation, offlineMode = false }: any) => {
 
       // Try to load mission stats with timeout handling
       try {
-        const response = await apiService.getMissionStats({ date: new Date().toISOString().split('T')[0] });
-        if (response.success) {
+        const missionsResponse = await apiService.getMyMissions();
+        if (missionsResponse.success && missionsResponse.data) {
+          const missions = missionsResponse.data;
+          const summary = missionsResponse.summary || {};
+          console.log('📈 Mission data loaded:', missions.length, 'missions');
+          console.log('📊 Mission summary:', summary);
+          
           // Map API response to frontend expected format
           const mappedStats = {
-            totalMissions: response.data.total_missions || 0,
-            completedMissions: response.data.completed_missions || 0,
-            totalPoints: response.data.total_points_earned || 0,
+            totalMissions: summary.total_missions || 0,
+            activeMissions: summary.active_missions || 0,
+            completedMissions: summary.completed_missions || 0,
+            totalPoints: summary.total_points_earned || 0,
           };
           setMissionStats(mappedStats);
           console.log('Mission stats loaded:', mappedStats);
         } else {
-          console.warn("Failed to load mission stats:", response.message);
+          console.warn("Failed to load mission stats:", missionsResponse.message);
           // Set default stats for offline mode
-          setMissionStats({ totalMissions: 0, completedMissions: 0, totalPoints: 0 });
+          setMissionStats({ totalMissions: 0, activeMissions: 0, completedMissions: 0, totalPoints: 0 });
         }
       } catch (statsError: any) {
         console.warn("Mission stats API failed, using offline mode:", statsError.message);
-        setMissionStats({ totalMissions: 0, completedMissions: 0, totalPoints: 0 });
+        setMissionStats({ totalMissions: 0, activeMissions: 0, completedMissions: 0, totalPoints: 0 });
       }
 
       // Try to load missions with timeout handling
@@ -543,7 +668,7 @@ const DashboardTab = ({ navigation, offlineMode = false }: any) => {
           servings: parseInt(summaryData.meal?.meal_count) || parseInt(summaryData.servings) || 0,
           steps: parseInt(summaryData.fitness?.steps) || parseInt(summaryData.steps) || 0,
           exerciseMinutes: parseInt(summaryData.fitness?.exercise_minutes) || parseInt(summaryData.exercise_minutes) || 0,
-          waterIntake: parseFloat(summaryData.water?.total_ml) || parseFloat(summaryData.water_intake) || 0,
+          waterIntake: (parseFloat(summaryData.water?.total_ml) || parseFloat(summaryData.water_intake) || 0) / 1000, // Convert ml to liters
         };
         console.log('Mapped today summary data:', todaySummaryData);
         setTodaySummary(todaySummaryData);
@@ -577,6 +702,7 @@ const DashboardTab = ({ navigation, offlineMode = false }: any) => {
       // Set default values on error
       setMissionStats({
         totalMissions: 0,
+        activeMissions: 0,
         completedMissions: 0,
         totalPoints: 0,
       });
@@ -859,19 +985,11 @@ const DashboardTab = ({ navigation, offlineMode = false }: any) => {
         <View style={styles.dashboardHeader}>
           <TouchableOpacity
             style={styles.backButton}
-            onPress={() => safeGoBack(navigation, 'Main')}
+            onPress={() => safeGoBack(navigation)}
           >
             <Icon name="arrow-left" size={24} color="#1F2937" />
           </TouchableOpacity>
           <View style={styles.headerLeft}>
-            <LinearGradient
-              colors={["#E53E3E", "#C53030"]}
-              style={styles.avatarModern}
-            >
-              <Text style={styles.avatarText}>
-                {user ? getInitials(user.name) : "U"}
-              </Text>
-            </LinearGradient>
             <View style={styles.headerText}>
               <Text style={styles.greetingText}>
                 Halo, {user?.name || "User"}! 👋
@@ -891,60 +1009,47 @@ const DashboardTab = ({ navigation, offlineMode = false }: any) => {
                   </View>
                 )}
               </View>
+              {/* Days Counter moved below greeting */}
+              <View style={styles.daysCounterHorizontal}>
+                <View style={styles.daysCounterContent}>
+                  <Text style={styles.daysCounterTextHorizontal}>
+                    {(user as any)?.wellness_program_joined && daysSinceJoining > 0 ? `${daysSinceJoining}` : '0'}
+                  </Text>
+                  <Text style={styles.daysCounterLabelHorizontal}>
+                    {(user as any)?.wellness_program_joined && targetDays > 0 
+                      ? `dari ${targetDays} hari` 
+                      : (user as any)?.wellness_join_date 
+                        ? 'hari bergabung' 
+                        : 'hari terdaftar'
+                    }
+                  </Text>
+                </View>
+                {(user as any)?.wellness_program_joined && targetDays > 0 && (
+                  <View style={styles.daysProgressBarHorizontal}>
+                    <View 
+                      style={[
+                        styles.daysProgressFillHorizontal, 
+                        { width: `${Math.min((daysSinceJoining / targetDays) * 100, 100)}%` }
+                      ]} 
+                    />
+                  </View>
+                )}
+              </View>
             </View>
+          </View>
+          <View style={styles.headerRight}>
+            <LinearGradient
+              colors={["#E53E3E", "#C53030"]}
+              style={styles.avatarModern}
+            >
+              <Text style={styles.avatarText}>
+                {user ? getInitials(user.name) : "U"}
+              </Text>
+            </LinearGradient>
           </View>
         </View>
 
-        {/* Mission Progress Section */}
-        <View style={styles.missionSection}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Progress Mission</Text>
-          </View>
-          
-          <LinearGradient
-            colors={["#FFFFFF", "#F8FAFC"]}
-            style={styles.missionStatsModern}
-          >
-            <TouchableOpacity style={styles.statCardModern} activeOpacity={0.8}>
-              <LinearGradient
-                colors={["#E53E3E", "#C53030"]}
-                style={styles.statIconContainer}
-              >
-                <Icon name="flag" size={18} color="#FFFFFF" />
-              </LinearGradient>
-              <Text style={styles.statNumberModern}>
-                {missionStats.totalMissions !== undefined ? missionStats.totalMissions : 0}
-              </Text>
-              <Text style={styles.statLabelModern}>Total Mission</Text>
-            </TouchableOpacity>
-            
-            <TouchableOpacity style={styles.statCardModern} activeOpacity={0.8}>
-              <LinearGradient
-                colors={["#10B981", "#059669"]}
-                style={styles.statIconContainer}
-              >
-                <Icon name="check-circle" size={18} color="#FFFFFF" />
-              </LinearGradient>
-              <Text style={styles.statNumberModern}>
-                {missionStats.completedMissions !== undefined ? missionStats.completedMissions : 0}
-              </Text>
-              <Text style={styles.statLabelModern}>Selesai</Text>
-            </TouchableOpacity>
-            
-            <TouchableOpacity style={styles.statCardModern} activeOpacity={0.8}>
-              <LinearGradient
-                colors={["#F59E0B", "#D97706"]}
-                style={styles.statIconContainer}
-              >
-                <Icon name="star" size={18} color="#FFFFFF" />
-              </LinearGradient>
-              <Text style={styles.statNumberModern}>
-                {missionStats.totalPoints !== undefined ? missionStats.totalPoints : 0}
-              </Text>
-              <Text style={styles.statLabelModern}>Poin</Text>
-            </TouchableOpacity>
-          </LinearGradient>
-        </View>
+       
 
         {/* Activity Summary Section - Repositioned */}
         <View style={styles.activitySection}>
@@ -961,68 +1066,75 @@ const DashboardTab = ({ navigation, offlineMode = false }: any) => {
           <TodaySummaryCard 
             date={selectedDate} 
             onMoreDetailsPress={() => {
-              setShowDatePicker(true);
+              // This will be handled by SimpleDatePicker
             }}
           />
-          
-          {/* Date Picker Modal */}
-          {showDatePicker && (
-            <View style={styles.datePickerModal}>
-              <View style={styles.datePickerContent}>
-                <Text style={styles.datePickerTitle}>Pilih Tanggal</Text>
-                {Platform.OS === 'ios' ? (
-                  <DateTimePicker
-                    value={datePickerDate}
-                    mode="date"
-                    display="spinner"
-                    onChange={(event, selectedDate) => {
-                      if (selectedDate) {
-                        setDatePickerDate(selectedDate);
-                        const formattedDate = selectedDate.toISOString().split('T')[0];
-                        setSelectedDate(formattedDate);
-                      }
-                    }}
-                    style={styles.datePicker}
-                  />
-                ) : (
-                  <DateTimePicker
-                    value={datePickerDate}
-                    mode="date"
-                    display="default"
-                    onChange={(event, selectedDate) => {
-                      setShowDatePicker(false);
-                      if (selectedDate) {
-                        setDatePickerDate(selectedDate);
-                        const formattedDate = selectedDate.toISOString().split('T')[0];
-                        setSelectedDate(formattedDate);
-                      }
-                    }}
-                  />
-                )}
-                {Platform.OS === 'ios' && (
-                  <View style={styles.datePickerButtons}>
-                    <TouchableOpacity
-                      style={styles.cancelButton}
-                      onPress={() => setShowDatePicker(false)}
-                    >
-                      <Text style={styles.cancelButtonText}>Batal</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={styles.confirmButton}
-                      onPress={() => {
-                        const formattedDate = datePickerDate.toISOString().split('T')[0];
-                        setSelectedDate(formattedDate);
-                        setShowDatePicker(false);
-                      }}
-                    >
-                      <Text style={styles.confirmButtonText}>Konfirmasi</Text>
-                    </TouchableOpacity>
-                  </View>
-                )}
+        </View>
+                 {/* Mission Progress Section - Updated to match WellnessActivityCard style */}
+        <TouchableOpacity 
+          style={styles.missionCardContainer}
+          onPress={() => navigation.navigate("DailyMission")}
+          activeOpacity={0.9}
+        >
+          <LinearGradient
+            colors={['#E53E3E', '#C53030', '#DC2626']}
+            style={styles.missionCard}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+          >
+            <View style={styles.missionCardHeader}>
+              <View style={styles.missionCardHeaderLeft}>
+                <Text style={styles.missionCardTitle}>Progress Mission</Text>
+                <Text style={styles.missionCardSubtitle}>Misi kesehatan hari ini</Text>
+              </View>
+              <View style={styles.missionCardHeaderRight}>
+                <Icon name="flag" size={24} color="rgba(255, 255, 255, 0.8)" />
               </View>
             </View>
-          )}
-        </View>
+
+            {/* Mission Stats Section */}
+            <View style={styles.missionStatsSection}>
+              <View style={styles.missionStatCard}>
+                <LinearGradient
+                  colors={["rgba(255, 255, 255, 0.2)", "rgba(255, 255, 255, 0.1)"]}
+                  style={styles.missionStatIconContainer}
+                >
+                  <Icon name="flag" size={18} color="#FFFFFF" />
+                </LinearGradient>
+                <Text style={styles.missionStatNumber}>
+                  {missionStats.activeMissions !== undefined ? missionStats.activeMissions : 0}
+                </Text>
+                <Text style={styles.missionStatLabel}>Active Mission</Text>
+              </View>
+              
+              <View style={styles.missionStatCard}>
+                <LinearGradient
+                  colors={["rgba(16, 185, 129, 0.3)", "rgba(16, 185, 129, 0.1)"]}
+                  style={styles.missionStatIconContainer}
+                >
+                  <Icon name="check-circle" size={18} color="#FFFFFF" />
+                </LinearGradient>
+                <Text style={styles.missionStatNumber}>
+                  {missionStats.completedMissions !== undefined ? missionStats.completedMissions : 0}
+                </Text>
+                <Text style={styles.missionStatLabel}>Selesai</Text>
+              </View>
+              
+              <View style={styles.missionStatCard}>
+                <LinearGradient
+                  colors={["rgba(245, 158, 11, 0.3)", "rgba(245, 158, 11, 0.1)"]}
+                  style={styles.missionStatIconContainer}
+                >
+                  <Icon name="star" size={18} color="#FFFFFF" />
+                </LinearGradient>
+                <Text style={styles.missionStatNumber}>
+                  {missionStats.totalPoints !== undefined ? missionStats.totalPoints : 0}
+                </Text>
+                <Text style={styles.missionStatLabel}>Poin</Text>
+              </View>
+            </View>
+          </LinearGradient>
+        </TouchableOpacity>
 
         {/* Wellness Activities Section */}
         <WellnessActivityCard 
@@ -1093,145 +1205,7 @@ const DashboardTab = ({ navigation, offlineMode = false }: any) => {
           </LinearGradient>
         </View>
 
-        {/* Active Missions Section */}
-        <View style={styles.missionsSection}>
-          <Text style={styles.sectionTitle}>Active Missions</Text>
-          {userMissions.filter((um) => um.status === "active").length > 0 ? (
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.activeMissionsScrollContainer}
-            >
-              {userMissions.filter((um) => um.status === "active").map((userMission, index) => {
-                // Calculate real-time progress
-                const progressPercentage = userMission.mission?.target_value 
-                  ? Math.min((userMission.current_value / userMission.mission.target_value) * 100, 100)
-                  : userMission.progress || 0;
-                
-                return (
-                <TouchableOpacity
-                  key={userMission.id || userMission.mission_id || `mission-${index}`}
-                  style={styles.activeMissionCard}
-                  onPress={() => {
-                    // Prevent navigation for completed missions
-                    if (userMission.status === "completed") {
-                      Alert.alert(
-                        "Mission Completed",
-                        "This mission has been completed. You cannot update completed missions.",
-                        [{ text: "OK" }]
-                      );
-                      return;
-                    }
-                    
-                    // Ensure we have the correct data structure
-                    const missionData = userMission.mission || {
-                      id: userMission.mission_id,
-                      title: (userMission as any).title,
-                      description: (userMission as any).description,
-                      category: (userMission as any).category,
-                      type: (userMission as any).type,
-                      target_value: (userMission as any).target_value,
-                      unit: (userMission as any).unit,
-                      points: (userMission as any).points,
-                      icon: (userMission as any).icon,
-                      color: (userMission as any).color,
-                      difficulty: (userMission as any).difficulty
-                    };
-                    
-                    const userMissionData = {
-                      id: userMission.id || (userMission as any).user_mission_id,
-                      user_id: userMission.user_id,
-                      mission_id: userMission.mission_id,
-                      status: userMission.status,
-                      progress: userMission.progress,
-                      current_value: userMission.current_value,
-                      start_date: userMission.start_date,
-                      completed_date: userMission.completed_date,
-                      due_date: userMission.due_date,
-                      points_earned: userMission.points_earned,
-                      streak_count: userMission.streak_count,
-                      last_completed_date: userMission.last_completed_date,
-                      notes: userMission.notes,
-                      mission: missionData
-                    };
-                    
-                    navigation.navigate("MissionDetail", { 
-                      mission: missionData,
-                      userMission: userMissionData,
-                      onMissionUpdate: () => {
-                        loadMissionData();
-                      }
-                    });
-                  }}
-                >
-                  <LinearGradient
-                    colors={["#FFFFFF", "#F8FAFC"]}
-                    style={styles.activeMissionCardGradient}
-                  >
-                    <View style={styles.activeMissionHeader}>
-                      <LinearGradient
-                        colors={[userMission.mission?.color + "20", userMission.mission?.color + "10"]}
-                        style={styles.activeMissionIconContainer}
-                      >
-                        <Icon
-                          name={userMission.mission?.icon || "flag"}
-                          size={24}
-                          color={userMission.mission?.color || "#E53E3E"}
-                        />
-                      </LinearGradient>
-                      <View style={styles.activeMissionInfo}>
-                        <Text style={styles.activeMissionTitle}>{userMission.mission?.title}</Text>
-                        <Text style={styles.activeMissionDescription} numberOfLines={2}>
-                          {userMission.mission?.description}
-                        </Text>
-                      </View>
-                      <View style={styles.activeMissionPoints}>
-                        <Text style={styles.activeMissionPointsText}>{userMission.mission?.points}</Text>
-                        <Text style={styles.activeMissionPointsLabel}>pts</Text>
-                      </View>
-                    </View>
-                    
-                    <View style={styles.activeMissionProgressContainer}>
-                      <View style={styles.activeMissionProgressBar}>
-                        <LinearGradient
-                          colors={[userMission.mission?.color || "#E53E3E", userMission.mission?.color + "80" || "#C53030"]}
-                          style={[
-                            styles.activeMissionProgressFill,
-                            { width: `${progressPercentage}%` },
-                          ]}
-                        />
-                      </View>
-                      <Text style={styles.activeMissionProgressText}>{Math.round(progressPercentage)}%</Text>
-                    </View>
-                  </LinearGradient>
-                </TouchableOpacity>
-              );
-            })}
-            </ScrollView>
-          ) : (
-            <View style={styles.noActiveMissionsContainer}>
-              <View style={styles.noActiveMissionsIcon}>
-                <Icon name="flag-outline" size={64} color="#CBD5E1" />
-              </View>
-              <Text style={styles.noActiveMissionsTitle}>Belum Ada Activity Aktif</Text>
-              <Text style={styles.noActiveMissionsDescription}>
-                Anda belum memiliki misi yang sedang aktif. Mulai perjalanan wellness Anda dengan memilih misi pertama!
-              </Text>
-              <TouchableOpacity
-                style={styles.noActiveMissionsButton}
-                onPress={() => navigation.navigate("DailyMission")}
-              >
-                <LinearGradient
-                  colors={["#667eea", "#764ba2"]}
-                  style={styles.noActiveMissionsButtonGradient}
-                >
-                  <Icon name="plus" size={20} color="#FFFFFF" />
-                  <Text style={styles.noActiveMissionsButtonText}>Pilih Misi Pertama</Text>
-                </LinearGradient>
-              </TouchableOpacity>
-            </View>
-          )}
-        </View>
+        
       </ScrollView>
     </SafeAreaView>
   );
@@ -1431,9 +1405,9 @@ const ActivityTab = ({ navigation }: any) => {
   return <MissionTab navigation={navigation} />;
 };
 
-// Wellness Activity Tab Component
-const WellnessActivityTab = ({ navigation }: any) => {
-  return <ActivityScreen navigation={navigation} />;
+// Habit Activity Tab Component
+const HabitActivityTab = ({ navigation }: any) => {
+  return <HabitActivityScreen navigation={navigation} />;
 };
 
 
@@ -1513,7 +1487,7 @@ const TrackingTab = ({ navigation }: any) => {
         <View style={styles.dashboardHeader}>
           <TouchableOpacity
             style={styles.backButton}
-            onPress={() => safeGoBack(navigation, 'Main')}
+            onPress={() => safeGoBack(navigation)}
           >
             <Icon name="arrow-left" size={24} color="#1F2937" />
           </TouchableOpacity>
@@ -1604,14 +1578,25 @@ const WellnessApp = ({ navigation }: any) => {
         console.warn("WellnessApp: API initialization failed, proceeding with cached data");
       }
       
-      // Try to get profile and missions with timeout handling
+      // Try to get profile and missions with shorter timeout
       let profileResponse = null;
       let missionsResponse = null;
       
       try {
-        // Set a shorter timeout for profile check
-        const profilePromise = apiService.getUserProfile();
-        const missionsPromise = apiService.getMyMissions();
+        // Set shorter timeout for profile check - 8 seconds instead of default
+        const profilePromise = Promise.race([
+          apiService.getUserProfile(),
+          new Promise((_, reject) => 
+            setTimeout(() => reject(new Error('Profile request timeout')), 8000)
+          )
+        ]);
+        
+        const missionsPromise = Promise.race([
+          apiService.getMyMissions(),
+          new Promise((_, reject) => 
+            setTimeout(() => reject(new Error('Missions request timeout')), 8000)
+          )
+        ]);
         
         // Use Promise.allSettled to handle partial failures
         const [profileResult, missionsResult] = await Promise.allSettled([
@@ -1635,34 +1620,40 @@ const WellnessApp = ({ navigation }: any) => {
         }
       }
       
-      // Check if we have any profile data
+      // Check wellness program status and missions
+      let needsOnboarding = true;
+      let hasWellnessAccess = false;
+      
       if (profileResponse && profileResponse.success && profileResponse.data) {
         const profile = profileResponse.data;
-        
-        // Check if user has missions (already registered in wellness program)
+        const hasWellnessProgram = profile.wellness_program_joined === true;
         const hasMissions = missionsResponse && missionsResponse.success && 
                            missionsResponse.data && missionsResponse.data.length > 0;
         
-        // Check if user has joined wellness program or has missions
-        if (profile.wellness_program_joined || hasMissions) {
-          console.log("WellnessApp: User has profile, showing main app");
-          setHasProfile(true);
-          setShowOnboarding(false);
-        } else {
-          console.log("WellnessApp: User needs onboarding");
-          setHasProfile(false);
-          setShowOnboarding(true);
-        }
+        console.log("WellnessApp: Profile data available", {
+          wellness_program_joined: hasWellnessProgram,
+          hasMissions: hasMissions,
+          missionCount: missionsResponse?.data?.length || 0
+        });
+        
+        // User can access wellness ONLY if they have joined the program
+        // Missions alone are not sufficient - user must register for wellness program first
+        hasWellnessAccess = hasWellnessProgram;
+        needsOnboarding = !hasWellnessAccess;
+        
+        console.log("WellnessApp: Wellness access decision", {
+          hasWellnessAccess,
+          needsOnboarding
+        });
       } else {
-        // If no profile data available, but user is authenticated, show onboarding
         console.log("WellnessApp: No profile data available, showing onboarding");
-        setHasProfile(false);
-        setShowOnboarding(true);
+        hasWellnessAccess = false;
+        needsOnboarding = true;
       }
       
-      // Clear any previous errors if we reach this point
+      setHasProfile(hasWellnessAccess);
+      setShowOnboarding(needsOnboarding);
       setError(null);
-      
     } catch (error) {
       console.error("WellnessApp: Error checking profile:", error);
       
@@ -1676,13 +1667,21 @@ const WellnessApp = ({ navigation }: any) => {
           errorMessage.includes('fetch')) {
         console.log("WellnessApp: Network/timeout error detected, enabling offline mode");
         
-        // For network issues, allow access to wellness app with user data from AuthContext
-        if (user && user.id) {
-          console.log("WellnessApp: Using AuthContext user data for offline access");
-          setHasProfile(true);
-          setShowOnboarding(false);
-          setError(null);
-        } else {
+                  // For network issues, check wellness status from AuthContext user data
+          if (user && user.id) {
+            console.log("WellnessApp: Using AuthContext user data for offline access");
+            const hasWellnessProgram = (user as any).wellness_program_joined === true;
+            const hasWellnessAccess = hasWellnessProgram; // User must have joined wellness program
+            
+            console.log("WellnessApp: Offline wellness check", {
+              wellness_program_joined: hasWellnessProgram,
+              hasWellnessAccess
+            });
+            
+            setHasProfile(hasWellnessAccess);
+            setShowOnboarding(!hasWellnessAccess);
+            setError(null);
+          } else {
           // If no user data available, show onboarding
           setHasProfile(false);
           setShowOnboarding(true);
@@ -1702,6 +1701,10 @@ const WellnessApp = ({ navigation }: any) => {
     console.log("WellnessApp: Profile saved, updating state");
     setHasProfile(true);
     setShowOnboarding(false);
+    
+    // Emit event to notify other components that user joined wellness program
+    eventEmitter.emit('wellnessProgramJoined');
+    console.log("WellnessApp: Emitted wellnessProgramJoined event");
   };
 
   console.log("WellnessApp: Render state:", { hasProfile, showOnboarding, error, isAuthenticated, user, authLoading, isLoading });
@@ -1766,8 +1769,18 @@ const WellnessApp = ({ navigation }: any) => {
                 onPress={() => {
                   console.log("WellnessApp: User forced offline mode");
                   setOfflineMode(true);
-                  setHasProfile(true);
-                  setShowOnboarding(false);
+                  
+                  // Check wellness status for offline mode
+                  const hasWellnessProgram = (user as any).wellness_program_joined === true;
+                  const hasWellnessAccess = hasWellnessProgram;
+                  
+                  console.log("WellnessApp: Forced offline wellness check", {
+                    wellness_program_joined: hasWellnessProgram,
+                    hasWellnessAccess
+                  });
+                  
+                  setHasProfile(hasWellnessAccess);
+                  setShowOnboarding(!hasWellnessAccess);
                   setError(null);
                 }}
               >
@@ -1775,12 +1788,7 @@ const WellnessApp = ({ navigation }: any) => {
               </TouchableOpacity>
             )}
             
-            <TouchableOpacity 
-              style={{ padding: 15, backgroundColor: '#6B7280', borderRadius: 8 }}
-              onPress={() => navigation.navigate('WellnessDebug')}
-            >
-              <Text style={{ color: 'white', textAlign: 'center', fontWeight: 'bold' }}>Debug Connection</Text>
-            </TouchableOpacity>
+
           </View>
         </View>
       </SafeAreaView>
@@ -1861,8 +1869,8 @@ const WellnessApp = ({ navigation }: any) => {
         </Tab.Screen>
         <Tab.Screen
           name="ACTIVITY"
-          component={WellnessActivityTab}
-          options={{ tabBarLabel: "Wellness" }}
+          component={HabitActivityTab}
+          options={{ tabBarLabel: "Habit" }}
         />
         <Tab.Screen
           name="MISSION"
@@ -1885,40 +1893,7 @@ const WellnessApp = ({ navigation }: any) => {
   );
 };
 
-// Simple test component to debug the issue
-const TestWellnessApp = ({ navigation }: any) => {
-  const { user, isAuthenticated } = useAuth();
-  
-  console.log("TestWellnessApp: Auth state:", { isAuthenticated, user });
-  
-  return (
-    <SafeAreaView style={styles.safeArea}>
-      <View style={styles.loadingContainer}>
-        <Text style={{ fontSize: 20, fontWeight: 'bold', marginBottom: 20 }}>Wellness App Test</Text>
-        <Text style={{ marginBottom: 10 }}>Authentication Status: {isAuthenticated ? 'Authenticated' : 'Not Authenticated'}</Text>
-        <Text style={{ marginBottom: 10 }}>User: {user ? user.name : 'No user'}</Text>
-        <Text style={{ marginBottom: 20 }}>User ID: {user ? user.id : 'No ID'}</Text>
-        
-        <TouchableOpacity 
-          style={{ padding: 15, backgroundColor: '#E22345', borderRadius: 8, marginBottom: 10 }}
-          onPress={() => navigation.navigate('Login')}
-        >
-          <Text style={{ color: 'white', textAlign: 'center', fontWeight: 'bold' }}>Go to Login</Text>
-        </TouchableOpacity>
-        
-        <TouchableOpacity 
-          style={{ padding: 15, backgroundColor: '#3182CE', borderRadius: 8 }}
-          onPress={() => safeGoBack(navigation, 'Main')}
-        >
-          <Text style={{ color: 'white', textAlign: 'center', fontWeight: 'bold' }}>Go Back</Text>
-        </TouchableOpacity>
-      </View>
-    </SafeAreaView>
-  );
-};
 
-// Export the test component for debugging
-export { TestWellnessApp };
 
 const styles = StyleSheet.create({
   safeArea: {
@@ -1941,6 +1916,126 @@ const styles = StyleSheet.create({
     alignItems: "flex-start",
     flex: 1,
     paddingRight: 20,
+  },
+  headerRight: {
+    flexDirection: "column",
+    alignItems: "flex-end",
+    justifyContent: "center",
+  },
+
+  daysCounterHorizontal: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    backgroundColor: "#F8FAFC",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+  },
+  daysCounterContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginRight: 12,
+  },
+  daysCounterTextHorizontal: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#1F2937",
+    marginRight: 4,
+  },
+  daysCounterLabelHorizontal: {
+    fontSize: 14,
+    color: "#64748B",
+    fontWeight: "500",
+  },
+  daysProgressBarHorizontal: {
+    flex: 1,
+    height: 6,
+    backgroundColor: "#E5E7EB",
+    borderRadius: 3,
+    overflow: "hidden",
+  },
+  daysProgressFillHorizontal: {
+    height: "100%",
+    backgroundColor: "#10B981",
+    borderRadius: 3,
+  },
+  // Mission Card Styles (matching WellnessActivityCard)
+  missionCardContainer: {
+    marginHorizontal: 20,
+    marginBottom: 20,
+    borderRadius: 20,
+    overflow: 'hidden',
+    shadowColor: '#E53E3E',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  missionCard: {
+    padding: 20,
+  },
+  missionCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 16,
+  },
+  missionCardHeaderLeft: {
+    flex: 1,
+  },
+  missionCardTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    marginBottom: 2,
+  },
+  missionCardSubtitle: {
+    fontSize: 13,
+    color: 'rgba(255, 255, 255, 0.8)',
+    fontWeight: '500',
+  },
+  missionCardHeaderRight: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  missionStatsSection: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  missionStatCard: {
+    flex: 1,
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    borderRadius: 12,
+    padding: 12,
+  },
+  missionStatIconContainer: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  missionStatNumber: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    marginBottom: 2,
+  },
+  missionStatLabel: {
+    fontSize: 11,
+    color: 'rgba(255, 255, 255, 0.8)',
+    fontWeight: '500',
+    textAlign: 'center',
   },
   headerTitle: {
     fontSize: 24,
@@ -2614,7 +2709,6 @@ const styles = StyleSheet.create({
     borderRadius: 24,
     justifyContent: "center",
     alignItems: "center",
-    marginRight: 16,
     shadowColor: "#E53E3E",
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
@@ -2630,7 +2724,6 @@ const styles = StyleSheet.create({
   headerText: {
     flexDirection: "column",
     alignItems: "flex-start",
-    marginLeft: 12,
     flex: 1,
   },
   greetingText: {
@@ -2886,17 +2979,6 @@ const styles = StyleSheet.create({
   },
   missionsGrid: {
     paddingHorizontal: 20,
-  },
-  missionCard: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 16,
-    padding: 20,
-    marginBottom: 16,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
   },
   missionCardModern: {
     marginBottom: 20,

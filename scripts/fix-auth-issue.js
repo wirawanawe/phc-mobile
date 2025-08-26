@@ -1,104 +1,157 @@
-const AsyncStorage = require('@react-native-async-storage/async-storage');
+#!/usr/bin/env node
 
-// Debug authentication data
-const debugAuth = async () => {
-  try {
-    console.log('🔍 Debugging authentication data...');
-    
-    const authToken = await AsyncStorage.getItem('authToken');
-    const refreshToken = await AsyncStorage.getItem('refreshToken');
-    const userData = await AsyncStorage.getItem('userData');
-    const userId = await AsyncStorage.getItem('userId');
-    
-    console.log('📊 Current Auth Status:');
-    console.log('- Auth Token:', authToken ? 'Present' : 'Missing');
-    console.log('- Refresh Token:', refreshToken ? 'Present' : 'Missing');
-    console.log('- User Data:', userData ? 'Present' : 'Missing');
-    console.log('- User ID:', userId || 'Missing');
-    
-    if (authToken) {
-      console.log('- Token Preview:', authToken.substring(0, 20) + '...');
-      
-      // Check if token is expired
-      try {
-        const parts = authToken.split('.');
-        if (parts.length === 3) {
-          const payload = JSON.parse(Buffer.from(parts[1], 'base64').toString());
-          const exp = payload.exp;
-          const now = Math.floor(Date.now() / 1000);
-          
-          console.log('- Token expiration:', new Date(exp * 1000).toISOString());
-          console.log('- Current time:', new Date(now * 1000).toISOString());
-          console.log('- Token expired:', exp < now ? 'YES' : 'NO');
-        }
-      } catch (e) {
-        console.log('- Could not parse token payload');
-      }
+const fs = require('fs');
+const path = require('path');
+
+console.log('🔐 PHC Mobile Authentication Fix Tool');
+console.log('=====================================');
+console.log('');
+
+console.log('This tool helps fix "Authentication failed. Please login again." errors.');
+console.log('');
+
+console.log('📋 Available Options:');
+console.log('1. Show authentication fix guide');
+console.log('2. Clear authentication data (requires app restart)');
+console.log('3. Test API connection');
+console.log('4. Show debug instructions');
+console.log('5. Exit');
+console.log('');
+
+const readline = require('readline');
+const rl = readline.createInterface({
+  input: process.stdin,
+  output: process.stdout
+});
+
+function showFixGuide() {
+  console.log('\n🔧 Authentication Fix Guide:');
+  console.log('============================');
+  console.log('');
+  console.log('If you\'re seeing "Authentication failed. Please login again." errors:');
+  console.log('');
+  console.log('1. 📱 In the Mobile App:');
+  console.log('   - Navigate to Profile → Debug Tools');
+  console.log('   - Tap "Check & Fix Auth Issues"');
+  console.log('   - If that doesn\'t work, tap "Clear Auth Data"');
+  console.log('   - Login again with your credentials');
+  console.log('');
+  console.log('2. 🔧 Using React Native Debugger:');
+  console.log('   - Open React Native debugger console');
+  console.log('   - Run: require(\'./src/utils/authFix.js\').default.debugAuth()');
+  console.log('   - Run: require(\'./src/utils/authFix.js\').default.clearAuth()');
+  console.log('   - Restart the app and login again');
+  console.log('');
+  console.log('3. 🧹 Manual Fix:');
+  console.log('   - Close the app completely');
+  console.log('   - Clear app data from device settings');
+  console.log('   - Restart the app and login again');
+  console.log('');
+  console.log('4. 🔄 If problems persist:');
+  console.log('   - Check your internet connection');
+  console.log('   - Verify the backend server is running');
+  console.log('   - Try logging in with different credentials');
+  console.log('');
+}
+
+function clearAuthData() {
+  console.log('\n🧹 Clearing Authentication Data...');
+  console.log('');
+  console.log('To clear authentication data:');
+  console.log('');
+  console.log('1. 📱 On your device:');
+  console.log('   - Go to Settings → Apps → PHC Mobile');
+  console.log('   - Tap "Storage" → "Clear Data"');
+  console.log('   - Restart the app');
+  console.log('');
+  console.log('2. 🔧 Using React Native Debugger:');
+  console.log('   - Run this command in the debugger console:');
+  console.log('   require(\'./src/utils/authFix.js\').default.clearAuth()');
+  console.log('');
+  console.log('3. 🖥️ Using the Debug Screen:');
+  console.log('   - Open the app');
+  console.log('   - Go to Profile → Debug Tools');
+  console.log('   - Tap "Clear Auth Data"');
+  console.log('');
+}
+
+function testApiConnection() {
+  console.log('\n🌐 Testing API Connection...');
+  console.log('');
+  console.log('To test API connection:');
+  console.log('');
+  console.log('1. 🔧 Using React Native Debugger:');
+  console.log('   - Run this command in the debugger console:');
+  console.log('   require(\'./src/services/api.js\').default.debugNetworkConnection()');
+  console.log('');
+  console.log('2. 🖥️ Using the Debug Screen:');
+  console.log('   - Open the app');
+  console.log('   - Go to Profile → Debug Tools');
+  console.log('   - Tap "Test API Connection"');
+  console.log('');
+  console.log('3. 🌐 Manual Test:');
+  console.log('   - Open your browser');
+  console.log('   - Navigate to: http://localhost:3000/api/health');
+  console.log('   - You should see a JSON response');
+  console.log('');
+}
+
+function showDebugInstructions() {
+  console.log('\n📖 Debug Instructions:');
+  console.log('====================');
+  console.log('');
+  console.log('If you\'re seeing "Authentication failed. Please login again." errors:');
+  console.log('');
+  console.log('1. 📱 In the Mobile App:');
+  console.log('   - Navigate to the Debug screen (if available)');
+  console.log('   - Tap "Check & Fix Auth Issues"');
+  console.log('   - If that doesn\'t work, tap "Clear Auth Data"');
+  console.log('   - Login again with your credentials');
+  console.log('');
+  console.log('2. 🔧 Using React Native Debugger:');
+  console.log('   - Open React Native debugger console');
+  console.log('   - Run: require(\'./src/utils/authFix.js\').default.debugAuth()');
+  console.log('   - Run: require(\'./src/utils/authFix.js\').default.clearAuth()');
+  console.log('   - Restart the app and login again');
+  console.log('');
+  console.log('3. 🧹 Manual Fix:');
+  console.log('   - Close the app completely');
+  console.log('   - Clear app data from device settings');
+  console.log('   - Restart the app and login again');
+  console.log('');
+  console.log('4. 🔄 If problems persist:');
+  console.log('   - Check your internet connection');
+  console.log('   - Verify the backend server is running');
+  console.log('   - Try logging in with different credentials');
+  console.log('');
+}
+
+function askQuestion() {
+  rl.question('Enter your choice (1-5): ', (answer) => {
+    switch(answer.trim()) {
+      case '1':
+        showFixGuide();
+        break;
+      case '2':
+        clearAuthData();
+        break;
+      case '3':
+        testApiConnection();
+        break;
+      case '4':
+        showDebugInstructions();
+        break;
+      case '5':
+        console.log('\n👋 Goodbye!');
+        rl.close();
+        return;
+      default:
+        console.log('\n❌ Invalid choice. Please enter a number between 1-5.');
     }
     
-    return {
-      hasAuthToken: !!authToken,
-      hasRefreshToken: !!refreshToken,
-      hasUserData: !!userData,
-      hasUserId: !!userId
-    };
-  } catch (error) {
-    console.error('❌ Error debugging auth data:', error);
-    return null;
-  }
-};
+    console.log('\n' + '='.repeat(50));
+    askQuestion();
+  });
+}
 
-// Clear authentication data
-const clearAuth = async () => {
-  try {
-    console.log('🧹 Clearing authentication data...');
-    
-    await AsyncStorage.multiRemove([
-      'authToken',
-      'refreshToken',
-      'userData',
-      'userId',
-      'lastLoginTime'
-    ]);
-    
-    console.log('✅ Authentication data cleared successfully');
-    return true;
-  } catch (error) {
-    console.error('❌ Error clearing auth data:', error);
-    return false;
-  }
-};
-
-// Main function
-const main = async () => {
-  console.log('🔐 PHC Mobile Authentication Fix Tool');
-  console.log('=====================================');
-  
-  // First, debug current auth status
-  console.log('\n1. Checking current authentication status...');
-  const authStatus = await debugAuth();
-  
-  if (authStatus && authStatus.hasAuthToken) {
-    console.log('\n2. Authentication data found. Clearing...');
-    const cleared = await clearAuth();
-    
-    if (cleared) {
-      console.log('\n✅ SUCCESS: Authentication data cleared!');
-      console.log('\n📱 Next steps:');
-      console.log('1. Restart your React Native app');
-      console.log('2. You will be redirected to the login screen');
-      console.log('3. Login with your credentials again');
-      console.log('4. The weekly progress should now load without errors');
-    } else {
-      console.log('\n❌ FAILED: Could not clear authentication data');
-    }
-  } else {
-    console.log('\nℹ️ No authentication data found. User may already be logged out.');
-  }
-  
-  console.log('\n🔍 Final auth status:');
-  await debugAuth();
-};
-
-// Run the script
-main().catch(console.error);
+askQuestion();

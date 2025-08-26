@@ -4,7 +4,7 @@ async function loginTestUser() {
   try {
     console.log('🔐 Logging in with test user...');
     
-    const baseURL = 'http://localhost:3000/api';
+    const baseURL = 'https://dash.doctorphc.id/api';
     
     // Login with test user
     const loginData = {

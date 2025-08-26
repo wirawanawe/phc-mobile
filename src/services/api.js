@@ -1,6 +1,6 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Platform } from "react-native";
-import { handleApiError, withRetry, handleError } from "../utils/errorHandler";
+import { handleApiError, withRetry, handleError, handleSessionExpiration } from "../utils/errorHandler";
 import mockApiService from "./mockApi";
 import NetworkHelper from "../utils/networkHelper";
 import NetworkDiagnostic from "../utils/networkDiagnostic";
@@ -11,26 +11,23 @@ import { connectionMonitor } from "../utils/connectionMonitor";
 import { loginDiagnostic } from "../utils/loginDiagnostic";
 import { getRecommendedApiUrl } from "../utils/networkStatus";
 import { getQuickApiUrl, testQuickConnection } from "../utils/quickFix";
+import { handleNetworkError, getNetworkErrorType, NetworkErrorType } from "../utils/networkErrorHandler";
+import BackgroundServiceManager from "../utils/backgroundServiceManager";
+import ConnectionStatusManager from "../utils/connectionStatusManager";
 
 // Get server URL based on environment
 const getServerURL = () => {
-  // For development - platform-specific configuration
-  if (__DEV__) {
-    // For development, use localhost for local testing
-    return "localhost";
-  }
-
-  // For production - use production server
-  return "dash.doctorphc.id";
+  // Force localhost for development
+  return "localhost";
 };
 
-// Fallback data for offline mode
+// Enhanced fallback data - return meaningful data when database is empty
 const getFallbackData = (endpoint) => {
   if (endpoint.includes('/wellness/activities')) {
     return {
       activities: [],
       total: 0,
-      message: 'Wellness activities temporarily unavailable'
+      message: 'No wellness activities available'
     };
   }
   
@@ -39,20 +36,38 @@ const getFallbackData = (endpoint) => {
       entries: [],
       total_entries: 0,
       most_common_mood: null,
-      average_mood_score: 0, // No data available instead of default 60
+      average_mood_score: 0,
       mood_distribution: {},
       period: 7
     };
   }
   
   if (endpoint.includes('/tracking/today-summary')) {
+    // Return meaningful default data structure
     return {
-      calories: 0,
-      water_intake: 0,
-      steps: 0,
-      exercise_minutes: 0,
-      distance: 0,
-      wellness_score: 0
+      date: new Date().toISOString().split('T')[0],
+      water: {
+        total_ml: "0",
+        target_ml: 2000,
+        percentage: 0
+      },
+      sleep: null,
+      mood: null,
+      health_data: [],
+      meal: {
+        calories: "0.00",
+        protein: "0.00",
+        carbs: "0.00",
+        fat: "0.00",
+        meal_count: 0
+      },
+      fitness: {
+        exercise_minutes: "0",
+        steps: "0",
+        distance_km: "0.00"
+      },
+      activities_completed: 0,
+      points_earned: 0
     };
   }
   
@@ -86,30 +101,33 @@ const getFallbackData = (endpoint) => {
     return {
       total_water_ml: 0,
       total_intake: 0,
-      goal_ml: 2500,
+      goal_ml: 2000,
       percentage: 0
-    };
-  }
-  
-  if (endpoint.includes('/tracking/fitness/today')) {
-    return {
-      steps: 0,
-      exercise_minutes: 0,
-      calories_burned: 0,
-      distance_km: 0,
-      workout_type: null,
-      notes: null
     };
   }
   
   if (endpoint.includes('/tracking/fitness') && !endpoint.includes('/today')) {
     return {
       data: [],
-      message: 'Fitness history temporarily unavailable'
+      message: 'No fitness data available'
     };
   }
   
-  // Default fallback
+  if (endpoint.includes('/tracking/sleep') && !endpoint.includes('/today')) {
+    return {
+      data: [],
+      message: 'No sleep data available'
+    };
+  }
+  
+  if (endpoint.includes('/missions') || endpoint.includes('/user_missions')) {
+    return {
+      data: [],
+      message: 'No missions available'
+    };
+  }
+  
+  // Default fallback for other endpoints
   return {
     data: [],
     message: 'Data temporarily unavailable'
@@ -119,21 +137,15 @@ const getFallbackData = (endpoint) => {
 
 // Configuration for different environments
 const getApiBaseUrl = () => {
-  // For development - platform-specific configuration
+  // For development - use appropriate URL based on platform
   if (__DEV__) {
-    // Check if running on Android emulator
-    if (Platform.OS === "android") {
-      return "http://10.0.2.2:3000/api/mobile";
-    }
-
-    // Check if running on iOS simulator
-    if (Platform.OS === "ios") {
+    // For mobile devices and emulators, use the machine's IP address
+    // For web development, use localhost
+    if (Platform.OS === 'web') {
       return "http://localhost:3000/api/mobile";
+    } else {
+      return "http://10.242.90.103:3000/api/mobile";
     }
-
-    // For physical device testing - try multiple IP addresses
-    // This will be handled dynamically in the initialize method
-    return "http://192.168.18.30:3000/api/mobile";
   }
 
   // For production - use production server
@@ -143,16 +155,14 @@ const getApiBaseUrl = () => {
 // Network connectivity test function
 const testNetworkConnectivity = async (baseURL) => {
   try {
-    console.log('🌐 Network: Testing connectivity to:', baseURL);
     const startTime = Date.now();
     
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 10000); // Reduced timeout to 10 seconds
+    const timeoutId = setTimeout(() => controller.abort(), 5000); // Reduced timeout to 5 seconds for faster connectivity test
     
     // Use the health endpoint for connectivity testing
-    // Fix: Remove /api/mobile from baseURL to get the correct health endpoint
-    const healthURL = `${baseURL.replace('/api/mobile', '')}/api/health`;
-    console.log('🏥 Network: Testing health endpoint:', healthURL);
+    // Fix: Use the correct mobile health endpoint
+    const healthURL = `${baseURL}/health`;
     
     const response = await fetch(healthURL, {
       method: 'GET',
@@ -166,15 +176,10 @@ const testNetworkConnectivity = async (baseURL) => {
     const endTime = Date.now();
     const responseTime = endTime - startTime;
     
-    console.log('✅ Network: Health check successful');
-    console.log('📊 Network: Response time:', responseTime + 'ms');
-    console.log('📊 Network: Status code:', response.status);
-    
     // Check if response is valid JSON
     if (response.ok) {
       try {
         const data = await response.json();
-        console.log('📊 Network: Health response:', data);
         return { success: true, responseTime, status: response.status, data };
       } catch (jsonError) {
         console.warn('⚠️ Network: Health response is not JSON, but server is responding');
@@ -192,92 +197,40 @@ const testNetworkConnectivity = async (baseURL) => {
       type: error.constructor.name
     });
     
-    // Provide more specific error messages
-    let errorMessage = error.message;
-    if (error.name === 'AbortError') {
-      errorMessage = 'Koneksi timeout. Silakan coba lagi.';
-    } else if (error.message.includes('Network request failed')) {
-      errorMessage = 'Tidak dapat terhubung ke server. Periksa koneksi internet Anda.';
-    } else if (error.message.includes('fetch')) {
-      errorMessage = 'Gagal terhubung ke server. Silakan coba lagi.';
-    }
+    // Use the new network error handler for better error classification
+    const errorType = getNetworkErrorType(error);
+    const errorInfo = handleNetworkError(error, {
+      showAlert: false, // Don't show alert during connectivity test
+      context: 'Connectivity Test'
+    });
     
-    return { success: false, error: errorMessage };
+    return { 
+      success: false, 
+      error: errorInfo.userMessage,
+      errorType: errorType,
+      shouldRetry: errorInfo.shouldRetry,
+      retryDelay: errorInfo.retryDelay
+    };
   }
 };
 
-  // Get the API URL (for development)
+  // Get the API URL (development mode)
   const getBestApiUrl = async () => {
-    console.log('🔍 API: Platform detected:', Platform.OS);
-    console.log('🔍 API: Development mode:', __DEV__);
-    
-    // Use the quick fix for immediate resolution
-    if (__DEV__) {
-      const quickUrl = getQuickApiUrl();
-      console.log('🔧 API: Using quick fix URL:', quickUrl);
-      
-      // Test the connection
-      const testResult = await testQuickConnection();
-      if (testResult.success) {
-        console.log('✅ API: Quick fix connection successful');
-        return quickUrl;
-      } else {
-        console.warn('⚠️ API: Quick fix failed, trying fallback...');
-      }
+  // For development - use appropriate URL based on platform
+  if (__DEV__) {
+    // For mobile devices and emulators, use the machine's IP address
+    // For web development, use localhost
+    if (Platform.OS === 'web') {
+      return "http://localhost:3000/api/mobile";
+    } else {
+      return "http://10.242.90.103:3000/api/mobile";
     }
-    
-    // Fallback to original logic
-    const baseUrl = getApiBaseUrl();
-    console.log('🔍 API: Using fallback URL:', baseUrl);
-    
-    // Test multiple URLs for Android emulator and development
-    if (__DEV__) {
-      const possibleUrls = Platform.OS === "android" ? [
-        "http://localhost:3000/api/mobile",      // Try localhost first
-        "http://10.0.2.2:3000/api/mobile",       // Fallback to emulator IP
-        "http://192.168.18.30:3000/api/mobile",  // Network IP
-        "http://192.168.193.150:3000/api/mobile" // Alternative network IP
-      ] : [
-        "http://localhost:3000/api/mobile",      // Localhost for iOS simulator
-        "http://192.168.18.30:3000/api/mobile",  // Network IP
-        "http://192.168.193.150:3000/api/mobile" // Alternative network IP
-      ];
-      
-      console.log('🔍 Network: Testing multiple URLs for best connectivity...');
-      
-      for (const url of possibleUrls) {
-        try {
-          console.log(`🌐 Network: Testing ${url}...`);
-          const testURL = url.replace('/api/mobile', '') + '/api/health';
-          
-          const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 3000); // 3s timeout for each test
-          
-          const response = await fetch(testURL, {
-            method: 'GET',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            signal: controller.signal
-          });
-          
-          clearTimeout(timeoutId);
-          
-          if (response.ok) {
-            console.log(`✅ Network: Found working URL: ${url}`);
-            return url;
-          }
-        } catch (error) {
-          console.log(`❌ Network: ${url} failed: ${error.message}`);
-          continue;
-        }
-      }
-      
-      console.log('⚠️ Network: No working URL found, using default localhost');
-    }
-    
-    return baseUrl;
-  };
+  }
+
+  // For production - use production server
+  console.log('🔧 Production mode: Using production server');
+  return "https://dash.doctorphc.id/api/mobile";
+};
 
 class ApiService {
   constructor() {
@@ -285,6 +238,12 @@ class ApiService {
     this.isInitialized = false;
     this.retryCount = 0;
     this.maxRetries = 3;
+    this.navigation = null; // Navigation reference for session expiration
+  }
+
+  // Set navigation reference for session expiration handling
+  setNavigation(navigation) {
+    this.navigation = navigation;
   }
 
   // Initialize the API service with the best available URL
@@ -295,7 +254,7 @@ class ApiService {
 
     try {
       this.baseURL = await getBestApiUrl();
-      console.log('🔍 API: Using base URL:', this.baseURL);
+  
       
       // Start connection monitoring
       if (connectionMonitor && typeof connectionMonitor.start === 'function') {
@@ -308,10 +267,8 @@ class ApiService {
       let connectivityTest = null;
       for (let attempt = 1; attempt <= 3; attempt++) {
         try {
-          console.log(`🔍 API: Connectivity test attempt ${attempt}/3`);
           connectivityTest = await this.testConnectivityWithRetry();
           if (connectivityTest.success) {
-            console.log('✅ API: Connectivity test successful');
             break;
           } else {
             console.warn(`⚠️ API: Connectivity test attempt ${attempt} failed:`, connectivityTest.error);
@@ -322,14 +279,13 @@ class ApiService {
         
         // Wait before retry
         if (attempt < 3) {
-          await new Promise(resolve => setTimeout(resolve, 1000));
+          await new Promise(resolve => setTimeout(resolve, 500)); // Reduced from 1000ms to 500ms for faster retry
         }
       }
       
       if (connectivityTest && connectivityTest.success) {
         this.isInitialized = true;
         this.retryCount = 0; // Reset retry count on success
-        console.log('✅ API: Service initialized successfully');
       } else {
         this.isInitialized = true;
         console.warn('⚠️ API: Service initialized but connectivity test failed - will use fallback mode');
@@ -345,15 +301,13 @@ class ApiService {
   // Test connectivity with retry mechanism
   async testConnectivityWithRetry() {
     try {
-      console.log('🌐 Network: Testing connectivity to:', this.baseURL);
       const startTime = Date.now();
       
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 20000); // 20s for connectivity test
       
-      // Prefer the health endpoint to avoid triggering auth/rate limits
-      const testURL = `${this.baseURL.replace('/api/mobile', '')}/api/health`;
-      console.log('🏥 Network: Testing endpoint:', testURL);
+      // Use the health endpoint which is working
+      const testURL = `${this.baseURL}/health`;
       
       const response = await fetch(testURL, {
         method: 'GET',
@@ -366,10 +320,6 @@ class ApiService {
       clearTimeout(timeoutId);
       const endTime = Date.now();
       const responseTime = endTime - startTime;
-      
-      console.log('✅ Network: Connectivity test successful');
-      console.log('📊 Network: Response time:', responseTime + 'ms');
-      console.log('📊 Network: Status code:', response.status);
       
       // Any HTTP response indicates connectivity
       return { success: true, responseTime, status: response.status };
@@ -394,13 +344,8 @@ class ApiService {
 
   // Debug method to test network connectivity
   async debugNetworkConnection() {
-    console.log('🔍 API Debug: Starting network connection test...');
-    console.log('🔍 API Debug: Platform:', Platform.OS);
-    console.log('🔍 API Debug: Development mode:', __DEV__);
-    
     try {
       const status = await getRecommendedApiUrl();
-      console.log('🔍 API Debug: Network status result:', status);
       return status;
     } catch (error) {
       console.error('🔍 API Debug: Network test failed:', error);
@@ -520,7 +465,7 @@ class ApiService {
         throw new Error("No refresh token available");
       }
 
-      const response = await fetch(`${this.baseURL}/auth/refresh`, {
+              const response = await fetch(`${this.baseURL}/auth/refresh`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -554,8 +499,20 @@ class ApiService {
       }
     } catch (error) {
       console.error('❌ API: Token refresh failed:', error.message);
-      await this.removeAuthToken();
-      await this.removeRefreshToken();
+      
+      // Handle session expiration with navigation if available
+      if (this.navigation && (error.message.includes('No refresh token available') || 
+                             error.message.includes('Token refresh failed') ||
+                             error.message.includes('Session expired'))) {
+        handleSessionExpiration(error, this.navigation, async () => {
+          await this.removeAuthToken();
+          await this.removeRefreshToken();
+        });
+      } else {
+        await this.removeAuthToken();
+        await this.removeRefreshToken();
+      }
+      
       throw error;
     }
   }
@@ -569,7 +526,6 @@ class ApiService {
 
     // Check network connectivity before making request
     let networkStatus = { isConnected: true, isInternetReachable: true, type: 'unknown', isWifi: false, isCellular: false };
-    let connectionStatus = { isConnected: false, lastCheck: null, isMonitoring: false };
     
     try {
       if (networkStatusManager && typeof networkStatusManager.getCurrentStatus === 'function') {
@@ -581,51 +537,43 @@ class ApiService {
         }
       } else {
         console.warn('⚠️ API: networkStatusManager not available, using default network status');
-        console.warn('⚠️ API: networkStatusManager type:', typeof networkStatusManager);
-        console.warn('⚠️ API: networkStatusManager value:', networkStatusManager);
-      }
-      
-      if (connectionMonitor && typeof connectionMonitor.getStatus === 'function') {
-        connectionStatus = connectionMonitor.getStatus();
-      } else {
-        console.warn('⚠️ API: connectionMonitor not available, using default connection status');
-        console.warn('⚠️ API: connectionMonitor type:', typeof connectionMonitor);
-        console.warn('⚠️ API: connectionMonitor value:', connectionMonitor);
       }
     } catch (error) {
       console.warn('⚠️ API: Error getting network status, using defaults:', error.message);
     }
     
-    console.log('🌐 Network: Current status:', networkStatus);
-    console.log('🔍 Connection: Server status:', connectionStatus);
-    
     if (!networkStatus.isConnected) {
       console.warn('⚠️ Network: No internet connection detected');
       // For non-critical endpoints, return fallback data instead of throwing
       if (endpoint.includes('/wellness') || endpoint.includes('/mood') || endpoint.includes('/tracking')) {
-        console.log(`🔄 API: No network connection, returning fallback data for ${endpoint}`);
         return {
           success: true,
           data: getFallbackData(endpoint),
-          message: 'Using offline data - no internet connection'
+          message: 'Using offline data - no internet connection',
+          fromFallback: true
         };
       }
       throw new Error('Tidak ada koneksi internet. Silakan periksa koneksi Anda.');
     }
     
-    // Check if server is known to be down
-    if (!connectionStatus.isConnected && connectionStatus.lastCheck) {
-      console.warn('⚠️ API: Server known to be down, using fallback for non-critical endpoints');
-      if (endpoint.includes('/wellness') || endpoint.includes('/mood') || endpoint.includes('/tracking')) {
-        return {
-          success: true,
-          data: getFallbackData(endpoint),
-          message: 'Using offline data - server unavailable'
-        };
-      }
+    // Use ConnectionStatusManager for intelligent connection handling
+    const connectionStatus = ConnectionStatusManager.getConnectionStatus();
+    
+    // Check if we should use fallback data based on connection status
+    if (connectionStatus.shouldUseFallback && 
+        (endpoint.includes('/wellness') || endpoint.includes('/mood') || endpoint.includes('/tracking'))) {
+      return {
+        success: true,
+        data: getFallbackData(endpoint),
+        message: `Using offline data - ${ConnectionStatusManager.getStatusMessage()}`,
+        fromFallback: true
+      };
     }
-
-    // No need to reinitialize since we're always using production server
+    
+    // For critical endpoints, proceed with request but log connection status
+    if (connectionStatus.warningLevel !== 'none') {
+      console.warn(`⚠️ API: Proceeding with request despite connection issues (${connectionStatus.warningLevel} level)`);
+    }
 
     const makeRequest = async (authToken) => {
       try {
@@ -717,17 +665,14 @@ class ApiService {
     try {
       // Get the auth token
       const token = await this.getAuthToken();
-      console.log(`🔄 API: Making request attempt ${attempt}/${this.maxRetries}`);
       return await makeRequest(token);
     } catch (error) {
         // Handle authentication errors
         if (error.message.includes('Authentication failed') || error.message.includes('401')) {
-          console.log('🔐 API: Authentication error detected, attempting token refresh...');
           try {
             const refreshResult = await this.refreshAccessToken();
             if (refreshResult.success) {
               const newToken = await this.getAuthToken();
-              console.log('🔐 API: Token refresh successful, retrying request...');
               return await makeRequest(newToken);
             } else {
               console.warn('🔐 API: Token refresh failed');
@@ -735,6 +680,24 @@ class ApiService {
             }
           } catch (refreshError) {
             console.warn('🔐 API: Authentication failed, user needs to login again');
+            
+            // Stop background services when authentication fails
+            try {
+              await BackgroundServiceManager.stopAllServices();
+            } catch (serviceError) {
+              console.log('⚠️ API: Error stopping background services:', serviceError);
+            }
+            
+            // Handle session expiration with navigation if available
+            if (this.navigation && (refreshError.message.includes('No refresh token available') || 
+                                  refreshError.message.includes('Token refresh failed') ||
+                                  refreshError.message.includes('Session expired'))) {
+              handleSessionExpiration(refreshError, this.navigation, async () => {
+                await this.removeAuthToken();
+                await this.removeRefreshToken();
+              });
+            }
+            
             throw new Error('Authentication failed. Please login again.');
           }
         }
@@ -761,20 +724,27 @@ class ApiService {
     throw error;
   }
 
-        // Handle network errors
+        // Handle network errors with enhanced error handling
         if (error.name === 'TypeError' && error.message.includes('fetch') || isNetworkError(error)) {
           // Network error detected
           console.log(`🌐 Network: Network error detected (attempt ${attempt}/${this.maxRetries})`);
           
-          if (attempt < this.maxRetries) {
-            const delay = Math.min(1000 * Math.pow(2, attempt - 1), 10000); // Max 10 seconds
-            console.log(`🌐 Network: Retrying in ${delay}ms...`);
+          // Use the new network error handler for better classification and user feedback
+          const errorType = getNetworkErrorType(error);
+          const errorInfo = handleNetworkError(error, {
+            showAlert: false, // Don't show alert during retry attempts
+            context: `API Request (${endpoint})`
+          });
+          
+          if (attempt < this.maxRetries && errorInfo.shouldRetry) {
+            const delay = errorInfo.retryDelay * Math.pow(2, attempt - 1);
+            console.log(`🌐 Network: Retrying in ${delay}ms... (${errorType})`);
             await new Promise(resolve => setTimeout(resolve, delay));
             continue;
           }
           
           console.warn('🌐 Network: Max retries reached, throwing network error');
-          throw new Error(getNetworkErrorMessage(error));
+          throw new Error(errorInfo.userMessage);
         }
 
         // Don't retry for certain error types
@@ -796,24 +766,21 @@ class ApiService {
           continue;
         }
 
-        // All retries exhausted - provide fallback data for non-critical endpoints
-        console.warn(`⚠️ API: All retries exhausted for ${endpoint}, providing fallback data`);
+        // All retries exhausted - throw error instead of using fallback data
+        console.warn(`⚠️ API: All retries exhausted for ${endpoint}, throwing error`);
         
-        // For certain endpoints, return fallback data instead of throwing
-        if (endpoint.includes('/wellness') || endpoint.includes('/mood') || endpoint.includes('/tracking')) {
-          console.log(`🔄 API: Returning fallback data for ${endpoint}`);
-          return {
-            success: true,
-            data: getFallbackData(endpoint),
-            message: 'Using offline data due to connection issues'
-          };
-        }
+        // Don't use fallback data - let the error propagate
+        // This ensures users see real data or no data, not fake data
         
-        // Use the new error handler for other errors (but don't show alert automatically)
-        const errorInfo = handleError(error, { 
-          title: `API Request to ${endpoint}`,
-          showAlert: false, // Don't show alert automatically, let the calling code handle it
-          maxRetries: 2
+        // Use the enhanced network error handler for better user experience
+        const errorType = getNetworkErrorType(error);
+        const errorInfo = handleNetworkError(error, {
+          showAlert: true, // Show alert for final error
+          context: `API Request (${endpoint})`,
+          onRetry: () => {
+            // Allow user to retry the specific request
+            // You can implement retry logic here if needed
+          }
         });
         
         // Re-throw the error with better context
@@ -837,16 +804,14 @@ class ApiService {
     let connectivityTest = null;
     for (let attempt = 1; attempt <= 2; attempt++) {
       try {
-        console.log(`🔐 Login: Testing connectivity before login (attempt ${attempt}/2)...`);
         connectivityTest = await this.testConnectivityWithRetry();
         if (connectivityTest.success) {
-          console.log("🔐 Login: Connectivity test passed");
           break;
         }
       } catch (connectivityError) {
         console.warn(`🔐 Login: Connectivity test attempt ${attempt} failed:`, connectivityError.message);
         if (attempt < 2) {
-          await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second before retry
+          await new Promise(resolve => setTimeout(resolve, 500)); // Reduced from 1000ms to 500ms for faster retry
         }
       }
     }
@@ -864,13 +829,10 @@ class ApiService {
     };
 
     try {
-      console.log("🔐 Login: Attempting login to:", `${this.baseURL}/auth/login`);
-      console.log("🔐 Login: Platform:", Platform.OS);
-      console.log("🔐 Login: Development mode:", __DEV__);
       
       // Create a timeout controller for the fetch request
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 seconds to better tolerate slow mobile networks
+      const timeoutId = setTimeout(() => controller.abort(), 10000); // Reduced to 10 seconds for faster login
       
       try {
         // Use mobile auth endpoint for mobile users
@@ -890,7 +852,25 @@ class ApiService {
           }
           
           if (response.status === 401) {
-            throw new Error("Invalid credentials");
+            // Enhanced 401 error handling with more specific messages
+            let errorMessage = "Invalid credentials";
+            
+            // Try to parse the error response for more specific information
+            try {
+              const errorData = JSON.parse(errorText);
+              if (errorData.message) {
+                errorMessage = errorData.message;
+              } else if (errorData.error) {
+                errorMessage = errorData.error;
+              }
+            } catch (parseError) {
+              // If we can't parse JSON, use the raw error text if available
+              if (errorText && errorText.trim()) {
+                errorMessage = errorText.trim();
+              }
+            }
+            
+            throw new Error(errorMessage);
           } else if (response.status === 404) {
             throw new Error("Login endpoint not found. Please check server configuration.");
           } else if (response.status === 429) {
@@ -961,8 +941,8 @@ class ApiService {
           } catch (_) {
             // ignore
           }
-          await new Promise(resolve => setTimeout(resolve, 1000));
-          return await this.login(email, password, retryCount + 1);
+                  await new Promise(resolve => setTimeout(resolve, 500)); // Reduced from 1000ms to 500ms for faster retry
+        return await this.login(email, password, retryCount + 1);
         }
         throw new Error("Koneksi timeout. Server mungkin sedang sibuk atau tidak dapat diakses. Silakan coba lagi dalam beberapa saat.");
       } else if (error.message.includes('Network request failed') || error.message.includes('fetch')) {
@@ -972,7 +952,7 @@ class ApiService {
           if (connectionMonitor && typeof connectionMonitor.quickTest === 'function') {
             const quickTest = await connectionMonitor.quickTest();
             if (!quickTest) {
-              throw new Error("Server tidak dapat diakses. Pastikan server berjalan di localhost:3000.");
+              throw new Error("Server tidak dapat diakses. Silakan coba lagi nanti.");
             }
           }
         } catch (testError) {
@@ -986,10 +966,8 @@ class ApiService {
       
       // Run diagnostics if this is a network-related error
       if (error.message.includes('Network') || error.message.includes('fetch') || error.message.includes('timeout')) {
-        console.log('🔍 Login: Running diagnostics for network error...');
         try {
           const diagnosticResults = await loginDiagnostic.runDiagnostics();
-          console.log('🔍 Login: Diagnostic results:', diagnosticResults);
           
           // Add diagnostic info to error
           const enhancedError = new Error(error.message);
@@ -1022,7 +1000,7 @@ class ApiService {
     };
 
     try {
-      const response = await fetch(`${this.baseURL}/auth/register`, config);
+              const response = await fetch(`${this.baseURL}/auth/register`, config);
       
       if (!response.ok) {
         let errorText = "";
@@ -1153,9 +1131,7 @@ class ApiService {
 
   async testConnection() {
     try {
-      console.log('🔍 API: Testing connection...');
       const response = await this.request("/test-connection");
-      console.log('🔍 API: Connection test response:', response);
       return response;
     } catch (error) {
       console.error('❌ API: Connection test failed:', error);
@@ -1166,16 +1142,27 @@ class ApiService {
   // ===== MOOD TRACKING =====
 
   async createMoodEntry(moodData) {
-    console.log('🔍 API: Creating mood entry with data:', moodData);
     const userId = await this.getUserId();
-    console.log('🔍 API: User ID:', userId);
     const dataWithUserId = { ...moodData, user_id: userId };
-    console.log('🔍 API: Final data to send:', dataWithUserId);
     const response = await this.request("/mood_tracking", {
       method: "POST",
       body: JSON.stringify(dataWithUserId),
     });
-    console.log('🔍 API: Mood entry response:', response);
+
+    // Auto-update missions if mood tracking is successful
+    if (response.success) {
+      try {
+        const today = new Date().toISOString().split('T')[0];
+        await this.autoUpdateMissionProgress({
+          tracking_type: 'mental_health',
+          current_value: moodData.mood_score || 0,
+          date: today
+        });
+      } catch (error) {
+        console.error('Error auto-updating missions for mood tracking:', error);
+      }
+    }
+
     return response;
   }
 
@@ -1207,18 +1194,44 @@ class ApiService {
     return await this.request(`/mood_tracking?${queryString}`);
   }
 
+  async getMoodTracking(params = {}) {
+    const queryString = await this.createQueryStringWithUserId(params);
+    return await this.request(`/mood_tracking?${queryString}`);
+  }
+
   // ===== WATER TRACKING =====
 
   async createWaterEntry(waterData) {
     const userId = await this.getUserId();
     const dataWithUserId = { ...waterData, user_id: userId };
-    return await this.request("/tracking/water", {
+    const response = await this.request("/tracking/water", {
       method: "POST",
       body: JSON.stringify(dataWithUserId),
     });
+
+    // Auto-update missions if water tracking is successful
+    if (response.success) {
+      try {
+        const today = new Date().toISOString().split('T')[0];
+        await this.autoUpdateMissionProgress({
+          tracking_type: 'health_tracking',
+          current_value: waterData.amount_ml || 0,
+          date: today
+        });
+      } catch (error) {
+        console.error('Error auto-updating missions for water tracking:', error);
+      }
+    }
+
+    return response;
   }
 
   async getWaterHistory(params = {}) {
+    const queryString = await this.createQueryStringWithUserId(params);
+    return await this.request(`/tracking/water?${queryString}`);
+  }
+
+  async getWaterTracking(params = {}) {
     const queryString = await this.createQueryStringWithUserId(params);
     return await this.request(`/tracking/water?${queryString}`);
   }
@@ -1294,6 +1307,20 @@ class ApiService {
     if (response && (response.message?.includes('successfully') || response.sleepData)) {
       response.success = true;
     }
+
+    // Auto-update missions if sleep tracking is successful
+    if (response.success) {
+      try {
+        const today = new Date().toISOString().split('T')[0];
+        await this.autoUpdateMissionProgress({
+          tracking_type: 'health_tracking',
+          current_value: sleepData.sleep_hours || 0,
+          date: today
+        });
+      } catch (error) {
+        console.error('Error auto-updating missions for sleep tracking:', error);
+      }
+    }
     
     return response;
   }
@@ -1315,6 +1342,11 @@ class ApiService {
   }
 
   async getSleepHistory(params = {}) {
+    const queryString = await this.createQueryStringWithUserId(params);
+    return await this.request(`/sleep_tracking?${queryString}`);
+  }
+
+  async getSleepTracking(params = {}) {
     const queryString = await this.createQueryStringWithUserId(params);
     return await this.request(`/sleep_tracking?${queryString}`);
   }
@@ -1349,10 +1381,34 @@ class ApiService {
       method: "POST",
       body: JSON.stringify(dataWithUserId),
     });
+
+    // Auto-update missions if meal tracking is successful
+    if (response.success) {
+      try {
+        const today = new Date().toISOString().split('T')[0];
+        // Calculate total calories from foods
+        const totalCalories = mealData.foods?.reduce((sum, food) => sum + (parseFloat(food.calories) || 0), 0) || 0;
+        
+        await this.autoUpdateMissionProgress({
+          tracking_type: 'nutrition',
+          current_value: totalCalories,
+          date: today
+        });
+      } catch (error) {
+        console.error('Error auto-updating missions for meal tracking:', error);
+      }
+    }
+
     return response;
   }
 
   async getMealHistory(params = {}) {
+    const queryString = await this.createQueryStringWithUserId(params);
+    const response = await this.request(`/tracking/meal?${queryString}`);
+    return response;
+  }
+
+  async getMealLogging(params = {}) {
     const queryString = await this.createQueryStringWithUserId(params);
     const response = await this.request(`/tracking/meal?${queryString}`);
     return response;
@@ -1377,20 +1433,45 @@ class ApiService {
       const userId = await this.getUserId();
       return await this.request(`/users/profile?user_id=${userId}`);
     } catch (error) {
-      // If API fails, try to return cached user data
-      if (error.message.includes('timeout') || error.message.includes('network')) {
-        console.log('🔄 API: Profile request timed out, checking for cached data');
-        try {
-          const cachedUserData = await AsyncStorage.getItem('userData');
-          if (cachedUserData) {
-            const userData = JSON.parse(cachedUserData);
-            console.log('✅ API: Using cached user data for profile');
-            return { success: true, data: userData };
-          }
-        } catch (cacheError) {
-          console.warn('⚠️ API: Could not load cached user data');
+      // Check for cached user data immediately for any error
+      try {
+        const cachedUserData = await AsyncStorage.getItem('userData');
+        if (cachedUserData) {
+          const userData = JSON.parse(cachedUserData);
+          return { success: true, data: userData, fromCache: true };
         }
+      } catch (cacheError) {
+        console.warn('⚠️ API: Could not load cached user data:', cacheError.message);
       }
+      
+      // If no cached data, create a basic fallback user profile
+      try {
+        const authToken = await AsyncStorage.getItem('authToken');
+        if (authToken) {
+          // Try to decode token to get basic user info
+          const tokenParts = authToken.split('.');
+          if (tokenParts.length === 3) {
+            try {
+              const payload = JSON.parse(atob(tokenParts[1]));
+              const fallbackUser = {
+                id: payload.user_id || payload.sub || '1',
+                name: payload.name || 'User',
+                email: payload.email || 'user@example.com',
+                points: 0,
+                level: 1,
+                role: 'user',
+                created_at: new Date().toISOString()
+              };
+              return { success: true, data: fallbackUser, fromFallback: true };
+            } catch (tokenError) {
+              console.warn('⚠️ API: Could not decode token for fallback data');
+            }
+          }
+        }
+      } catch (fallbackError) {
+        console.warn('⚠️ API: Could not create fallback user data');
+      }
+      
       throw error;
     }
   }
@@ -1477,38 +1558,90 @@ class ApiService {
     });
   }
 
-  async getWellnessActivities(params = {}) {
+  async getHabitActivities(params = {}) {
     try {
       const queryString = await this.createQueryStringWithUserId(params);
-      return await this.request(`/wellness/activities?${queryString}`);
+      return await this.request(`/habit/activities?${queryString}`);
     } catch (error) {
       // If authentication fails, try the public endpoint
-      if (error.message.includes('Authentication failed') || error.message.includes('401')) {
-        console.log('🔐 API: Authentication failed, trying public wellness activities endpoint');
+      if (error.message.includes('Authentication failed') || error.message.includes('401') || error.message.includes('Authorization header required')) {
+        console.log('🔐 API: Authentication failed, trying public habit activities endpoint');
         const queryString = new URLSearchParams(params).toString();
-        return await this.request(`/wellness/activities/public?${queryString}`);
+        return await this.request(`/habit/activities/public?${queryString}`);
       }
       // If it's a server error, try the public endpoint as fallback
       if (error.message.includes('server error') || error.message.includes('500')) {
-        console.log('🔐 API: Server error, trying public wellness activities endpoint');
+        console.log('🔐 API: Server error, trying public habit activities endpoint');
         const queryString = new URLSearchParams(params).toString();
-        return await this.request(`/wellness/activities/public?${queryString}`);
+        return await this.request(`/habit/activities/public?${queryString}`);
       }
       throw error;
     }
+  }
+
+  // Keep backward compatibility
+  async getWellnessActivities(params = {}) {
+    return await this.getHabitActivities(params);
   }
 
   async getWellnessActivity(id) {
     return await this.request(`/wellness/activities/${id}`);
   }
 
-  async completeWellnessActivity(activityData) {
+  async completeHabitActivity(activityData) {
     const userId = await this.getUserId();
     const dataWithUserId = { ...activityData, user_id: userId };
-    return await this.request("/wellness/activities/complete", {
+    return await this.request("/habit/activities/complete", {
       method: "POST",
       body: JSON.stringify(dataWithUserId),
     });
+  }
+
+  // Keep backward compatibility
+  async completeWellnessActivity(activityData) {
+    return await this.completeHabitActivity(activityData);
+  }
+
+  async getHabitHistory(date, category = '') {
+    try {
+      const userId = await this.getUserId();
+      const params = { user_id: userId, date: date };
+      if (category) {
+        params.category = category;
+      }
+      const queryString = new URLSearchParams(params).toString();
+      return await this.request(`/habit/activities/history?${queryString}`);
+    } catch (error) {
+      // If authentication fails, return fallback data
+      if (error.message.includes('Authentication failed') || error.message.includes('401') || error.message.includes('Authorization header required')) {
+        console.log('🔐 API: Authentication failed for habit history, returning fallback data');
+        return {
+          success: true,
+          data: [],
+          summary: {
+            total_habits: 0,
+            completed_habits: 0,
+            total_points: 0
+          },
+          message: 'Habit history loaded from fallback data (authentication required for real-time data)'
+        };
+      }
+      // If it's a server error, return fallback data
+      if (error.message.includes('server error') || error.message.includes('500') || error.message.includes('Network') || error.message.includes('timeout')) {
+        console.log('🔐 API: Server/Network error for habit history, returning fallback data');
+        return {
+          success: true,
+          data: [],
+          summary: {
+            total_habits: 0,
+            completed_habits: 0,
+            total_points: 0
+          },
+          message: 'Habit history temporarily unavailable'
+        };
+      }
+      throw error;
+    }
   }
 
   async updateWellnessActivity(recordId, activityData) {
@@ -1526,7 +1659,7 @@ class ApiService {
       return await this.request(`/wellness/activities/history?${queryString}`);
     } catch (error) {
       // If authentication fails, return fallback data
-      if (error.message.includes('Authentication failed') || error.message.includes('401')) {
+      if (error.message.includes('Authentication failed') || error.message.includes('401') || error.message.includes('Authorization header required')) {
         console.log('🔐 API: Authentication failed for wellness history, returning fallback data');
         return {
           success: true,
@@ -1666,29 +1799,34 @@ class ApiService {
     });
   }
 
-  async getWellnessStats(params = {}) {
+  async getHabitStats(params = {}) {
     try {
       const queryString = await this.createQueryStringWithUserId(params);
-      return await this.request(`/wellness/stats?${queryString}`);
+      return await this.request(`/habit/stats?${queryString}`);
     } catch (error) {
       // If authentication fails, try the public endpoint
-      if (error.message.includes('Authentication failed') || error.message.includes('401')) {
-        console.log('🔐 API: Authentication failed for wellness stats, trying public endpoint');
+      if (error.message.includes('Authentication failed') || error.message.includes('401') || error.message.includes('Authorization header required')) {
+        console.log('🔐 API: Authentication failed for habit stats, trying public endpoint');
         const queryString = new URLSearchParams(params).toString();
-        return await this.request(`/wellness/stats/public?${queryString}`);
+        return await this.request(`/habit/stats/public?${queryString}`);
       }
       // If it's a server error, try the public endpoint as fallback
       if (error.message.includes('server error') || error.message.includes('500') || error.message.includes('Network') || error.message.includes('timeout')) {
-        console.log('🔐 API: Server/Network error for wellness stats, trying public endpoint');
+        console.log('🔐 API: Server/Network error for habit stats, trying public endpoint');
         const queryString = new URLSearchParams(params).toString();
-        return await this.request(`/wellness/stats/public?${queryString}`);
+        return await this.request(`/habit/stats/public?${queryString}`);
       }
       
       // For any other error, try the public endpoint as a last resort
-      console.log('🔐 API: Unknown error for wellness stats, trying public endpoint');
+      console.log('🔐 API: Unknown error for habit stats, trying public endpoint');
       const queryString = new URLSearchParams(params).toString();
-      return await this.request(`/wellness/stats/public?${queryString}`);
+      return await this.request(`/habit/stats/public?${queryString}`);
     }
+  }
+
+  // Keep backward compatibility
+  async getWellnessStats(params = {}) {
+    return await this.getHabitStats(params);
   }
 
   async resetWellnessActivities(recordId = null) {
@@ -1771,6 +1909,27 @@ class ApiService {
     }
   }
 
+  async getMission(missionId) {
+    try {
+      console.log('🔍 API: Getting mission by ID:', missionId);
+      const response = await this.request(`/missions/${missionId}`);
+      return response;
+    } catch (error) {
+      console.warn('🔄 API: getMission failed, using fallback:', error.message);
+      
+      // For timeout/network errors, return error response
+      if (error.message.includes('timeout') || error.message.includes('network')) {
+        return {
+          success: false,
+          message: 'Mission data temporarily unavailable'
+        };
+      }
+      
+      // Try to get from mock API as fallback
+      return await mockApiService.getMission(missionId);
+    }
+  }
+
   async getMissionsByCategory(category) {
     return await this.request(`/missions/category/${category}`);
   }
@@ -1794,8 +1953,13 @@ class ApiService {
   async getMyMissions(targetDate = null, showAllDates = false) {
     try {
       const userId = await this.getUserId();
-      // Build query parameters
+      if (!userId) {
+        throw new Error("User not authenticated");
+      }
+
+      // Build query parameters with user_id
       const params = new URLSearchParams();
+      params.append('user_id', userId.toString());
       if (targetDate) {
         params.append('date', targetDate);
       }
@@ -1823,6 +1987,35 @@ class ApiService {
     }
   }
 
+  async getMissionHistory(params = {}) {
+    try {
+      // Build query string without user_id since it's handled by JWT token
+      const queryParams = new URLSearchParams();
+      if (params.period) {
+        queryParams.append('period', params.period);
+      }
+      if (params.date) {
+        queryParams.append('date', params.date);
+      }
+      
+      const response = await this.request(`/missions/history?${queryParams.toString()}`);
+      return response;
+    } catch (error) {
+      console.warn('🔄 API: getMissionHistory failed, using fallback:', error.message);
+      
+      // For timeout/network errors, return empty history instead of mock data
+      if (error.message.includes('timeout') || error.message.includes('network')) {
+        return {
+          success: true,
+          data: [],
+          message: 'Mission history temporarily unavailable'
+        };
+      }
+      
+      return await mockApiService.getMissionHistory(params);
+    }
+  }
+
   async acceptMission(missionId, missionDate = null) {
     try {
       const userId = await this.getUserId();
@@ -1839,6 +2032,13 @@ class ApiService {
         method: "POST",
         body: JSON.stringify(requestBody),
       });
+
+      // Emit event if mission was successfully accepted
+      if (response.success) {
+        // Import eventEmitter dynamically to avoid circular dependencies
+        const { eventEmitter } = await import('../utils/eventEmitter');
+        eventEmitter.emit('missionAccepted', response.data);
+      }
 
       return response;
     } catch (error) {
@@ -1861,6 +2061,18 @@ class ApiService {
         body: JSON.stringify(progressData),
       });
 
+      // Emit events if mission progress was successfully updated
+      if (response.success) {
+        // Import eventEmitter dynamically to avoid circular dependencies
+        const { eventEmitter } = await import('../utils/eventEmitter');
+        eventEmitter.emit('missionUpdated', response.data);
+        
+        // Check if mission was completed
+        if (response.data && response.data.status === "completed") {
+          eventEmitter.emit('missionCompleted', response.data);
+        }
+      }
+
       return response;
     } catch (error) {
       if (error.message.includes("Network") || error.message.includes("connection")) {
@@ -1870,12 +2082,58 @@ class ApiService {
     }
   }
 
+  async autoUpdateMissionProgress(trackingData) {
+    try {
+      const userId = await this.getUserId();
+      if (!userId) {
+        throw new Error("User not authenticated");
+      }
+
+      const response = await this.request(`/tracking/auto-update-missions`, {
+        method: "POST",
+        body: JSON.stringify({
+          user_id: userId,
+          ...trackingData
+        }),
+      });
+
+      // Emit events if missions were successfully updated
+      if (response.success && response.data && response.data.updated_missions && response.data.updated_missions.length > 0) {
+        // Import eventEmitter dynamically to avoid circular dependencies
+        const { eventEmitter } = await import('../utils/eventEmitter');
+        eventEmitter.emit('missionUpdated', response.data);
+        
+        // Check if any missions were completed
+        const completedMissions = response.data.updated_missions.filter((mission: any) => mission.completed);
+        if (completedMissions.length > 0) {
+          eventEmitter.emit('missionCompleted', response.data);
+        }
+      }
+
+      return response;
+    } catch (error) {
+      console.error('Error auto-updating mission progress:', error);
+      return {
+        success: false,
+        message: 'Failed to auto-update mission progress',
+        error: error.message
+      };
+    }
+  }
+
   async abandonMission(userMissionId, reason = null) {
     try {
       const response = await this.request(`/missions/abandon/${userMissionId}`, {
         method: "PUT",
         body: JSON.stringify({ reason }),
       });
+
+      // Emit event if mission was successfully abandoned
+      if (response.success) {
+        // Import eventEmitter dynamically to avoid circular dependencies
+        const { eventEmitter } = await import('../utils/eventEmitter');
+        eventEmitter.emit('missionAbandoned', response.data);
+      }
 
       return response;
     } catch (error) {
@@ -1898,6 +2156,13 @@ class ApiService {
         body: JSON.stringify({}),
       });
 
+      // Emit event if mission was successfully reactivated
+      if (response.success) {
+        // Import eventEmitter dynamically to avoid circular dependencies
+        const { eventEmitter } = await import('../utils/eventEmitter');
+        eventEmitter.emit('missionReactivated', response.data);
+      }
+
       return response;
     } catch (error) {
       if (error.message.includes("Network") || error.message.includes("connection")) {
@@ -1907,11 +2172,193 @@ class ApiService {
     }
   }
 
+  async getUserMission(userMissionId) {
+    try {
+      const userId = await this.getUserId();
+      if (!userId) {
+        throw new Error("User not authenticated");
+      }
+
+      const response = await this.request(`/missions/user-mission/${userMissionId}`);
+      return response;
+    } catch (error) {
+      if (error.message.includes("Network") || error.message.includes("connection")) {
+        // For network errors, try to get from my-missions as fallback
+        const myMissionsResponse = await this.getMyMissions();
+        if (myMissionsResponse.success && myMissionsResponse.data) {
+          const userMission = myMissionsResponse.data.find(
+            (um) => um.id === userMissionId
+          );
+          if (userMission) {
+            return {
+              success: true,
+              data: userMission,
+              message: "Retrieved from cached data"
+            };
+          }
+        }
+        return {
+          success: false,
+          message: "User mission not found"
+        };
+      }
+      throw error;
+    }
+  }
+
+  // Optimized method to get tracking data for mission detail
+  async getTrackingDataForMission(missionCategory, missionUnit) {
+    try {
+      const userId = await this.getUserId();
+      if (!userId) {
+        throw new Error("User not authenticated");
+      }
+
+      // Get today's date
+      const today = new Date().toISOString().split('T')[0];
+      
+      console.log(`🔍 MissionDetailService: Getting tracking data for ${missionCategory}/${missionUnit} on ${today}`);
+      
+      let trackingData = null;
+      
+      switch (missionCategory) {
+        case 'health_tracking':
+          if (missionUnit === 'ml') {
+            const waterResponse = await this.getWaterTracking();
+            if (waterResponse.success && waterResponse.data) {
+              // Handle water tracking data structure: { entries: [...] }
+              const waterEntries = waterResponse.data.entries || waterResponse.data;
+              if (Array.isArray(waterEntries)) {
+                const todayWater = waterEntries.find(entry => 
+                  entry.tracking_date === today
+                );
+                trackingData = todayWater?.amount_ml || 0;
+              }
+            }
+          } else if (missionUnit === 'hours') {
+            const sleepResponse = await this.getSleepTracking();
+            if (sleepResponse.success && sleepResponse.data) {
+              // Handle sleep tracking data structure: { sleepData: [...] }
+              const sleepEntries = sleepResponse.data.sleepData || sleepResponse.data;
+              if (Array.isArray(sleepEntries)) {
+                const todaySleep = sleepEntries.find(entry => 
+                  entry.sleep_date === today
+                );
+                trackingData = todaySleep?.sleep_hours || 0;
+              }
+            }
+          }
+          break;
+          
+        case 'fitness':
+          const fitnessResponse = await this.getFitnessTracking();
+          if (fitnessResponse.success && fitnessResponse.data) {
+            // Handle fitness tracking data structure: direct array
+            const fitnessEntries = Array.isArray(fitnessResponse.data) ? fitnessResponse.data : [];
+            if (fitnessEntries.length > 0) {
+              const todayFitness = fitnessEntries.find(entry => 
+                entry.recorded_at && new Date(entry.recorded_at).toDateString() === new Date().toDateString()
+              );
+              if (missionUnit === 'steps' || missionUnit === 'langkah') {
+                trackingData = todayFitness?.steps || 0;
+              } else if (missionUnit === 'minutes' || missionUnit === 'menit') {
+                trackingData = todayFitness?.duration_minutes || 0;
+              }
+            }
+          }
+          break;
+          
+        case 'nutrition':
+          const mealResponse = await this.getMealLogging();
+          console.log(`🍽️ Meal response:`, mealResponse);
+          if (mealResponse.success && mealResponse.data) {
+            // Handle the correct data structure: { entries: [...] }
+            const mealEntries = mealResponse.data.entries || mealResponse.data;
+            console.log(`🍽️ Meal entries:`, mealEntries);
+            if (Array.isArray(mealEntries)) {
+              const todayMeals = mealEntries.filter(entry => 
+                new Date(entry.recorded_at).toDateString() === new Date().toDateString()
+              );
+              console.log(`🍽️ Today's meals:`, todayMeals);
+              if (missionUnit === 'calories') {
+                trackingData = todayMeals.reduce((sum, meal) => sum + (meal.calories || 0), 0);
+              } else if (missionUnit === 'meals') {
+                const uniqueMealTypes = new Set(todayMeals.map(meal => meal.meal_type));
+                trackingData = uniqueMealTypes.size;
+              }
+            } else {
+              console.log(`❌ Meal entries is not an array:`, typeof mealEntries, mealEntries);
+            }
+          } else {
+            console.log(`❌ Meal response not successful:`, mealResponse);
+          }
+          break;
+          
+        case 'mental_health':
+          const moodResponse = await this.getMoodTracking();
+          if (moodResponse.success && moodResponse.data) {
+            // Handle mood tracking data structure: { entries: [...] }
+            const moodEntries = moodResponse.data.entries || moodResponse.data;
+            if (Array.isArray(moodEntries)) {
+              const todayMood = moodEntries.find(entry => 
+                entry.tracking_date === today
+              );
+              if (missionUnit === 'mood_score') {
+                trackingData = todayMood?.mood_score || 0;
+              } else if (missionUnit === 'stress_level') {
+                if (todayMood?.stress_level) {
+                  switch (todayMood.stress_level) {
+                    case 'low': trackingData = 1; break;
+                    case 'moderate': trackingData = 2; break;
+                    case 'high': trackingData = 3; break;
+                    case 'very_high': trackingData = 4; break;
+                    default: trackingData = 2;
+                  }
+                }
+              }
+            }
+          }
+          break;
+      }
+      
+      return {
+        success: true,
+        data: {
+          tracking_type: missionCategory,
+          current_value: trackingData || 0,
+          date: today
+        }
+      };
+    } catch (error) {
+      console.error('Error getting tracking data for mission:', error);
+      return {
+        success: false,
+        message: error.message,
+        data: { tracking_type: missionCategory, current_value: 0, date: new Date().toISOString().split('T')[0] }
+      };
+    }
+  }
+
   async getMissionStats(params = {}) {
     try {
-      const queryString = new URLSearchParams(params).toString();
-      return await this.request(`/mission-stats${queryString ? `?${queryString}` : ""}`);
+      const userId = await this.getUserId();
+      if (!userId) {
+        throw new Error("User not authenticated");
+      }
+
+      // Build query parameters with user_id
+      const queryParams = new URLSearchParams();
+      queryParams.append('user_id', userId.toString());
+      
+      // Add other params
+      Object.keys(params).forEach(key => {
+        queryParams.append(key, params[key]);
+      });
+
+      const queryString = queryParams.toString();
+      return await this.request(`/missions/stats?${queryString}`);
     } catch (error) {
+      console.warn('🔄 API: getMissionStats failed, using fallback:', error.message);
       return await mockApiService.getMissionStats();
     }
   }
@@ -1919,7 +2366,8 @@ class ApiService {
   // ===== TODAY'S SUMMARY =====
 
   async getTodaySummary() {
-    return await this.request("/tracking/today-summary");
+    const queryString = await this.createQueryStringWithUserId();
+    return await this.request(`/tracking/today-summary?${queryString}`);
   }
 
   async getWeeklySummary() {
@@ -1944,13 +2392,47 @@ class ApiService {
   async createFitnessEntry(fitnessData) {
     const userId = await this.getUserId();
     const dataWithUserId = { ...fitnessData, user_id: userId };
-    return await this.request("/tracking/fitness", {
+    const response = await this.request("/tracking/fitness", {
       method: "POST",
       body: JSON.stringify(dataWithUserId),
     });
+
+    // Auto-update missions if fitness tracking is successful
+    if (response.success) {
+      try {
+        const today = new Date().toISOString().split('T')[0];
+        
+        // Update steps missions
+        if (fitnessData.steps && fitnessData.steps > 0) {
+          await this.autoUpdateMissionProgress({
+            tracking_type: 'fitness',
+            current_value: fitnessData.steps,
+            date: today
+          });
+        }
+        
+        // Update exercise minutes missions
+        if (fitnessData.duration_minutes && fitnessData.duration_minutes > 0) {
+          await this.autoUpdateMissionProgress({
+            tracking_type: 'fitness',
+            current_value: fitnessData.duration_minutes,
+            date: today
+          });
+        }
+      } catch (error) {
+        console.error('Error auto-updating missions for fitness tracking:', error);
+      }
+    }
+
+    return response;
   }
 
   async getFitnessHistory(params = {}) {
+    const queryString = await this.createQueryStringWithUserId(params);
+    return await this.request(`/tracking/fitness?${queryString}`);
+  }
+
+  async getFitnessTracking(params = {}) {
     const queryString = await this.createQueryStringWithUserId(params);
     return await this.request(`/tracking/fitness?${queryString}`);
   }
@@ -2310,6 +2792,61 @@ class ApiService {
     return this.request('/wellness/check-program-status');
   }
 
+  async stopWellnessProgram(reason = null) {
+    return this.request('/wellness/stop-program', {
+      method: 'POST',
+      body: JSON.stringify({ reason })
+    });
+  }
+
+  async getWellnessProgramStopHistory() {
+    return this.request('/wellness/stop-program');
+  }
+
+  async downloadWellnessReport(programId = null) {
+    try {
+      const url = programId 
+        ? `${this.baseURL}/wellness/report?programId=${programId}`
+        : `${this.baseURL}/wellness/report`;
+        
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${this.getToken()}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      // For Excel files, we need to handle the response differently
+      const blob = await response.blob();
+      
+      // Create a download link
+      const url2 = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url2;
+      
+      // Generate filename based on program ID
+      const filename = programId 
+        ? `laporan-wellness-cycle-${programId}-${new Date().toISOString().split('T')[0]}.xlsx`
+        : `laporan-wellness-${new Date().toISOString().split('T')[0]}.xlsx`;
+        
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url2);
+
+      return { success: true };
+    } catch (error) {
+      console.error('Error downloading wellness report:', error);
+      throw error;
+    }
+  }
+
   async updateWellnessData(wellnessData) {
     return this.request('/setup-wellness', {
       method: 'PUT',
@@ -2331,6 +2868,11 @@ class ApiService {
 
   async getAnthropometryProgress(params = {}) {
     const queryString = new URLSearchParams(params).toString();
+    return this.request(`/anthropometry/progress${queryString ? `?${queryString}` : ''}`);
+  }
+
+  async getAnthropometryHistory(params = {}) {
+    const queryString = await this.createQueryStringWithUserId(params);
     return this.request(`/anthropometry/progress${queryString ? `?${queryString}` : ''}`);
   }
 
@@ -2399,6 +2941,143 @@ class ApiService {
       });
     } catch (error) {
       console.error('Error adding medical visit:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Handle authentication failure and stop background services
+   */
+  async handleAuthenticationFailure(error) {
+    console.warn('🔐 API: Handling authentication failure...');
+    
+    try {
+      // Stop all background services
+      await BackgroundServiceManager.stopAllServices();
+      console.log('🛑 API: Background services stopped due to authentication failure');
+      
+      // Clear authentication tokens
+      await this.removeAuthToken();
+      await this.removeRefreshToken();
+      
+      console.log('✅ API: Authentication failure handled successfully');
+    } catch (serviceError) {
+      console.error('❌ API: Error handling authentication failure:', serviceError);
+    }
+    
+    // Re-throw the original error
+    throw error;
+  }
+
+  // HTTP Method convenience methods
+  async get(endpoint, options = {}) {
+    return this.request(endpoint, { ...options, method: 'GET' });
+  }
+
+  async post(endpoint, data, options = {}) {
+    return this.request(endpoint, {
+      ...options,
+      method: 'POST',
+      body: JSON.stringify(data)
+    });
+  }
+
+  async put(endpoint, data, options = {}) {
+    return this.request(endpoint, {
+      ...options,
+      method: 'PUT',
+      body: JSON.stringify(data)
+    });
+  }
+
+  async delete(endpoint, options = {}) {
+    return this.request(endpoint, { ...options, method: 'DELETE' });
+  }
+
+  async patch(endpoint, data, options = {}) {
+    return this.request(endpoint, {
+      ...options,
+      method: 'PATCH',
+      body: JSON.stringify(data)
+    });
+  }
+
+  // PIN Management API functions
+  async getPinStatus(userId) {
+    try {
+      return await this.request(`/pin?user_id=${userId}`, {
+        method: 'GET'
+      });
+    } catch (error) {
+      console.error('Error getting PIN status:', error);
+      throw error;
+    }
+  }
+
+  async enablePin(userId, pinCode) {
+    try {
+      return await this.request('/pin', {
+        method: 'POST',
+        body: JSON.stringify({
+          user_id: userId,
+          pin_code: pinCode
+        })
+      });
+    } catch (error) {
+      console.error('Error enabling PIN:', error);
+      throw error;
+    }
+  }
+
+  async updatePin(userId, oldPin, newPin) {
+    try {
+      return await this.request('/pin', {
+        method: 'PUT',
+        body: JSON.stringify({
+          user_id: userId,
+          old_pin: oldPin,
+          new_pin: newPin
+        })
+      });
+    } catch (error) {
+      console.error('Error updating PIN:', error);
+      throw error;
+    }
+  }
+
+  async disablePin(userId) {
+    try {
+      return await this.request(`/pin?user_id=${userId}`, {
+        method: 'DELETE'
+      });
+    } catch (error) {
+      console.error('Error disabling PIN:', error);
+      throw error;
+    }
+  }
+
+  async validatePin(userId, pinCode) {
+    try {
+      return await this.request('/pin/validate', {
+        method: 'POST',
+        body: JSON.stringify({
+          user_id: userId,
+          pin_code: pinCode
+        })
+      });
+    } catch (error) {
+      console.error('Error validating PIN:', error);
+      throw error;
+    }
+  }
+
+  async getPinValidationStatus(userId) {
+    try {
+      return await this.request(`/pin/validate?user_id=${userId}`, {
+        method: 'GET'
+      });
+    } catch (error) {
+      console.error('Error getting PIN validation status:', error);
       throw error;
     }
   }

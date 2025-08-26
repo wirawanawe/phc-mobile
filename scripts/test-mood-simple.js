@@ -1,7 +1,6 @@
 // Simple test to verify mood data saving and retrieval
 const testUrls = [
-  'http://localhost:3000/api/mobile',
-  'http://192.168.18.30:3000/api/mobile'
+  'https://dash.doctorphc.id/api/mobile'
 ];
 
 async function testMoodSimple(url) {

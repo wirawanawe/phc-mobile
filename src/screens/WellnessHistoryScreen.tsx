@@ -7,12 +7,14 @@ import {
   TouchableOpacity,
   SafeAreaView,
   ActivityIndicator,
+  Alert,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import Icon from "react-native-vector-icons/MaterialCommunityIcons";
 import { useAuth } from "../contexts/AuthContext";
 import apiService from "../services/api";
 import { safeGoBack } from "../utils/safeNavigation";
+import SimpleDatePicker from "../components/SimpleDatePicker";
 
 interface WellnessProgramHistory {
   id: number;
@@ -35,25 +37,118 @@ interface WellnessProgramHistory {
 const WellnessHistoryScreen = ({ navigation }: any) => {
   const { user, isAuthenticated } = useAuth();
   const [programHistory, setProgramHistory] = useState<WellnessProgramHistory[]>([]);
+  const [filteredHistory, setFilteredHistory] = useState<WellnessProgramHistory[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedProgram, setSelectedProgram] = useState<WellnessProgramHistory | null>(null);
+  
+  // Date filter state
+  const [selectedDate, setSelectedDate] = useState(new Date());
 
   useEffect(() => {
     fetchWellnessHistory();
   }, []);
 
+  // Load data when selected date changes
+  useEffect(() => {
+    fetchWellnessHistory();
+  }, [selectedDate]);
+
+  // Remove the old filter effect since we're now loading data directly for the selected date
+  // useEffect(() => {
+  //   filterWellnessHistory();
+  // }, [programHistory, selectedDate]);
+
+  const filterWellnessHistory = () => {
+    const selectedDateString = selectedDate.toLocaleDateString('en-CA'); // YYYY-MM-DD format
+    
+    const filtered = programHistory.filter((program) => {
+      const programStartDate = new Date(program.program_start_date);
+      const programEndDate = new Date(program.program_end_date);
+      const programStartString = programStartDate.toLocaleDateString('en-CA');
+      const programEndString = programEndDate.toLocaleDateString('en-CA');
+      
+      // Check if selected date falls within program period
+      return selectedDateString >= programStartString && selectedDateString <= programEndString;
+    });
+
+    setFilteredHistory(filtered);
+  };
+
   const fetchWellnessHistory = async () => {
     try {
       setLoading(true);
+      
+      // Convert selected date to string format for API
+      const dateString = selectedDate.toLocaleDateString('en-CA'); // YYYY-MM-DD format
+      console.log(`🔍 WellnessHistoryScreen - Loading data for date: ${dateString}`);
+      
       const response = await apiService.checkWellnessProgramStatus();
       
       if (response.success && response.data?.program_history) {
+        // Filter the program history to show programs that were active on the selected date
+        const selectedDateString = selectedDate.toLocaleDateString('en-CA');
+        const filteredPrograms = response.data.program_history.filter((program: any) => {
+          const programStartDate = new Date(program.program_start_date);
+          const programEndDate = new Date(program.program_end_date);
+          const programStartString = programStartDate.toLocaleDateString('en-CA');
+          const programEndString = programEndDate.toLocaleDateString('en-CA');
+          
+          // Check if selected date falls within program period
+          return selectedDateString >= programStartString && selectedDateString <= programEndString;
+        });
+        
         setProgramHistory(response.data.program_history);
+        setFilteredHistory(filteredPrograms);
+      } else {
+        setProgramHistory([]);
+        setFilteredHistory([]);
       }
     } catch (error) {
       console.error("Error fetching wellness history:", error);
+      setProgramHistory([]);
+      setFilteredHistory([]);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleDownloadReport = async (program: WellnessProgramHistory) => {
+    try {
+      const cycleNumber = filteredHistory.length - filteredHistory.findIndex(p => p.id === program.id);
+      const programDate = new Date(program.program_start_date).toLocaleDateString('id-ID');
+      
+      Alert.alert(
+        "Download Laporan",
+        `Apakah Anda ingin mengunduh laporan program wellness cycle ${cycleNumber} (${programDate}) dalam format Excel?`,
+        [
+          {
+            text: "Batal",
+            style: "cancel",
+          },
+          {
+            text: "Download",
+            onPress: async () => {
+              try {
+                Alert.alert("Mengunduh...", "Sedang mempersiapkan laporan Excel...");
+                
+                const response = await apiService.downloadWellnessReport(program.id);
+                
+                if (response && response.success) {
+                  Alert.alert("Berhasil", "Laporan berhasil diunduh! File tersimpan di folder Downloads.");
+                } else {
+                  Alert.alert("Gagal", "Gagal mengunduh laporan. Silakan coba lagi.");
+                }
+              } catch (error) {
+                console.error("Error downloading report:", error);
+                Alert.alert("Error", "Terjadi kesalahan saat mengunduh laporan.");
+              }
+            },
+          },
+        ]
+      );
+    } catch (error) {
+      console.error("Error in handleDownloadReport:", error);
+      Alert.alert("Error", "Terjadi kesalahan saat mempersiapkan laporan.");
     }
   };
 
@@ -88,10 +183,15 @@ const WellnessHistoryScreen = ({ navigation }: any) => {
   };
 
   const getCompletionRateColor = (rate: number) => {
+    if (!rate || typeof rate !== 'number') return '#6B7280';
     if (rate >= 80) return '#10B981';
     if (rate >= 60) return '#F59E0B';
     if (rate >= 40) return '#EF4444';
     return '#6B7280';
+  };
+
+  const handleDateChange = (date: Date) => {
+    setSelectedDate(date);
   };
 
   const renderProgramCard = (program: WellnessProgramHistory, index: number) => (
@@ -102,7 +202,7 @@ const WellnessHistoryScreen = ({ navigation }: any) => {
     >
       <View style={styles.programHeader}>
         <View style={styles.programNumber}>
-          <Text style={styles.programNumberText}>#{programHistory.length - index}</Text>
+          <Text style={styles.programNumberText}>#{filteredHistory.length - index}</Text>
         </View>
         <View style={styles.programInfo}>
           <Text style={styles.programDate}>
@@ -141,14 +241,14 @@ const WellnessHistoryScreen = ({ navigation }: any) => {
                 style={[
                   styles.completionProgress, 
                   { 
-                    width: `${Math.min(program.completion_rate, 100)}%`,
+                    width: `${program.completion_rate && typeof program.completion_rate === 'number' ? Math.min(program.completion_rate, 100) : 0}%`,
                     backgroundColor: getCompletionRateColor(program.completion_rate)
                   }
                 ]} 
               />
             </View>
             <Text style={[styles.completionRate, { color: getCompletionRateColor(program.completion_rate) }]}>
-              {Math.round(program.completion_rate)}%
+              {program.completion_rate && typeof program.completion_rate === 'number' ? Math.round(program.completion_rate) : 0}%
             </Text>
           </View>
 
@@ -171,7 +271,7 @@ const WellnessHistoryScreen = ({ navigation }: any) => {
             </View>
             <View style={styles.statItem}>
               <Icon name="heart-pulse" size={20} color="#EF4444" />
-              <Text style={styles.statValue}>{Math.round(program.wellness_score)}</Text>
+              <Text style={styles.statValue}>{program.wellness_score && typeof program.wellness_score === 'number' ? Math.round(program.wellness_score) : 0}</Text>
               <Text style={styles.statLabel}>Skor</Text>
             </View>
           </View>
@@ -183,20 +283,35 @@ const WellnessHistoryScreen = ({ navigation }: any) => {
               <View style={styles.metricItem}>
                 <Icon name="water" size={16} color="#06B6D4" />
                 <Text style={styles.metricLabel}>Air Minum</Text>
-                <Text style={styles.metricValue}>{Math.round(program.avg_water_intake)}ml/hari</Text>
+                <Text style={styles.metricValue}>
+                  {program.avg_water_intake && typeof program.avg_water_intake === 'number' ? (program.avg_water_intake / 1000).toFixed(1) : '0.0'}L/hari
+                </Text>
               </View>
               <View style={styles.metricItem}>
                 <Icon name="sleep" size={16} color="#8B5CF6" />
                 <Text style={styles.metricLabel}>Tidur</Text>
-                <Text style={styles.metricValue}>{program.avg_sleep_hours.toFixed(1)} jam</Text>
+                <Text style={styles.metricValue}>
+                  {program.avg_sleep_hours && typeof program.avg_sleep_hours === 'number' ? program.avg_sleep_hours.toFixed(1) : '0.0'} jam
+                </Text>
               </View>
               <View style={styles.metricItem}>
                 <Icon name="emoticon" size={16} color="#F59E0B" />
                 <Text style={styles.metricLabel}>Mood</Text>
-                <Text style={styles.metricValue}>{program.avg_mood_score.toFixed(1)}/10</Text>
+                <Text style={styles.metricValue}>
+                  {program.avg_mood_score && typeof program.avg_mood_score === 'number' ? program.avg_mood_score.toFixed(1) : '0.0'}/10
+                </Text>
               </View>
             </View>
           </View>
+
+          {/* Download Report Button */}
+          <TouchableOpacity
+            style={styles.downloadReportButton}
+            onPress={() => handleDownloadReport(program)}
+          >
+            <Icon name="download" size={20} color="#FFFFFF" />
+            <Text style={styles.downloadButtonText}>Download Laporan</Text>
+          </TouchableOpacity>
         </View>
       )}
     </TouchableOpacity>
@@ -233,20 +348,33 @@ const WellnessHistoryScreen = ({ navigation }: any) => {
 
         {/* Content */}
         <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-          {programHistory.length === 0 ? (
+          {/* Date Picker */}
+          <SimpleDatePicker
+            selectedDate={selectedDate}
+            onDateChange={handleDateChange}
+            title="Pilih Tanggal Program"
+            variant="light"
+          />
+
+          {filteredHistory.length === 0 ? (
             <View style={styles.emptyState}>
               <Icon name="history" size={64} color="#9CA3AF" />
-              <Text style={styles.emptyTitle}>Belum Ada Riwayat Program</Text>
+              <Text style={styles.emptyTitle}>
+                {programHistory.length === 0 ? 'Belum Ada Riwayat Program' : 'Tidak Ada Program untuk Tanggal Ini'}
+              </Text>
               <Text style={styles.emptySubtitle}>
-                Riwayat program wellness akan muncul setelah program selesai
+                {programHistory.length === 0 
+                  ? 'Riwayat program wellness akan muncul setelah program selesai'
+                  : 'Tidak ada program wellness yang aktif pada tanggal yang dipilih'
+                }
               </Text>
             </View>
           ) : (
             <View style={styles.historyContainer}>
               <Text style={styles.sectionTitle}>
-                {programHistory.length} Program Selesai
+                {filteredHistory.length} Program Selesai
               </Text>
-              {programHistory.map((program, index) => renderProgramCard(program, index))}
+              {filteredHistory.map((program, index) => renderProgramCard(program, index))}
             </View>
           )}
         </ScrollView>
@@ -286,6 +414,35 @@ const styles = StyleSheet.create({
   },
   placeholder: {
     width: 40,
+  },
+  downloadButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "rgba(255, 255, 255, 0.2)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  downloadReportButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#10B981",
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+    marginTop: 16,
+    shadowColor: "#10B981",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  downloadButtonText: {
+    color: "#FFFFFF",
+    fontSize: 16,
+    fontWeight: "600",
+    marginLeft: 8,
   },
   content: {
     flex: 1,

@@ -2,7 +2,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 
 class MockApiService {
   constructor() {
-    this.baseURL = "https://dash.doctorphc.id/api";
+    this.baseURL = "http://192.168.193.150:3000/api";
     this.mockUserMissions = []; // Track user missions - will be populated from database
     this.mockMissionStats = {
       totalMissions: 0,
@@ -284,6 +284,30 @@ class MockApiService {
       return {
         success: false,
         message: "Failed to get missions",
+        error: error.message
+      };
+    }
+  }
+
+  async getMission(missionId) {
+    try {
+      const mission = this.mockMissions.find(m => m.id === missionId);
+      
+      if (!mission) {
+        return {
+          success: false,
+          message: "Mission not found"
+        };
+      }
+      
+      return {
+        success: true,
+        data: mission
+      };
+    } catch (error) {
+      return {
+        success: false,
+        message: "Failed to get mission",
         error: error.message
       };
     }
@@ -590,6 +614,39 @@ class MockApiService {
     }
   }
 
+  async getUserMission(userMissionId) {
+    try {
+      const userData = await AsyncStorage.getItem('userData');
+      if (!userData) {
+        return {
+          success: false,
+          message: "User not authenticated"
+        };
+      }
+      
+      const user = JSON.parse(userData);
+      const userMission = this.mockUserMissions.find(um => um.id === userMissionId && um.user_id === user.id);
+      
+      if (!userMission) {
+        return {
+          success: false,
+          message: "User mission not found"
+        };
+      }
+      
+      return {
+        success: true,
+        data: userMission
+      };
+    } catch (error) {
+      return {
+        success: false,
+        message: "Failed to get user mission",
+        error: error.message
+      };
+    }
+  }
+
   async getMissionStats() {
     try {
       const userData = await AsyncStorage.getItem('userData');
@@ -623,6 +680,53 @@ class MockApiService {
       return {
         success: false,
         message: "Failed to get mission stats",
+        error: error.message
+      };
+    }
+  }
+
+  async getMissionHistory(params = {}) {
+    try {
+      const userData = await AsyncStorage.getItem('userData');
+      if (!userData) {
+        return {
+          success: false,
+          message: "User not authenticated"
+        };
+      }
+      
+      const user = JSON.parse(userData);
+      let userMissions = this.mockUserMissions.filter(um => um.user_id === user.id);
+      
+      // Apply date filter if provided
+      if (params.date) {
+        const targetDate = new Date(params.date);
+        userMissions = userMissions.filter(um => {
+          const missionDate = new Date(um.created_at);
+          return missionDate.toDateString() === targetDate.toDateString();
+        });
+      }
+      
+      // Apply period filter if no date is provided
+      if (!params.date && params.period) {
+        const daysAgo = parseInt(params.period);
+        const cutoffDate = new Date();
+        cutoffDate.setDate(cutoffDate.getDate() - daysAgo);
+        
+        userMissions = userMissions.filter(um => {
+          const missionDate = new Date(um.created_at);
+          return missionDate >= cutoffDate;
+        });
+      }
+      
+      return {
+        success: true,
+        data: userMissions
+      };
+    } catch (error) {
+      return {
+        success: false,
+        message: "Failed to get mission history",
         error: error.message
       };
     }

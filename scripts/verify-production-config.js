@@ -1,116 +1,101 @@
 #!/usr/bin/env node
 
 /**
- * Production Configuration Verification Script
- * Verifies that all settings are properly configured for production
+ * Verify Production Configuration Script
+ * Checks all configuration files to ensure they're set to production mode
  */
 
 const fs = require('fs');
 const path = require('path');
 
-console.log('🔍 Verifying Production Configuration...\n');
-
-// Check API configuration
-console.log('📡 Checking API Configuration...');
-const apiFile = path.join(__dirname, '../src/services/api.js');
-const apiContent = fs.readFileSync(apiFile, 'utf8');
-
-// Check if production URLs are forced
-const hasProductionURLs = apiContent.includes('https://dash.doctorphc.id/api/mobile') &&
-                         !apiContent.includes('localhost') &&
-                         !apiContent.includes('10.0.2.2') &&
-                         !apiContent.includes('127.0.0.1');
-
-if (hasProductionURLs) {
-    console.log('✅ API configuration: Production URLs are forced');
-} else {
-    console.log('❌ API configuration: Still contains development URLs');
-}
-
-// Check app.json configuration
-console.log('\n📱 Checking App Configuration...');
-const appJsonPath = path.join(__dirname, '../app.json');
-const appJson = JSON.parse(fs.readFileSync(appJsonPath, 'utf8'));
-
-const hasProductionBuild = appJson.expo.build && appJson.expo.build.production;
-if (hasProductionBuild) {
-    console.log('✅ App configuration: Production build profile exists');
-} else {
-    console.log('❌ App configuration: Missing production build profile');
-}
-
-// Check EAS configuration
-console.log('\n🏗️ Checking EAS Configuration...');
-const easJsonPath = path.join(__dirname, '../eas.json');
-const easJson = JSON.parse(fs.readFileSync(easJsonPath, 'utf8'));
-
-const hasEASProduction = easJson.build && easJson.build.production;
-if (hasEASProduction) {
-    console.log('✅ EAS configuration: Production profile exists');
-} else {
-    console.log('❌ EAS configuration: Missing production profile');
-}
-
-// Check for development-specific configurations
-console.log('\n🔧 Checking for Development Configurations...');
-const devPatterns = [
-  /127\.0\.0\.1/,
-  /10\.0\.2\.2/,
-  /__DEV__/,
-  /development/
+const CONFIG_FILES = [
+  { path: 'src/services/api.js', name: 'API Service' },
+  { path: 'src/utils/quickFix.js', name: 'Quick Fix' },
+  { path: 'src/utils/networkHelper.js', name: 'Network Helper' },
+  { path: 'src/utils/networkStatus.js', name: 'Network Status' },
+  { path: 'src/utils/networkTest.js', name: 'Network Test' },
+  { path: 'src/utils/connectionMonitor.js', name: 'Connection Monitor' },
+  { path: 'src/utils/connectionTester.js', name: 'Connection Tester' },
+  { path: 'src/utils/testConnection.js', name: 'Test Connection' },
+  { path: 'src/utils/networkDiagnostics.js', name: 'Network Diagnostics' },
+  { path: 'src/utils/loginDiagnostic.js', name: 'Login Diagnostic' },
+  { path: 'src/utils/networkDiagnostic.js', name: 'Network Diagnostic' }
 ];
 
-let devConfigFound = false;
-const filesToCheck = [
-    '../src/services/api.js',
-    '../src/utils/networkHelper.js',
-    '../src/utils/connectionTest.js'
-];
+function checkFile(fileInfo) {
+  try {
+    const content = fs.readFileSync(path.join(__dirname, '..', fileInfo.path), 'utf8');
+    
+    const hasProduction = content.includes('https://dash.doctorphc.id');
+    const hasLocalhost = content.includes('localhost:3000');
+    const hasLocalIP = content.includes('192.168.193.150:3000') || content.includes('10.0.2.2:3000');
+    const hasDevCheck = content.includes('__DEV__');
+    
+    return {
+      file: fileInfo.name,
+      hasProduction,
+      hasLocalhost,
+      hasLocalIP,
+      hasDevCheck,
+      status: hasProduction && !hasLocalhost && !hasLocalIP ? '✅ Production' : '❌ Mixed/Development'
+    };
+  } catch (error) {
+    return {
+      file: fileInfo.name,
+      error: error.message,
+      status: '❌ Error reading file'
+    };
+  }
+}
 
-filesToCheck.forEach(file => {
-    const filePath = path.join(__dirname, file);
-    if (fs.existsSync(filePath)) {
-        const content = fs.readFileSync(filePath, 'utf8');
-        devPatterns.forEach(pattern => {
-            if (pattern.test(content)) {
-                console.log(`⚠️  Found development pattern in ${file}: ${pattern.source}`);
-                devConfigFound = true;
-            }
-        });
+function main() {
+  console.log('🔍 Verifying Production Configuration...\n');
+  
+  const results = CONFIG_FILES.map(checkFile);
+  
+  console.log('📋 Configuration Status:\n');
+  
+  let allCorrect = true;
+  
+  results.forEach(result => {
+    if (result.error) {
+      console.log(`❌ ${result.file}: ${result.error}`);
+      allCorrect = false;
+    } else {
+      console.log(`${result.status === '✅ Production' ? '✅' : '❌'} ${result.file}: ${result.status}`);
+      
+      if (result.status !== '✅ Production') {
+        allCorrect = false;
+        if (result.hasLocalhost) console.log(`   ⚠️  Contains localhost:3000`);
+        if (result.hasLocalIP) console.log(`   ⚠️  Contains local IP`);
+        if (result.hasDevCheck) console.log(`   ⚠️  Contains __DEV__ checks`);
+      }
     }
-});
-
-if (!devConfigFound) {
-    console.log('✅ No development configurations found');
+  });
+  
+  console.log('\n📊 Summary:');
+  
+  const correctCount = results.filter(r => r.status === '✅ Production').length;
+  const totalCount = results.length;
+  
+  console.log(`✅ Correctly configured: ${correctCount}/${totalCount}`);
+  console.log(`❌ Needs attention: ${totalCount - correctCount}/${totalCount}`);
+  
+  if (allCorrect) {
+    console.log('\n🎉 All configuration files are properly set to production mode!');
+    console.log('🌐 Production server: https://dash.doctorphc.id');
+    console.log('📱 API endpoint: https://dash.doctorphc.id/api/mobile');
+  } else {
+    console.log('\n⚠️  Some files still need to be updated to production mode.');
+    console.log('💡 Run the following commands to fix:');
+    console.log('   node scripts/switch-to-production.js');
+  }
+  
+  console.log('\n💡 Available commands:');
+  console.log('   node scripts/check-current-config.js - Check current configuration');
+  console.log('   node scripts/test-production-connection.js - Test production connection');
+  console.log('   node scripts/switch-to-production.js - Switch to production mode');
+  console.log('   node scripts/switch-to-development.js - Switch to development mode');
 }
 
-// Summary
-console.log('\n📋 Production Configuration Summary:');
-console.log('=====================================');
-
-const checks = [
-    { name: 'API URLs forced to production', status: hasProductionURLs },
-    { name: 'App.json production profile', status: hasProductionBuild },
-    { name: 'EAS production profile', status: hasEASProduction },
-    { name: 'No development configs', status: !devConfigFound }
-];
-
-let allPassed = true;
-checks.forEach(check => {
-    const status = check.status ? '✅' : '❌';
-    console.log(`${status} ${check.name}`);
-    if (!check.status) allPassed = false;
-});
-
-console.log('\n' + '='.repeat(50));
-if (allPassed) {
-    console.log('🎉 All production configurations are properly set!');
-    console.log('🚀 Ready to build for production');
-} else {
-    console.log('⚠️  Some configurations need attention before production build');
-}
-
-console.log('\n💡 To build for production, run:');
-console.log('   ./scripts/build-production.sh');
-console.log('   or');
-console.log('   eas build --platform android --profile production');
+main();

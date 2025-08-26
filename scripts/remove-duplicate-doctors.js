@@ -7,7 +7,7 @@ async function removeDuplicateDoctors() {
   try {
     // Create database connection
     connection = await mysql.createConnection({
-      host: process.env.DB_HOST || 'localhost',
+      host: process.env.DB_HOST || 'dash.doctorphc.id',
       user: process.env.DB_USER || 'root',
       password: process.env.DB_PASSWORD || 'pr1k1t1w',
       database: process.env.DB_NAME || 'phc_dashboard',

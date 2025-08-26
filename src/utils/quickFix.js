@@ -1,24 +1,10 @@
 import { Platform } from 'react-native';
 
-// Quick fix for connection issues
+// Quick fix for network issues
 export const getQuickApiUrl = () => {
-  if (__DEV__) {
-    // For iOS Simulator
-    if (Platform.OS === 'ios') {
-      return 'http://localhost:3000/api/mobile';
-    }
-    
-    // For Android Emulator
-    if (Platform.OS === 'android') {
-      return 'http://10.0.2.2:3000/api/mobile';
-    }
-    
-    // For physical devices - use the fastest IP
-    return 'http://192.168.18.30:3000/api/mobile';
-  }
-  
-  // Production
-  return 'https://dash.doctorphc.id/api/mobile';
+  // Use localhost for development
+  console.log('🔧 Development mode: Using localhost API');
+  return 'http://localhost:3000/api/mobile';
 };
 
 // Test connection with the quick fix
@@ -27,7 +13,7 @@ export const testQuickConnection = async () => {
   console.log('🔧 Quick Fix: Testing connection to:', url);
   
   try {
-    const testUrl = url.replace('/api/mobile', '/api/health');
+    const testUrl = url + '/health';
     const response = await fetch(testUrl, {
       method: 'GET',
       headers: {

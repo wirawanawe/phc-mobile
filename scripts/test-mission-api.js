@@ -1,70 +1,164 @@
+#!/usr/bin/env node
+
+/**
+ * Test Mission API Endpoints
+ * 
+ * This script directly tests the mission API endpoints to verify they're working correctly.
+ */
+
 const fetch = require('node-fetch');
 
+// Configuration
 const BASE_URL = 'http://localhost:3000/api/mobile';
+const TEST_USER_ID = 1; // Super Admin user ID
+
+async function makeRequest(endpoint, options = {}) {
+  const url = `${BASE_URL}${endpoint}`;
+  
+  const config = {
+    method: options.method || 'GET',
+    headers: {
+      'Content-Type': 'application/json',
+      ...options.headers,
+    },
+    ...options,
+  };
+
+  if (options.body) {
+    config.body = JSON.stringify(options.body);
+  }
+
+  try {
+    const response = await fetch(url, config);
+    const data = await response.json();
+    
+    return {
+      success: response.ok,
+      status: response.status,
+      data,
+    };
+  } catch (error) {
+    return {
+      success: false,
+      error: error.message,
+    };
+  }
+}
 
 async function testMissionAPI() {
   console.log('🧪 Testing Mission API Endpoints...\n');
 
   try {
-    // Test 1: Get missions
-    console.log('📋 Test 1: Getting missions...');
-    const missionsResponse = await fetch(`${BASE_URL}/missions`);
-    const missionsData = await missionsResponse.json();
+    // Test 1: Get available missions
+    console.log('📋 Test 1: Getting available missions...');
+    const missionsResponse = await makeRequest('/missions');
     
-    if (missionsData.success) {
-      console.log('✅ Missions API working');
-      console.log(`   Found ${missionsData.missions?.length || 0} missions`);
+    if (missionsResponse.success) {
+      console.log(`✅ Found ${missionsResponse.data.data?.length || 0} available missions`);
     } else {
-      console.log('❌ Missions API failed:', missionsData.message);
+      console.error('❌ Failed to get missions:', missionsResponse.data?.message || missionsResponse.error);
     }
 
-    // Test 2: Get mission stats
-    console.log('\n📊 Test 2: Getting mission stats...');
-    const statsResponse = await fetch(`${BASE_URL}/mission-stats`);
-    const statsData = await statsResponse.json();
+    // Test 2: Get user missions
+    console.log('\n👤 Test 2: Getting user missions...');
+    const userMissionsResponse = await makeRequest('/missions/my-missions');
     
-    if (statsData.success) {
-      console.log('✅ Mission stats API working');
-      console.log(`   Total missions: ${statsData.data?.total_missions || 0}`);
-      console.log(`   Active missions: ${statsData.data?.active_missions || 0}`);
-      console.log(`   Completed missions: ${statsData.data?.completed_missions || 0}`);
+    if (userMissionsResponse.success) {
+      const userMissions = userMissionsResponse.data.data || [];
+      console.log(`✅ Found ${userMissions.length} user missions`);
+      
+      // Find an active mission
+      const activeMission = userMissions.find(um => um.status === 'active');
+      
+      if (activeMission) {
+        console.log(`🎯 Found active mission: ${activeMission.mission?.title} (ID: ${activeMission.id})`);
+        
+        // Test 3: Get specific user mission
+        console.log('\n🔍 Test 3: Getting specific user mission...');
+        const userMissionResponse = await makeRequest(`/missions/user-mission/${activeMission.id}`);
+        
+        if (userMissionResponse.success) {
+          console.log('✅ User mission retrieved successfully');
+          const userMission = userMissionResponse.data.data;
+          console.log(`📊 Current progress: ${userMission.current_value}/${userMission.target_value} (${userMission.progress}%)`);
+          
+          // Test 4: Update mission progress
+          console.log('\n🔄 Test 4: Updating mission progress...');
+          const newValue = Math.min(userMission.current_value + 10, userMission.target_value);
+          console.log(`📈 Updating to: ${newValue}/${userMission.target_value}`);
+          
+          const updateResponse = await makeRequest(`/missions/progress/${activeMission.id}`, {
+            method: 'PUT',
+            body: {
+              current_value: newValue,
+              notes: 'Test progress update'
+            }
+          });
+          
+          if (updateResponse.success) {
+            console.log('✅ Progress update successful!');
+            console.log('📤 Response:', updateResponse.data);
+            
+            // Test 5: Verify the update
+            console.log('\n🔍 Test 5: Verifying update...');
+            const verifyResponse = await makeRequest(`/missions/user-mission/${activeMission.id}`);
+            
+            if (verifyResponse.success) {
+              const updatedMission = verifyResponse.data.data;
+              console.log(`📊 Updated progress: ${updatedMission.current_value}/${updatedMission.target_value} (${updatedMission.progress}%)`);
+              
+              if (updatedMission.current_value === newValue) {
+                console.log('✅ Verification successful - progress was updated correctly!');
+              } else {
+                console.error('❌ Verification failed - progress was not updated correctly');
+              }
+            } else {
+              console.error('❌ Failed to verify update:', verifyResponse.data?.message || verifyResponse.error);
+            }
+          } else {
+            console.error('❌ Progress update failed:', updateResponse.data?.message || updateResponse.error);
+          }
+        } else {
+          console.error('❌ Failed to get user mission:', userMissionResponse.data?.message || userMissionResponse.error);
+        }
+      } else {
+        console.log('⚠️ No active missions found');
+        
+        // Test accepting a mission
+        if (missionsResponse.success && missionsResponse.data.data?.length > 0) {
+          const missionToAccept = missionsResponse.data.data[0];
+          console.log(`\n📝 Test: Accepting mission ${missionToAccept.title}...`);
+          
+          const acceptResponse = await makeRequest('/missions/accept', {
+            method: 'POST',
+            body: {
+              mission_id: missionToAccept.id
+            }
+          });
+          
+          if (acceptResponse.success) {
+            console.log('✅ Mission accepted successfully');
+          } else {
+            console.error('❌ Failed to accept mission:', acceptResponse.data?.message || acceptResponse.error);
+          }
+        }
+      }
     } else {
-      console.log('❌ Mission stats API failed:', statsData.message);
+      console.error('❌ Failed to get user missions:', userMissionsResponse.data?.message || userMissionsResponse.error);
     }
-
-    // Test 3: Test mission progress update (without auth)
-    console.log('\n📈 Test 3: Testing mission progress update endpoint...');
-    const progressResponse = await fetch(`${BASE_URL}/missions/progress/4`, {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        current_value: 3,
-        notes: 'Test update'
-      })
-    });
-    const progressData = await progressResponse.json();
-    
-    if (progressResponse.status === 401) {
-      console.log('✅ Progress update endpoint requires auth (expected)');
-    } else if (progressData.success) {
-      console.log('✅ Progress update API working');
-      console.log(`   Updated progress: ${progressData.data?.progress || 0}%`);
-    } else {
-      console.log('❌ Progress update API failed:', progressData.message);
-    }
-
-    console.log('\n🎯 Summary:');
-    console.log('- Database has current_value column: ✅');
-    console.log('- Mission progress can be updated: ✅');
-    console.log('- API endpoints are accessible: ✅');
-    console.log('\n💡 The issue was that the current_value column was missing from the database.');
-    console.log('   This has been fixed with the migration script.');
 
   } catch (error) {
-    console.error('❌ Test failed:', error.message);
+    console.error('❌ Test failed:', error);
   }
 }
 
-testMissionAPI(); 
+// Run the test
+testMissionAPI()
+  .then(() => {
+    console.log('\n🏁 Test completed');
+    process.exit(0);
+  })
+  .catch((error) => {
+    console.error('\n💥 Test failed:', error);
+    process.exit(1);
+  }); 

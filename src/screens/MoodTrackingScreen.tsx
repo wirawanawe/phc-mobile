@@ -22,6 +22,7 @@ import { safeGoBack } from "../utils/safeNavigation";
 import { networkStatusManager, NetworkStatus } from "../utils/networkStatus";
 import { getTodayDate } from "../utils/dateUtils";
 
+
 const { width } = Dimensions.get("window");
 
 const MoodTrackingScreen = ({ navigation }: any) => {
@@ -34,6 +35,8 @@ const MoodTrackingScreen = ({ navigation }: any) => {
   const [moodScore, setMoodScore] = useState<number>(0);
   const [hasTodayEntry, setHasTodayEntry] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+  
+
   const [networkStatus, setNetworkStatus] = useState<NetworkStatus>({
     isConnected: true,
     isInternetReachable: true,
@@ -98,6 +101,18 @@ const MoodTrackingScreen = ({ navigation }: any) => {
     dateChangeDetector.initialize();
     
     // Listen for network status changes
+  }, []);
+
+  // Load mood data when component mounts
+  useEffect(() => {
+    if (isAuthenticated) {
+      loadTodayMood();
+    }
+  }, [isAuthenticated]);
+
+
+
+  useEffect(() => {
     const handleNetworkChange = (status: NetworkStatus) => {
       setNetworkStatus(status);
       console.log('Network status changed:', status);
@@ -142,15 +157,51 @@ const MoodTrackingScreen = ({ navigation }: any) => {
         loadTodayMood();
       }
     };
+
+    // Listen for cache cleared events
+    const handleCacheCleared = () => {
+      console.log('MoodTrackingScreen - Cache cleared event detected, refreshing mood data...');
+      setTimeout(() => {
+        if (isAuthenticated) {
+          loadTodayMood();
+        }
+      }, 200);
+    };
+
+    // Listen for force refresh events
+    const handleForceRefreshAllData = () => {
+      console.log('MoodTrackingScreen - Force refresh all data event detected...');
+      setTimeout(() => {
+        if (isAuthenticated) {
+          loadTodayMood();
+        }
+      }, 300);
+    };
+
+    // Listen for cache refreshed events
+    const handleCacheRefreshed = () => {
+      console.log('MoodTrackingScreen - Cache refreshed event detected...');
+      setTimeout(() => {
+        if (isAuthenticated) {
+          loadTodayMood();
+        }
+      }, 150);
+    };
     
     // Add event listeners
     eventEmitter.on('moodLogged', handleMoodLogged);
     eventEmitter.on('dailyReset', handleDailyReset);
+    eventEmitter.on('cacheCleared', handleCacheCleared);
+    eventEmitter.on('forceRefreshAllData', handleForceRefreshAllData);
+    eventEmitter.on('cacheRefreshed', handleCacheRefreshed);
     
     return () => {
       // Remove event listeners
       eventEmitter.off('moodLogged', handleMoodLogged);
       eventEmitter.off('dailyReset', handleDailyReset);
+      eventEmitter.off('cacheCleared', handleCacheCleared);
+      eventEmitter.off('forceRefreshAllData', handleForceRefreshAllData);
+      eventEmitter.off('cacheRefreshed', handleCacheRefreshed);
       if (networkStatusManager && typeof networkStatusManager.removeListener === 'function') {
         networkStatusManager.removeListener(handleNetworkChange);
       }
@@ -173,49 +224,45 @@ const MoodTrackingScreen = ({ navigation }: any) => {
       setIsLoadingData(true);
       setError(null);
       
+      console.log(`🔍 MoodTrackingScreen - Loading mood data`);
+      
       // Try to load data with individual error handling
       let todayResponse = null;
       let historyResponse = null;
       
       try {
-        todayResponse = await apiService.getTodayMood();
-        console.log("Today mood response:", todayResponse);
-      } catch (error) {
-        console.warn("Failed to load today's mood:", error);
-        todayResponse = { success: false, message: (error as Error).message || 'Unknown error' };
-      }
-      
-      try {
-        historyResponse = await apiService.getMoodTracker({ period: "7" });
+        // Load all mood data (no date filtering)
+        historyResponse = await apiService.getMoodTracker({ 
+          period: "30" // Load more entries for better history view
+        });
         console.log("Mood history response:", historyResponse);
       } catch (error) {
         console.warn("Failed to load mood history:", error);
         historyResponse = { success: false, message: (error as Error).message || 'Unknown error' };
       }
       
-      // Handle today's mood data
-      if (todayResponse && todayResponse.success && todayResponse.data && todayResponse.data.hasEntry) {
-        // The API only returns a flag, not actual mood data
-        // We'll get the actual mood data from the history response
-        setIsEditMode(true);
-      } else {
-        setIsEditMode(false);
-      }
-
       // Handle mood history data
       if (historyResponse && historyResponse.success && historyResponse.data) {
         setMoodHistory(historyResponse.data);
         
         // Check if there's an entry for today
-        const today = getTodayDate();
+        const todayString = new Date().toLocaleDateString('en-CA');
         const todayEntry = historyResponse.data.entries && 
-          historyResponse.data.entries.find((entry: any) => entry.tracking_date === today);
+          historyResponse.data.entries.find((entry: any) => {
+            const entryDate = new Date(entry.tracking_date);
+            const entryDateString = entryDate.toLocaleDateString('en-CA');
+            return entryDateString === todayString;
+          });
+        
         setHasTodayEntry(!!todayEntry);
         
-        // If there's a today entry, use it as existingMood
+        // If there's an entry for today, use it as existingMood
         if (todayEntry) {
           setExistingMood(todayEntry);
           setIsEditMode(true);
+        } else {
+          setExistingMood(null);
+          setIsEditMode(false);
         }
         
         // Calculate mood score based on API data (1-10 scale) converted to display scale (0-100)
@@ -235,7 +282,9 @@ const MoodTrackingScreen = ({ navigation }: any) => {
         setMoodHistory(null);
         setMoodScore(0); // No data available instead of default 60
         setHasTodayEntry(false);
-        setError("Unable to load mood history. You can still log your mood today.");
+        setExistingMood(null);
+        setIsEditMode(false);
+        setError("Unable to load mood history. You can still log your mood for today.");
       }
       
     } catch (error) {
@@ -244,6 +293,7 @@ const MoodTrackingScreen = ({ navigation }: any) => {
       setMoodHistory(null);
       setMoodScore(0); // No data available instead of default 60
       setHasTodayEntry(false);
+      setExistingMood(null);
       setError("Failed to load mood data. Please check your connection and try again.");
     } finally {
       setIsLoadingData(false);
@@ -328,27 +378,34 @@ const MoodTrackingScreen = ({ navigation }: any) => {
                 <View style={styles.moodHistoryHeader}>
                   <Icon name="history" size={20} color="#6B7280" />
                   <Text style={styles.moodHistoryTitle}>Mood History</Text>
-                  <Text style={styles.moodHistorySubtitle}>{moodHistory.total_entries} entries</Text>
+                  <Text style={styles.moodHistorySubtitle}>
+                    {moodHistory.total_entries} entries
+                  </Text>
                 </View>
                 
-                {/* Recent Mood Entries - Simplified */}
-                {moodHistory.entries && moodHistory.entries.length > 0 && (
+
+                
+                {/* Recent Mood Entries - Show all entries in chronological order */}
+                {moodHistory && moodHistory.entries && moodHistory.entries.length > 0 ? (
                   <View style={styles.recentMoodContainer}>
-                    {moodHistory.entries.slice(0, 5).map((entry: any, index: number) => (
-                      <View key={index} style={styles.moodHistoryEntry}>
-                        <Text style={styles.moodHistoryEmoji}>
-                          {moods.find(m => m.id === entry.mood_level)?.emoji || '😐'}
-                        </Text>
-                        <Text style={styles.moodHistoryDate}>
-                          {new Date(entry.tracking_date).toLocaleDateString('en-US', {
-                            month: 'short',
-                            day: 'numeric'
-                          })}
-                        </Text>
-                      </View>
-                    ))}
+                    {moodHistory.entries
+                      .sort((a: any, b: any) => new Date(b.tracking_date).getTime() - new Date(a.tracking_date).getTime())
+                      .slice(0, 10)
+                      .map((entry: any, index: number) => (
+                        <View key={index} style={styles.moodHistoryEntry}>
+                          <Text style={styles.moodHistoryEmoji}>
+                            {moods.find(m => m.id === entry.mood_level)?.emoji || '😐'}
+                          </Text>
+                          <Text style={styles.moodHistoryDate}>
+                            {new Date(entry.tracking_date).toLocaleDateString('en-US', {
+                              month: 'short',
+                              day: 'numeric'
+                            })}
+                          </Text>
+                        </View>
+                      ))}
                   </View>
-                )}
+                ) : null}
               </View>
             )}
 
@@ -903,6 +960,13 @@ const styles = StyleSheet.create({
     color: "#6B7280",
     textAlign: "center",
     lineHeight: 20,
+  },
+  noFilteredEntriesText: {
+    fontSize: 14,
+    color: "#6B7280",
+    textAlign: "center",
+    fontStyle: "italic",
+    paddingVertical: 20,
   },
   // Mood Input Button Styles
   moodInputButton: {

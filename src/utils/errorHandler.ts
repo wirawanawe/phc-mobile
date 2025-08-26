@@ -443,3 +443,67 @@ export const withErrorHandling = async <T>(
     return null;
   }
 }; 
+
+// Enhanced authentication error handler with session expiration handling
+export const handleSessionExpiration = (
+  error: any, 
+  navigation: any,
+  onLogout?: () => void
+) => {
+  console.error('🔐 Session Expiration Error:', error);
+  
+  // Check if this is a "No refresh token available" error
+  const isNoRefreshTokenError = error?.message?.includes('No refresh token available') ||
+                               error?.message?.includes('Token refresh failed') ||
+                               error?.message?.includes('Session expired');
+  
+  if (isNoRefreshTokenError) {
+    // Show session expiration alert with automatic redirect
+    Alert.alert(
+      'Sesi Berakhir',
+      'Sesi Anda telah berakhir. Silakan login kembali.',
+      [
+        {
+          text: 'OK',
+          onPress: () => {
+            console.log('🔐 User acknowledged session expiration, redirecting to login');
+            
+            // Clear auth data first
+            if (onLogout) {
+              onLogout();
+            }
+            
+            // Navigate to login screen
+            try {
+              navigation.reset({
+                index: 0,
+                routes: [{ name: 'Login' }],
+              });
+            } catch (navError) {
+              console.error('❌ Navigation error:', navError);
+              // Fallback navigation
+              try {
+                navigation.navigate('Login');
+              } catch (fallbackError) {
+                console.error('❌ Fallback navigation also failed:', fallbackError);
+              }
+            }
+          }
+        }
+      ],
+      { cancelable: false }
+    );
+    
+    return {
+      type: ErrorType.AUTHENTICATION,
+      message: 'Session expired. Please login again.',
+      userMessage: 'Sesi Anda telah berakhir. Silakan login kembali.',
+      shouldRetry: false,
+      shouldLogout: true,
+      shouldShowAlert: false // We handle the alert manually
+    };
+  }
+  
+  // Handle other authentication errors normally
+  return handleAuthError(error, onLogout);
+}; 

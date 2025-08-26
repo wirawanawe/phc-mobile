@@ -17,7 +17,12 @@
     "screenshot:auto": "node scripts/screenshot-helper.js --auto 5",
     "screenshot:android": "node scripts/take-screenshots-android.js",
     "screenshot:list": "node scripts/screenshot-helper.js --list",
-    "screenshot:clear": "node scripts/screenshot-helper.js --clear"
+    "screenshot:clear": "node scripts/screenshot-helper.js --clear",
+    "build:production": "./setup-sh/build-production.sh",
+    "build:android": "npx eas-cli build --platform android --profile production",
+    "build:ios": "npx eas-cli build --platform ios --profile production",
+    "build:preview": "npx eas-cli build --platform android --profile preview",
+    "switch:production": "node scripts/switch-to-production.js"
   },
   "dependencies": {
     "@expo/metro-runtime": "~5.0.4",

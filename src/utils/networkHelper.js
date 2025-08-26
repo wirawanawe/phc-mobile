@@ -11,81 +11,66 @@ export class NetworkHelper {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), timeout);
       
-      const startTime = Date.now();
       const response = await fetch(url, {
         method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        },
         signal: controller.signal
       });
       
       clearTimeout(timeoutId);
-      const endTime = Date.now();
-      
-      return {
-        success: true,
-        responseTime: endTime - startTime,
-        status: response.status,
-        statusText: response.statusText
-      };
+      return { success: response.ok, status: response.status };
     } catch (error) {
-      return {
-        success: false,
-        error: error.message,
-        errorType: error.name
-      };
+      return { success: false, error: error.message };
     }
   }
 
   static async findBestServer() {
     const servers = [
-      'http://localhost:3000', // Local development (primary)
+      'http://192.168.193.150:3000', // Local development (primary)
+      'http://localhost:3000', // Local development (fallback)
       'http://127.0.0.1:3000', // Local development (fallback)
       'http://10.0.2.2:3000', // Android emulator (fallback)
-      'http://10.242.90.103:3000', // Server IP from server.js (fallback)
-      'https://dash.doctorphc.id' // Production server (fallback)
+      'http://localhost:3000' // Local development (fallback)
     ];
 
+    const fastest = (prev, current) => 
+      current.responseTime < prev.responseTime ? current : prev;
+
     const results = await Promise.all(
-      servers.map(async (url) => {
+      servers.map(async (server) => {
+        const startTime = Date.now();
         try {
-          const startTime = Date.now();
-          const response = await fetch(`${url}/api/health`, {
+          const response = await fetch(`${server}/api/health`, {
             method: 'GET',
             timeout: 5000,
           });
           const endTime = Date.now();
-          const responseTime = endTime - startTime;
-
+          
           if (response.ok) {
-            return { url, responseTime, success: true };
-          } else {
-            return { url, error: `HTTP ${response.status}`, success: false };
+            return {
+              url: server,
+              responseTime: endTime - startTime,
+              success: true
+            };
           }
         } catch (error) {
-          return { url, error: error.message, success: false };
+          // Continue to next server
         }
+        return { url: server, responseTime: Infinity, success: false };
       })
     );
 
-    const workingServers = results.filter(result => result.success);
-    
+    const workingServers = results.filter(r => r.success);
     if (workingServers.length === 0) {
       throw new Error('No servers are reachable');
     }
 
-    const fastest = workingServers.reduce((prev, current) => 
-      prev.responseTime < current.responseTime ? prev : current
-    );
-
-    return `${fastest.url}/api/mobile`;
+    return `${workingServers.reduce(fastest).url}/api/mobile`;
   }
 
   static async testConnection(url) {
     try {
       const startTime = Date.now();
-      const response = await fetch(`${url}/api/health`, {
+      const response = await fetch(`${url}/api/mobile/health`, {
         method: 'GET',
         timeout: 5000,
       });
@@ -103,7 +88,10 @@ export class NetworkHelper {
   }
 
   static getDefaultURL() {
-    // Use localhost for development
+    // Temporary development mode - production server is down
+    if (__DEV__) {
+      return 'http://192.168.193.150:3000/api/mobile';
+    }
     return 'http://localhost:3000/api/mobile';
   }
 

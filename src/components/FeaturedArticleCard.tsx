@@ -24,6 +24,7 @@ interface RSSItem {
   link?: string;
   pubDate?: string;
   source: string;
+  imageUrl?: string; // Added imageUrl to the interface
 }
 
 interface FeaturedArticleCardProps {
@@ -76,7 +77,15 @@ const FeaturedArticleCard: React.FC<FeaturedArticleCardProps> = ({ article, onPr
         {/* Header with Image and Source Badge */}
         <View style={styles.header}>
           <View style={[styles.imageContainer, { backgroundColor: article.bgColor }]}>
-            <Icon name={article.image} size={32} color={article.color} />
+            {article.imageUrl ? (
+              <Image
+                source={{ uri: article.imageUrl }}
+                style={styles.articleImage}
+                resizeMode="cover"
+              />
+            ) : (
+              <Icon name={article.image} size={32} color={article.color} />
+            )}
           </View>
           <View style={[styles.sourceBadge, { backgroundColor: article.color }]}>
             <Icon name={getSourceIcon(article.source)} size={12} color="#FFFFFF" />
@@ -164,6 +173,11 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.08,
     shadowRadius: 4,
     elevation: 2,
+  },
+  articleImage: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 16,
   },
   sourceBadge: {
     flexDirection: 'row',

@@ -21,6 +21,7 @@ import Icon from "react-native-vector-icons/MaterialCommunityIcons";
 import { CustomTheme } from "../theme/theme";
 import { useAuth } from "../contexts/AuthContext";
 import api from "../services/api";
+import { getTodayDate } from "../utils/dateUtils";
 
 const { width } = Dimensions.get("window");
 
@@ -88,21 +89,21 @@ const DashboardScreen = ({ navigation }: any) => {
     }
   }, [isAuthenticated]);
 
-  // Remove automatic focus refresh - manual refresh only
-  // useFocusEffect(
-  //   React.useCallback(() => {
-  //     if (isAuthenticated) {
-  //       loadMissionData();
-  //     }
-  //   }, [isAuthenticated])
-  // );
+  // Refresh data when screen comes into focus (e.g., returning from MissionDetail)
+  useFocusEffect(
+    React.useCallback(() => {
+      if (isAuthenticated) {
+        loadMissionData();
+      }
+    }, [isAuthenticated])
+  );
 
   const loadMissionData = async () => {
     try {
       setLoading(true);
       const [statsResponse, userMissionsResponse, availableMissionsResponse] =
         await Promise.all([
-          api.getMissionStats({ date: new Date().toISOString().split('T')[0] }),
+          api.getMissionStats({ date: getTodayDate() }),
           api.getMyMissions(),
           api.getMissions(),
         ]);
@@ -595,9 +596,9 @@ const DashboardScreen = ({ navigation }: any) => {
                   .filter((um) => um.status === "active")
                   .map((userMission, index) => {
                     const mission = userMission.mission;
-                    const progressPercentage = mission?.target_value 
-                      ? Math.min((userMission.current_value / mission.target_value) * 100, 100)
-                      : 0;
+                    // Use the stored progress value instead of calculating from current_value
+                    // This prevents NaN% when current_value is 0 or undefined
+                    const progressPercentage = userMission.progress || 0;
                     
                     return (
                       <TouchableOpacity
@@ -614,8 +615,7 @@ const DashboardScreen = ({ navigation }: any) => {
                           }
                           navigation.navigate("MissionDetail", {
                             mission: mission,
-                            userMission: userMission,
-                            onMissionUpdate: loadMissionData
+                            userMission: userMission
                           });
                         }}
                       >
@@ -659,7 +659,7 @@ const DashboardScreen = ({ navigation }: any) => {
                                   { color: theme.colors.onBackground },
                                 ]}
                               >
-                                {userMission.current_value} / {mission?.target_value} {mission?.unit}
+                                {userMission.current_value || 0} / {mission?.target_value} {mission?.unit}
                                 {` (${Math.round(progressPercentage)}%)`}
                               </Text>
                             </View>

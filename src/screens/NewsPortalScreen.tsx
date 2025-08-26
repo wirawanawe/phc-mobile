@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { View, StyleSheet, ScrollView } from "react-native";
+import { View, StyleSheet, ScrollView, Image } from "react-native";
 import {
   Text,
   Card,
@@ -93,11 +93,19 @@ const NewsPortalScreen = ({ navigation }: any) => {
                       { backgroundColor: featuredArticle.bgColor },
                     ]}
                   >
-                    <Icon 
-                      name={featuredArticle.image} 
-                      size={24} 
-                      color={featuredArticle.color} 
-                    />
+                    {featuredArticle.imageUrl ? (
+                      <Image
+                        source={{ uri: featuredArticle.imageUrl }}
+                        style={styles.featuredArticleImage}
+                        resizeMode="cover"
+                      />
+                    ) : (
+                      <Icon 
+                        name={featuredArticle.image} 
+                        size={24} 
+                        color={featuredArticle.color} 
+                      />
+                    )}
                   </View>
                   <View style={styles.featuredInfo}>
                     <Text
@@ -169,11 +177,19 @@ const NewsPortalScreen = ({ navigation }: any) => {
                       { backgroundColor: article.bgColor },
                     ]}
                   >
-                    <Icon 
-                      name={article.image} 
-                      size={20} 
-                      color={article.color} 
-                    />
+                    {article.imageUrl ? (
+                      <Image
+                        source={{ uri: article.imageUrl }}
+                        style={styles.articleImage}
+                        resizeMode="cover"
+                      />
+                    ) : (
+                      <Icon 
+                        name={article.image} 
+                        size={20} 
+                        color={article.color} 
+                      />
+                    )}
                   </View>
                   <View style={styles.articleInfo}>
                     <Text
@@ -317,6 +333,12 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     marginRight: 15,
+    overflow: "hidden",
+  },
+  featuredArticleImage: {
+    width: "100%",
+    height: "100%",
+    borderRadius: 25,
   },
 
   featuredInfo: {
@@ -373,6 +395,12 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     marginRight: 15,
+    overflow: "hidden",
+  },
+  articleImage: {
+    width: "100%",
+    height: "100%",
+    borderRadius: 20,
   },
   articleInfo: {
     flex: 1,

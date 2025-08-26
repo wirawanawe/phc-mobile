@@ -11,7 +11,7 @@ import {
   Platform,
 } from "react-native";
 import CustomAlert from "../components/CustomAlert";
-import { debugSleepResponse, validateSleepData } from "../utils/sleepDebugger";
+
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { Text, useTheme } from "react-native-paper";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -20,9 +20,11 @@ import { LinearGradient } from "expo-linear-gradient";
 import { CustomTheme } from "../theme/theme";
 import { useAuth } from "../contexts/AuthContext";
 import apiService from "../services/api";
+
 import eventEmitter from "../utils/eventEmitter";
 import dateChangeDetector from "../utils/dateChangeDetector";
 import { safeGoBack } from "../utils/safeNavigation";
+import { getTodayDate } from "../utils/dateUtils";
 
 const { width } = Dimensions.get("window");
 
@@ -77,29 +79,29 @@ const SleepTrackingScreen = ({ navigation }: any) => {
   const sleepTips = [
     {
       id: "1",
-      title: "Consistent Schedule",
-      description: "Go to bed and wake up at the same time every day",
+      title: "Jadwal Tidur yang Konsisten",
+      description: "Tidur dan bangun pada waktu yang sama setiap hari",
       icon: "calendar-clock",
       color: "#8B5CF6",
     },
     {
       id: "2",
-      title: "Dark Environment",
-      description: "Keep your bedroom dark and cool for better sleep",
+      title: "Lingkungan Gelap",
+      description: "Jaga ruangan tidur Anda tetap gelap dan dingin untuk mendukung tidur yang lebih baik",
       icon: "moon-waning-crescent",
       color: "#3B82F6",
     },
     {
       id: "3",
-      title: "Avoid Screens",
-      description: "Stop using devices 1 hour before bedtime",
+      title: "Hindari Layar",
+      description: "Hindari penggunaan perangkat 1 jam sebelum tidur",
       icon: "cellphone-off",
       color: "#EF4444",
     },
     {
       id: "4",
-      title: "Relaxation Routine",
-      description: "Practice meditation or reading before sleep",
+      title: "Ritual Relaksasi",
+      description: "Lakukan meditasi atau membaca sebelum tidur",
       icon: "meditation",
       color: "#10B981",
     },
@@ -120,13 +122,43 @@ const SleepTrackingScreen = ({ navigation }: any) => {
       setTotalSleepHours("0");
       fetchSleepData();
     };
+
+    // Listen for cache cleared events
+    const handleCacheCleared = () => {
+      console.log('SleepTrackingScreen - Cache cleared event detected, refreshing sleep data...');
+      setTimeout(() => {
+        fetchSleepData();
+      }, 200);
+    };
+
+    // Listen for force refresh events
+    const handleForceRefreshAllData = () => {
+      console.log('SleepTrackingScreen - Force refresh all data event detected...');
+      setTimeout(() => {
+        fetchSleepData();
+      }, 300);
+    };
+
+    // Listen for cache refreshed events
+    const handleCacheRefreshed = () => {
+      console.log('SleepTrackingScreen - Cache refreshed event detected...');
+      setTimeout(() => {
+        fetchSleepData();
+      }, 150);
+    };
     
     // Add event listeners
     eventEmitter.on('dailyReset', handleDailyReset);
+    eventEmitter.on('cacheCleared', handleCacheCleared);
+    eventEmitter.on('forceRefreshAllData', handleForceRefreshAllData);
+    eventEmitter.on('cacheRefreshed', handleCacheRefreshed);
     
     return () => {
       // Remove event listeners
       eventEmitter.off('dailyReset', handleDailyReset);
+      eventEmitter.off('cacheCleared', handleCacheCleared);
+      eventEmitter.off('forceRefreshAllData', handleForceRefreshAllData);
+      eventEmitter.off('cacheRefreshed', handleCacheRefreshed);
     };
   }, []);
 
@@ -140,13 +172,13 @@ const SleepTrackingScreen = ({ navigation }: any) => {
         console.error("No user ID found - user may not be logged in");
         // Set default data if user is not logged in
         setSleepQualityData([
-          { day: "Mon", hours: 0, quality: 0 },
-          { day: "Tue", hours: 0, quality: 0 },
-          { day: "Wed", hours: 0, quality: 0 },
-          { day: "Thu", hours: 0, quality: 0 },
-          { day: "Fri", hours: 0, quality: 0 },
-          { day: "Sat", hours: 0, quality: 0 },
-          { day: "Sun", hours: 0, quality: 0 },
+          { day: "Sen", hours: 0, quality: 0 },
+          { day: "Sel", hours: 0, quality: 0 },
+          { day: "Rab", hours: 0, quality: 0 },
+          { day: "Kam", hours: 0, quality: 0 },
+          { day: "Jum", hours: 0, quality: 0 },
+          { day: "Sab", hours: 0, quality: 0 },
+          { day: "Min", hours: 0, quality: 0 },
         ]);
         return;
       }
@@ -169,7 +201,7 @@ const SleepTrackingScreen = ({ navigation }: any) => {
           }
           
           return {
-            day: day.date ? new Date(day.date).toLocaleDateString('en-US', { weekday: 'short' }) : 'Unknown',
+            day: day.date ? new Date(day.date).toLocaleDateString('id-ID', { weekday: 'short' }) : 'Unknown',
             hours: hours,
             quality: day.quality && typeof day.quality === 'string' ? getQualityScore(day.quality) : 0,
             date: day.date,
@@ -200,13 +232,13 @@ const SleepTrackingScreen = ({ navigation }: any) => {
         console.log('SleepTrackingScreen - No weekly data available, setting defaults');
         // Set default data if API fails or no data
         setSleepQualityData([
-          { day: "Mon", hours: 0, quality: 0 },
-          { day: "Tue", hours: 0, quality: 0 },
-          { day: "Wed", hours: 0, quality: 0 },
-          { day: "Thu", hours: 0, quality: 0 },
-          { day: "Fri", hours: 0, quality: 0 },
-          { day: "Sat", hours: 0, quality: 0 },
-          { day: "Sun", hours: 0, quality: 0 },
+          { day: "Sen", hours: 0, quality: 0 },
+          { day: "Sel", hours: 0, quality: 0 },
+          { day: "Rab", hours: 0, quality: 0 },
+          { day: "Kam", hours: 0, quality: 0 },
+          { day: "Jum", hours: 0, quality: 0 },
+          { day: "Sab", hours: 0, quality: 0 },
+          { day: "Min", hours: 0, quality: 0 },
         ]);
         // Set default values for today
         setTotalSleepHours("0");
@@ -221,7 +253,7 @@ const SleepTrackingScreen = ({ navigation }: any) => {
         setSleepMetrics([
           {
             id: "1",
-            title: "Sleep Duration",
+            title: "Durasi Tidur",
             value: analysis.average_sleep_hours?.toFixed(1) || "0",
             unit: "hours",
             trend: "Stable",
@@ -231,7 +263,7 @@ const SleepTrackingScreen = ({ navigation }: any) => {
           },
           {
             id: "2",
-            title: "Sleep Quality",
+            title: "Kualitas Tidur",
             value: analysis.average_sleep_quality?.toFixed(1) || "0",
             unit: "%",
             trend: "Stable",
@@ -241,7 +273,7 @@ const SleepTrackingScreen = ({ navigation }: any) => {
           },
           {
             id: "3",
-            title: "Sleep Consistency",
+            title: "Konsistensi Tidur",
             value: analysis.sleep_consistency?.toFixed(1) || "0",
             unit: "%",
             trend: "Stable",
@@ -251,7 +283,7 @@ const SleepTrackingScreen = ({ navigation }: any) => {
           },
           {
             id: "4",
-            title: "Sleep Efficiency",
+            title: "Efisiensi Tidur",
             value: analysis.average_sleep_efficiency?.toFixed(1) || "0",
             unit: "%",
             trend: "Stable",
@@ -265,7 +297,7 @@ const SleepTrackingScreen = ({ navigation }: any) => {
         setSleepMetrics([
           {
             id: "1",
-            title: "Sleep Duration",
+            title: "Durasi Tidur",
             value: "0",
             unit: "hours",
             trend: "Stable",
@@ -275,7 +307,7 @@ const SleepTrackingScreen = ({ navigation }: any) => {
           },
           {
             id: "2",
-            title: "Sleep Quality",
+            title: "Kualitas Tidur",
             value: "0",
             unit: "%",
             trend: "Stable",
@@ -285,7 +317,7 @@ const SleepTrackingScreen = ({ navigation }: any) => {
           },
           {
             id: "3",
-            title: "Sleep Consistency",
+            title: "Konsistensi Tidur",
             value: "0",
             unit: "%",
             trend: "Stable",
@@ -295,7 +327,7 @@ const SleepTrackingScreen = ({ navigation }: any) => {
           },
           {
             id: "4",
-            title: "Sleep Efficiency",
+            title: "Efisiensi Tidur",
             value: "0",
             unit: "%",
             trend: "Stable",
@@ -343,13 +375,13 @@ const SleepTrackingScreen = ({ navigation }: any) => {
       console.error("Error fetching sleep data:", error);
       // Set default data if API fails
       setSleepQualityData([
-        { day: "Mon", hours: 0, quality: 0 },
-        { day: "Tue", hours: 0, quality: 0 },
-        { day: "Wed", hours: 0, quality: 0 },
-        { day: "Thu", hours: 0, quality: 0 },
-        { day: "Fri", hours: 0, quality: 0 },
-        { day: "Sat", hours: 0, quality: 0 },
-        { day: "Sun", hours: 0, quality: 0 },
+        { day: "Sen", hours: 0, quality: 0 },
+        { day: "Sel", hours: 0, quality: 0 },
+        { day: "Rab", hours: 0, quality: 0 },
+        { day: "Kam", hours: 0, quality: 0 },
+        { day: "Jum", hours: 0, quality: 0 },
+        { day: "Sab", hours: 0, quality: 0 },
+        { day: "Min", hours: 0, quality: 0 },
       ]);
       // Set default values for today
       setTotalSleepHours("0");
@@ -358,25 +390,25 @@ const SleepTrackingScreen = ({ navigation }: any) => {
       // Set default sleep stages if API fails
       setSleepStages([
         {
-          stage: "Deep Sleep",
+          stage: "Tidur Dalam",
           duration: "2h 30m",
           percentage: 25,
           color: "#3B82F6",
         },
         {
-          stage: "REM Sleep",
+          stage: "Tidur REM",
           duration: "1h 45m",
           percentage: 18,
           color: "#10B981",
         },
         {
-          stage: "Light Sleep",
+          stage: "Tidur Ringan",
           duration: "4h 15m",
           percentage: 42,
           color: "#F59E0B",
         },
         {
-          stage: "Awake",
+          stage: "Bangun",
           duration: "30m",
           percentage: 5,
           color: "#EF4444",
@@ -443,7 +475,7 @@ const SleepTrackingScreen = ({ navigation }: any) => {
 
     try {
       // Check if sleep data already exists for today
-      const today = new Date().toISOString().split('T')[0];
+      const today = getTodayDate();
       const existingData = await apiService.getSleepDataByDate(today);
       
       if (existingData.sleepData && existingData.sleepData.length > 0) {
@@ -451,15 +483,15 @@ const SleepTrackingScreen = ({ navigation }: any) => {
         
 
         Alert.alert(
-          "Sleep Data Already Exists",
-          "You have already logged sleep data for today. Would you like to update your existing entry?",
+          "Data Tidur Sudah Ada",
+          "Anda sudah mencatat data tidur hari ini. Apakah Anda ingin memperbarui data yang sudah ada?",
           [
             {
-              text: "Cancel",
+              text: "Batal",
               style: "cancel",
             },
             {
-              text: "Update",
+              text: "Perbarui",
               onPress: async () => {
                 try {
                   setIsSaving(true);
@@ -483,7 +515,7 @@ const SleepTrackingScreen = ({ navigation }: any) => {
                     sleep_quality: selectedSleepQuality,
                     bedtime: selectedSleepTime,
                     wake_time: selectedWakeTime,
-                    notes: `Sleep duration: ${sleepHours}h ${sleepMinutes}m, Quality: ${selectedSleepQuality}`
+                    notes: `Durasi Tidur: ${sleepHours}h ${sleepMinutes}m, Kualitas: ${selectedSleepQuality}`
                   };
 
                   // Validate sleep data before sending
@@ -498,9 +530,7 @@ const SleepTrackingScreen = ({ navigation }: any) => {
                   const updateResponse = await apiService.updateSleepEntry(existingEntry.id, updatedSleepData);
                   console.log("🔍 SleepTrackingScreen: API Response for update:", updateResponse);
                   
-                  // Debug response structure
-                  const debugInfo = debugSleepResponse(updateResponse, 'update');
-                  console.log("🔍 SleepTrackingScreen: Debug info for update:", debugInfo);
+
 
                   // Check if response is successful
                   if (updateResponse && updateResponse.success) {
@@ -556,24 +586,18 @@ const SleepTrackingScreen = ({ navigation }: any) => {
         notes: `Sleep duration: ${sleepHours}h ${sleepMinutes}m, Quality: ${selectedSleepQuality}`
       };
 
-      // Validate sleep data before sending
-      const validation = validateSleepData(sleepData);
-      if (!validation.isValid) {
-        console.log("❌ SleepTrackingScreen: Validation failed:", validation.errors);
-        showAlert("Validation Error", validation.errors.join('\n'), "error");
-        return;
-      }
+
 
       console.log("✅ SleepTrackingScreen: Sleep data validated successfully:", sleepData);
-      const response = await apiService.createSleepEntry(sleepData);
-      console.log("🔍 SleepTrackingScreen: API Response for create:", response);
       
-      // Debug response structure
-      const debugInfo = debugSleepResponse(response, 'create');
-      console.log("🔍 SleepTrackingScreen: Debug info for create:", debugInfo);
+      // Create sleep tracking entry
+      const sleepResponse = await apiService.createSleepEntry(sleepData);
+      console.log("🔍 SleepTrackingScreen: Sleep tracking result:", sleepResponse);
+      
+
 
       // Check if response is successful
-      if (response && response.success) {
+      if (sleepResponse && sleepResponse.success) {
         console.log("✅ SleepTrackingScreen: Showing success alert for create");
         showAlert(
           "Save Success",
@@ -585,7 +609,7 @@ const SleepTrackingScreen = ({ navigation }: any) => {
           }
         );
       } else {
-        const errorMessage = response?.message || "Failed to save sleep data";
+        const errorMessage = sleepResponse?.message || "Failed to save sleep data";
         console.log("❌ SleepTrackingScreen: Showing error alert for create -", errorMessage);
         showAlert("Save Error", errorMessage, "error");
       }
@@ -724,24 +748,27 @@ const SleepTrackingScreen = ({ navigation }: any) => {
           <View style={styles.header}>
             <TouchableOpacity
               style={styles.backButton}
-              onPress={() => safeGoBack(navigation, 'Main')}
+              onPress={() => navigation.goBack()}
             >
               <Icon name="arrow-left" size={24} color="#1F2937" />
             </TouchableOpacity>
             <Text style={styles.headerTitle}>Sleep Tracking</Text>
-            <TouchableOpacity style={styles.settingsButton} onPress={fetchSleepData}>
-              <Icon name="refresh" size={24} color="#1F2937" />
+            <TouchableOpacity
+              style={styles.historyButton}
+              onPress={() => navigation.navigate('SleepHistory')}
+            >
+              <Icon name="history" size={24} color="#8B5CF6" />
             </TouchableOpacity>
           </View>
 
           {/* Sleep Schedule */}
           <View style={styles.sleepScheduleContainer}>
-            <Text style={styles.sectionTitle}>Sleep Schedule</Text>
+            <Text style={styles.sectionTitle}>Jadwal Tidur</Text>
             <View style={styles.sleepScheduleCard}>
               <View style={styles.sleepTimeContainer}>
                 <View style={styles.sleepTimeItem}>
                   <Icon name="moon-waning-crescent" size={24} color="#8B5CF6" />
-                  <Text style={styles.sleepTimeLabel}>Bedtime</Text>
+                  <Text style={styles.sleepTimeLabel}>Waktu Tidur</Text>
                   <TouchableOpacity 
                     style={styles.timeButton}
                     onPress={() => showTimePicker('sleep')}
@@ -754,7 +781,7 @@ const SleepTrackingScreen = ({ navigation }: any) => {
                 </View>
                 <View style={styles.sleepTimeItem}>
                   <Icon name="weather-sunny" size={24} color="#F59E0B" />
-                  <Text style={styles.sleepTimeLabel}>Wake Time</Text>
+                  <Text style={styles.sleepTimeLabel}>Waktu Bangun</Text>
                   <TouchableOpacity 
                     style={styles.timeButton}
                     onPress={() => showTimePicker('wake')}
@@ -764,20 +791,20 @@ const SleepTrackingScreen = ({ navigation }: any) => {
                 </View>
               </View>
               <View style={styles.sleepDurationContainer}>
-                <Text style={styles.sleepDurationLabel}>Total Sleep</Text>
+                <Text style={styles.sleepDurationLabel}>Total Tidur</Text>
                 <Text style={styles.sleepDurationValue}>{totalSleepHours} hours</Text>
               </View>
               
               {/* Sleep Quality Selector */}
               <View style={styles.sleepQualitySelector}>
-                <Text style={styles.sleepQualityLabel}>Sleep Quality</Text>
+                <Text style={styles.sleepQualityLabel}>Kualitas Tidur</Text>
                 <View style={styles.sleepQualityOptions}>
                   {[
-                    { value: "excellent", label: "Excellent", color: "#10B981" },
-                    { value: "good", label: "Good", color: "#34D399" },
-                    { value: "fair", label: "Fair", color: "#F59E0B" },
-                    { value: "poor", label: "Poor", color: "#EF4444" },
-                    { value: "very_poor", label: "Very Poor", color: "#DC2626" },
+                    { value: "excellent", label: "Sangat Baik", color: "#10B981" },
+                    { value: "good", label: "Baik", color: "#34D399" },
+                    { value: "fair", label: "Cukup", color: "#F59E0B" },
+                    { value: "poor", label: "Buruk", color: "#EF4444" },
+                    { value: "very_poor", label: "Sangat Buruk", color: "#DC2626" },
                   ].map((quality) => (
                     <TouchableOpacity
                       key={quality.value}
@@ -813,10 +840,10 @@ const SleepTrackingScreen = ({ navigation }: any) => {
                     {isSaving ? (
                       <View style={styles.loadingContainer}>
                         <ActivityIndicator size="small" color="#FFFFFF" />
-                        <Text style={styles.saveButtonText}>Saving...</Text>
+                        <Text style={styles.saveButtonText}>Menyimpan...</Text>
                       </View>
                     ) : (
-                      <Text style={styles.saveButtonText}>Save Sleep Data</Text>
+                      <Text style={styles.saveButtonText}>Simpan Data Tidur</Text>
                     )}
                   </LinearGradient>
                 </TouchableOpacity>
@@ -827,7 +854,7 @@ const SleepTrackingScreen = ({ navigation }: any) => {
 
           {/* Sleep Tips */}
           <View style={styles.sleepTipsContainer}>
-            <Text style={styles.sectionTitle}>Sleep Tips</Text>
+            <Text style={styles.sectionTitle}>Tips Tidur</Text>
             <View style={styles.sleepTipsList}>
               {sleepTips.map((tip) => (
                 <View key={tip.id} style={styles.sleepTipCard}>
@@ -867,7 +894,7 @@ const SleepTrackingScreen = ({ navigation }: any) => {
                   style={styles.pickerDoneButton}
                   onPress={() => setShowSleepTimePicker(false)}
                 >
-                  <Text style={styles.pickerDoneButtonText}>Done</Text>
+                  <Text style={styles.pickerDoneButtonText}>Selesai</Text>
                 </TouchableOpacity>
               </View>
             )}
@@ -889,7 +916,7 @@ const SleepTrackingScreen = ({ navigation }: any) => {
                   style={styles.pickerDoneButton}
                   onPress={() => setShowWakeTimePicker(false)}
                 >
-                  <Text style={styles.pickerDoneButtonText}>Done</Text>
+                  <Text style={styles.pickerDoneButtonText}>Selesai</Text>
                 </TouchableOpacity>
               </View>
             )}
@@ -915,6 +942,27 @@ const styles = StyleSheet.create({
   },
   safeArea: {
     flex: 1,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0, 0, 0, 0.1)',
+  },
+  backButton: {
+    padding: 8,
+  },
+  headerTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#1F2937',
+  },
+  historyButton: {
+    padding: 8,
   },
   loadingContainer: {
     flex: 1,

@@ -248,11 +248,7 @@ const HelpSupportScreen = ({ navigation }: any) => {
               <Text style={styles.heroSubtitle}>
                 Kami siap membantu Anda 24/7
               </Text>
-              {contactData?.primaryContact && (
-                <Text style={styles.debugText}>
-                  📞 Data dari: {contactData.primaryContact.officeName}
-                </Text>
-              )}
+
             </View>
           </View>
         </LinearGradient>
@@ -388,8 +384,8 @@ const HelpSupportScreen = ({ navigation }: any) => {
 
         {/* App Version */}
         <View style={styles.versionContainer}>
-          <Text style={styles.versionText}>Versi Aplikasi 1.0.0</Text>
-          <Text style={styles.versionText}>© 2024 Wellness WeCare</Text>
+          <Text style={styles.versionText}>Versi Aplikasi 0.0.1</Text>
+          <Text style={styles.versionText}>© 2025 Doctor PHC</Text>
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -618,11 +614,7 @@ const styles = StyleSheet.create({
     textAlign: "center",
     fontStyle: "italic",
   },
-  debugText: {
-    fontSize: 12,
-    color: "rgba(255, 255, 255, 0.8)",
-    marginTop: 4,
-  },
+
   errorCard: {
     borderRadius: 12,
     elevation: 2,

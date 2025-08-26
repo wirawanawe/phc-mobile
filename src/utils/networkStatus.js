@@ -10,10 +10,7 @@ export const checkNetworkStatus = async () => {
   };
 
   const testUrls = [
-    'http://localhost:3000/api/health',
-    'http://192.168.18.30:3000/api/health',
-    'http://10.242.90.103:3000/api/health',
-    'http://192.168.193.150:3000/api/health'
+    'http://10.242.90.103:3000/api/mobile/test-connection'
   ];
 
   console.log('🔍 Network Status: Starting network diagnostics...');
@@ -78,24 +75,9 @@ export const checkNetworkStatus = async () => {
 
 // Get recommended API URL based on current network status
 export const getRecommendedApiUrl = async () => {
-  const status = await checkNetworkStatus();
-  
-  if (status.bestUrl) {
-    return status.bestUrl;
-  }
-  
-  // Fallback based on platform
-  if (__DEV__) {
-    if (Platform.OS === 'android') {
-      return 'http://10.0.2.2:3000/api/mobile';
-    }
-    if (Platform.OS === 'ios') {
-      return 'http://localhost:3000/api/mobile';
-    }
-    return 'http://192.168.18.30:3000/api/mobile';
-  }
-  
-  return 'https://dash.doctorphc.id/api/mobile';
+  // Use localhost for development
+  console.log('🔧 Development mode: Using localhost API');
+  return 'http://localhost:3000/api/mobile';
 };
 
 // Helper function to get user-friendly network error message

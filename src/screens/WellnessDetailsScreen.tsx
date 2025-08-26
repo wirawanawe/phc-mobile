@@ -16,7 +16,7 @@ import { Text, useTheme, Button, Card } from "react-native-paper";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Icon from "react-native-vector-icons/MaterialCommunityIcons";
 import { LinearGradient } from "expo-linear-gradient";
-import DateTimePicker from "@react-native-community/datetimepicker";
+import SimpleDatePicker from "../components/SimpleDatePicker";
 import { CustomTheme } from "../theme/theme";
 import api from "../services/api";
 import { safeGoBack } from "../utils/safeNavigation";
@@ -24,12 +24,59 @@ import eventEmitter from "../utils/eventEmitter";
 
 const { width } = Dimensions.get("window");
 
+// Workout types with their parameters
+const WORKOUT_TYPES = {
+  "Weight Lifting": {
+    icon: "dumbbell",
+    parameters: [
+      { name: "weight_kg", label: "Berat (kg)", unit: "kg" },
+      { name: "sets", label: "Set", unit: "set" },
+      { name: "reps", label: "Repetisi", unit: "reps" }
+    ]
+  },
+  "Running": {
+    icon: "run",
+    parameters: [
+      { name: "distance_km", label: "Jarak", unit: "km" },
+      { name: "pace_min_km", label: "Kecepatan", unit: "min/km" }
+    ]
+  },
+  "Cycling": {
+    icon: "bike",
+    parameters: [
+      { name: "distance_km", label: "Jarak", unit: "km" },
+      { name: "speed_kmh", label: "Kecepatan", unit: "km/h" }
+    ]
+  },
+  "Swimming": {
+    icon: "swim",
+    parameters: [
+      { name: "distance_m", label: "Jarak", unit: "m" },
+      { name: "stroke_type", label: "Gaya Renang", unit: "" }
+    ]
+  },
+  "Yoga": {
+    icon: "yoga",
+    parameters: [
+      { name: "intensity", label: "Intensitas", unit: "" }
+    ]
+  },
+  "Walking": {
+    icon: "walk",
+    parameters: [
+      { name: "distance_km", label: "Jarak", unit: "km" },
+      { name: "steps", label: "Langkah", unit: "langkah" }
+    ]
+  }
+};
+
 interface TrackingData {
   mood?: any;
   fitness?: any;
   water?: any;
   sleep?: any;
   meal?: any;
+  anthropometry?: any;
 }
 
 interface TrackingCategory {
@@ -49,7 +96,6 @@ const WellnessDetailsScreen = ({ navigation }: any) => {
   
   // Date selection states
   const [selectedDate, setSelectedDate] = useState(new Date());
-  const [showDatePicker, setShowDatePicker] = useState(false);
   
   // Tracking data states
   const [trackingData, setTrackingData] = useState<TrackingData>({});
@@ -74,6 +120,7 @@ const WellnessDetailsScreen = ({ navigation }: any) => {
     eventEmitter.on('waterLogged', handleDataRefresh);
     eventEmitter.on('sleepLogged', handleDataRefresh);
     eventEmitter.on('mealLogged', handleDataRefresh);
+    eventEmitter.on('anthropometryLogged', handleDataRefresh);
     eventEmitter.on('wellnessActivityCompleted', handleDataRefresh);
     eventEmitter.on('wellnessActivityUpdated', handleDataRefresh);
     eventEmitter.on('wellnessActivityDeleted', handleDataRefresh);
@@ -86,6 +133,7 @@ const WellnessDetailsScreen = ({ navigation }: any) => {
       eventEmitter.off('waterLogged', handleDataRefresh);
       eventEmitter.off('sleepLogged', handleDataRefresh);
       eventEmitter.off('mealLogged', handleDataRefresh);
+      eventEmitter.off('anthropometryLogged', handleDataRefresh);
       eventEmitter.off('wellnessActivityCompleted', handleDataRefresh);
       eventEmitter.off('wellnessActivityUpdated', handleDataRefresh);
       eventEmitter.off('wellnessActivityDeleted', handleDataRefresh);
@@ -112,25 +160,19 @@ const WellnessDetailsScreen = ({ navigation }: any) => {
       console.log(`Fetching tracking data for date: ${dateString}`);
 
       // Fetch all tracking data for the selected date
-      const [moodResponse, fitnessResponse, waterResponse, sleepResponse, mealResponse] = await Promise.all([
+      const [moodResponse, fitnessResponse, waterResponse, sleepResponse, mealResponse, anthropometryResponse] = await Promise.all([
         api.getMoodHistory({ date: dateString }),
         api.getFitnessHistory({ date: dateString }),
         api.getWaterHistory({ date: dateString }),
         api.getSleepHistory({ sleep_date: dateString }),
         api.getMealHistory({ date: dateString }),
+        api.getAnthropometryHistory({ measured_date: dateString }),
       ]);
 
       const newTrackingData: TrackingData = {};
       let hasAnyData = false;
 
-      // Debug logging for API responses
-      console.log("=== API RESPONSES DEBUG ===");
-      console.log("Mood Response:", moodResponse);
-      console.log("Fitness Response:", fitnessResponse);
-      console.log("Water Response:", waterResponse);
-      console.log("Sleep Response:", sleepResponse);
-      console.log("Meal Response:", mealResponse);
-      console.log("=== END API RESPONSES DEBUG ===");
+
 
       // Process mood data
       if (moodResponse.success && moodResponse.data?.entries?.length > 0) {
@@ -214,6 +256,23 @@ const WellnessDetailsScreen = ({ navigation }: any) => {
         console.log("❌ Meal data not available or empty");
       }
 
+      // Process anthropometry data
+      if (anthropometryResponse.success && anthropometryResponse.data?.length > 0) {
+        newTrackingData.anthropometry = { entries: anthropometryResponse.data };
+        hasAnyData = true;
+        console.log("✅ Anthropometry data processed:", anthropometryResponse.data.length, "entries");
+        console.log("🔍 Anthropometry data structure:", JSON.stringify(anthropometryResponse.data[0], null, 2));
+      } else if (anthropometryResponse.success && Array.isArray(anthropometryResponse.data) && anthropometryResponse.data.length > 0) {
+        // Handle case where data is directly an array
+        newTrackingData.anthropometry = { entries: anthropometryResponse.data };
+        hasAnyData = true;
+        console.log("✅ Anthropometry data processed (array format):", anthropometryResponse.data.length, "entries");
+        console.log("🔍 Anthropometry data structure:", JSON.stringify(anthropometryResponse.data[0], null, 2));
+      } else {
+        console.log("❌ Anthropometry data not available or empty");
+        console.log("🔍 Anthropometry response:", JSON.stringify(anthropometryResponse, null, 2));
+      }
+
       setTrackingData(newTrackingData);
       setHasData(hasAnyData);
 
@@ -221,7 +280,7 @@ const WellnessDetailsScreen = ({ navigation }: any) => {
       const categories: TrackingCategory[] = [
         {
           id: 'all',
-          title: 'All',
+          title: 'Semua',
           icon: 'view-dashboard',
           color: '#4CAF50',
           data: newTrackingData,
@@ -229,7 +288,7 @@ const WellnessDetailsScreen = ({ navigation }: any) => {
         },
         {
           id: 'mood',
-          title: 'Mood',
+          title: 'Mood', // TODO: translate to indonesia
           icon: 'emoticon',
           color: '#FF9800',
           data: newTrackingData.mood,
@@ -237,7 +296,7 @@ const WellnessDetailsScreen = ({ navigation }: any) => {
         },
         {
           id: 'water',
-          title: 'Water',
+          title: 'Air Minum',
           icon: 'cup-water',
           color: '#2196F3',
           data: newTrackingData.water,
@@ -245,7 +304,7 @@ const WellnessDetailsScreen = ({ navigation }: any) => {
         },
         {
           id: 'fitness',
-          title: 'Fitness',
+          title: 'Fitness', // TODO: translate to indonesia
           icon: 'dumbbell',
           color: '#9C27B0',
           data: newTrackingData.fitness,
@@ -253,7 +312,7 @@ const WellnessDetailsScreen = ({ navigation }: any) => {
         },
         {
           id: 'sleep',
-          title: 'Sleep',
+          title: 'Tidur',
           icon: 'sleep',
           color: '#673AB7',
           data: newTrackingData.sleep,
@@ -261,11 +320,19 @@ const WellnessDetailsScreen = ({ navigation }: any) => {
         },
         {
           id: 'meal',
-          title: 'Meal',
+          title: 'Makan',
           icon: 'food-apple',
           color: '#FF5722',
           data: newTrackingData.meal,
           hasData: newTrackingData.meal?.entries?.length > 0
+        },
+        {
+          id: 'anthropometry',
+          title: 'Antropometri',
+          icon: 'human-male-height',
+          color: '#795548',
+          data: newTrackingData.anthropometry,
+          hasData: newTrackingData.anthropometry?.entries?.length > 0
         }
       ];
 
@@ -351,7 +418,7 @@ const WellnessDetailsScreen = ({ navigation }: any) => {
         <>
           {trackingData.mood && trackingData.mood.entries?.length > 0 && (
             <View style={styles.sectionContainer}>
-              <Text style={styles.sectionTitle}>Mood Tracking</Text>
+              <Text style={styles.sectionTitle}>Pelacakan Mood</Text>
               {trackingData.mood.entries.map((entry: any, index: number) => (
                 <Card key={index} style={styles.trackingCard}>
                   <Card.Content>
@@ -368,7 +435,7 @@ const WellnessDetailsScreen = ({ navigation }: any) => {
                           {entry.mood_level.replace('_', ' ').replace(/\b\w/g, (l: string) => l.toUpperCase())}
                         </Text>
                         <Text style={styles.trackingSubtitle}>
-                          Score: {entry.mood_score}/10
+                          Skor: {entry.mood_score}/10
                         </Text>
                         {entry.tracking_time && (
                           <Text style={styles.trackingTime}>
@@ -394,7 +461,7 @@ const WellnessDetailsScreen = ({ navigation }: any) => {
 
           {trackingData.water && trackingData.water.entries?.length > 0 && (
             <View style={styles.sectionContainer}>
-              <Text style={styles.sectionTitle}>Water Intake</Text>
+              <Text style={styles.sectionTitle}>Air Minum</Text>
               {trackingData.water.entries.map((entry: any, index: number) => (
                 <Card key={index} style={styles.trackingCard}>
                   <Card.Content>
@@ -428,46 +495,70 @@ const WellnessDetailsScreen = ({ navigation }: any) => {
 
           {trackingData.fitness && trackingData.fitness.entries?.length > 0 && (
             <View style={styles.sectionContainer}>
-              <Text style={styles.sectionTitle}>Fitness Activities</Text>
-              {trackingData.fitness.entries.map((entry: any, index: number) => (
-                <Card key={index} style={styles.trackingCard}>
-                  <Card.Content>
-                    <View style={styles.trackingHeader}>
-                      <View style={styles.trackingIconContainer}>
-                        <Icon name={getActivityIcon(entry.activity_type)} size={24} color="#9C27B0" />
-                      </View>
-                      <View style={styles.trackingInfo}>
-                        <Text style={styles.trackingTitle}>
-                          {entry.activity_name || entry.activity_type}
-                        </Text>
-                        <Text style={styles.trackingSubtitle}>
-                          {entry.duration_minutes} minutes • {entry.calories_burned} calories
-                        </Text>
-                        {entry.tracking_time && (
-                          <Text style={styles.trackingTime}>
-                            {formatTime(entry.tracking_time)}
+              <Text style={styles.sectionTitle}>Aktivitas Fitness</Text>
+              {trackingData.fitness.entries.map((entry: any, index: number) => {
+                const workoutParameters = getWorkoutParameters(entry);
+                const actualNotes = getActualNotes(entry);
+                
+                return (
+                  <Card key={index} style={styles.trackingCard}>
+                    <Card.Content>
+                      <View style={styles.trackingHeader}>
+                        <View style={styles.trackingIconContainer}>
+                          <Icon name={getActivityIcon(entry.activity_type)} size={24} color="#9C27B0" />
+                        </View>
+                        <View style={styles.trackingInfo}>
+                          <Text style={styles.trackingTitle}>
+                            {entry.activity_name || entry.activity_type}
                           </Text>
-                        )}
+                          <Text style={styles.trackingSubtitle}>
+                            {entry.duration_minutes || entry.exercise_minutes} minutes • {entry.calories_burned} calories
+                          </Text>
+                          {entry.tracking_time && (
+                            <Text style={styles.trackingTime}>
+                              {formatTime(entry.tracking_time)}
+                            </Text>
+                          )}
+                        </View>
+                        <View style={styles.trackingScore}>
+                          <Text style={[styles.trackingScoreValue, { color: "#9C27B0" }]}>
+                            {entry.duration_minutes || entry.exercise_minutes}
+                          </Text>
+                          <Text style={styles.trackingScoreLabel}>min</Text>
+                        </View>
                       </View>
-                      <View style={styles.trackingScore}>
-                        <Text style={[styles.trackingScoreValue, { color: "#9C27B0" }]}>
-                          {entry.duration_minutes}
-                        </Text>
-                        <Text style={styles.trackingScoreLabel}>min</Text>
-                      </View>
-                    </View>
-                    {entry.notes && (
-                      <Text style={styles.trackingNotes}>{entry.notes}</Text>
-                    )}
-                  </Card.Content>
-                </Card>
-              ))}
+                      
+                      {/* Workout Parameters */}
+                      {workoutParameters.length > 0 && (
+                        <View style={styles.workoutParametersContainer}>
+                          <Text style={styles.workoutParametersTitle}>Parameter Latihan:</Text>
+                          <View style={styles.workoutParametersGrid}>
+                            {workoutParameters.map((param, paramIndex) => (
+                              <View key={paramIndex} style={styles.workoutParameterItem}>
+                                <Text style={styles.workoutParameterLabel}>{param.label}</Text>
+                                <Text style={styles.workoutParameterValue}>
+                                  {param.value} {param.unit}
+                                </Text>
+                              </View>
+                            ))}
+                          </View>
+                        </View>
+                      )}
+                      
+                      {/* Notes */}
+                      {actualNotes && (
+                        <Text style={styles.trackingNotes}>{actualNotes}</Text>
+                      )}
+                    </Card.Content>
+                  </Card>
+                );
+              })}
             </View>
           )}
 
           {trackingData.sleep && trackingData.sleep.sleepData?.length > 0 && (
             <View style={styles.sectionContainer}>
-              <Text style={styles.sectionTitle}>Sleep Tracking</Text>
+              <Text style={styles.sectionTitle}>Pelacakan Tidur</Text>
               {trackingData.sleep.sleepData.map((entry: any, index: number) => (
                 <Card key={index} style={styles.trackingCard}>
                   <Card.Content>
@@ -504,7 +595,7 @@ const WellnessDetailsScreen = ({ navigation }: any) => {
 
           {trackingData.meal && trackingData.meal.entries?.length > 0 && (
             <View style={styles.sectionContainer}>
-              <Text style={styles.sectionTitle}>Meal Tracking</Text>
+              <Text style={styles.sectionTitle}>Pelacakan Makan</Text>
               {trackingData.meal.entries.map((entry: any, index: number) => (
                 <Card key={index} style={styles.trackingCard}>
                   <Card.Content>
@@ -596,7 +687,7 @@ const WellnessDetailsScreen = ({ navigation }: any) => {
       case 'mood':
         return (
           <View style={styles.sectionContainer}>
-            <Text style={styles.sectionTitle}>Mood Tracking</Text>
+            <Text style={styles.sectionTitle}>Pelacakan Mood</Text>
             {category.data.entries.map((entry: any, index: number) => (
               <Card key={index} style={styles.trackingCard}>
                 <Card.Content>
@@ -613,7 +704,7 @@ const WellnessDetailsScreen = ({ navigation }: any) => {
                         {entry.mood_level.replace('_', ' ').replace(/\b\w/g, (l: string) => l.toUpperCase())}
                       </Text>
                       <Text style={styles.trackingSubtitle}>
-                        Score: {entry.mood_score}/10
+                        Skor: {entry.mood_score}/10
                       </Text>
                       {entry.tracking_time && (
                         <Text style={styles.trackingTime}>
@@ -640,7 +731,7 @@ const WellnessDetailsScreen = ({ navigation }: any) => {
       case 'water':
         return (
           <View style={styles.sectionContainer}>
-            <Text style={styles.sectionTitle}>Water Intake</Text>
+            <Text style={styles.sectionTitle}>Air Minum</Text>
             {category.data.entries.map((entry: any, index: number) => (
               <Card key={index} style={styles.trackingCard}>
                 <Card.Content>
@@ -675,47 +766,71 @@ const WellnessDetailsScreen = ({ navigation }: any) => {
       case 'fitness':
         return (
           <View style={styles.sectionContainer}>
-            <Text style={styles.sectionTitle}>Fitness Activities</Text>
-            {category.data.entries.map((entry: any, index: number) => (
-              <Card key={index} style={styles.trackingCard}>
-                <Card.Content>
-                  <View style={styles.trackingHeader}>
-                    <View style={styles.trackingIconContainer}>
-                      <Icon name={getActivityIcon(entry.activity_type)} size={24} color="#9C27B0" />
-                    </View>
-                    <View style={styles.trackingInfo}>
-                      <Text style={styles.trackingTitle}>
-                        {entry.activity_name || entry.activity_type}
-                      </Text>
-                      <Text style={styles.trackingSubtitle}>
-                        {entry.duration_minutes} minutes • {entry.calories_burned} calories
-                      </Text>
-                      {entry.tracking_time && (
-                        <Text style={styles.trackingTime}>
-                          {formatTime(entry.tracking_time)}
+            <Text style={styles.sectionTitle}>Aktivitas Fitness</Text>
+            {category.data.entries.map((entry: any, index: number) => {
+              const workoutParameters = getWorkoutParameters(entry);
+              const actualNotes = getActualNotes(entry);
+              
+              return (
+                <Card key={index} style={styles.trackingCard}>
+                  <Card.Content>
+                    <View style={styles.trackingHeader}>
+                      <View style={styles.trackingIconContainer}>
+                        <Icon name={getActivityIcon(entry.activity_type)} size={24} color="#9C27B0" />
+                      </View>
+                      <View style={styles.trackingInfo}>
+                        <Text style={styles.trackingTitle}>
+                          {entry.activity_name || entry.activity_type}
                         </Text>
-                      )}
+                        <Text style={styles.trackingSubtitle}>
+                          {entry.duration_minutes || entry.exercise_minutes} minutes • {entry.calories_burned} calories
+                        </Text>
+                        {entry.tracking_time && (
+                          <Text style={styles.trackingTime}>
+                            {formatTime(entry.tracking_time)}
+                          </Text>
+                        )}
+                      </View>
+                      <View style={styles.trackingScore}>
+                        <Text style={[styles.trackingScoreValue, { color: "#9C27B0" }]}>
+                          {entry.duration_minutes || entry.exercise_minutes}
+                        </Text>
+                        <Text style={styles.trackingScoreLabel}>min</Text>
+                      </View>
                     </View>
-                    <View style={styles.trackingScore}>
-                      <Text style={[styles.trackingScoreValue, { color: "#9C27B0" }]}>
-                        {entry.duration_minutes}
-                      </Text>
-                      <Text style={styles.trackingScoreLabel}>min</Text>
-                    </View>
-                  </View>
-                  {entry.notes && (
-                    <Text style={styles.trackingNotes}>{entry.notes}</Text>
-                  )}
-                </Card.Content>
-              </Card>
-            ))}
+                    
+                    {/* Workout Parameters */}
+                    {workoutParameters.length > 0 && (
+                      <View style={styles.workoutParametersContainer}>
+                        <Text style={styles.workoutParametersTitle}>Parameter Latihan:</Text>
+                        <View style={styles.workoutParametersGrid}>
+                          {workoutParameters.map((param, paramIndex) => (
+                            <View key={paramIndex} style={styles.workoutParameterItem}>
+                              <Text style={styles.workoutParameterLabel}>{param.label}</Text>
+                              <Text style={styles.workoutParameterValue}>
+                                {param.value} {param.unit}
+                              </Text>
+                            </View>
+                          ))}
+                        </View>
+                      </View>
+                    )}
+                    
+                    {/* Notes */}
+                    {actualNotes && (
+                      <Text style={styles.trackingNotes}>{actualNotes}</Text>
+                    )}
+                  </Card.Content>
+                </Card>
+              );
+            })}
           </View>
         );
 
       case 'sleep':
         return (
           <View style={styles.sectionContainer}>
-            <Text style={styles.sectionTitle}>Sleep Tracking</Text>
+            <Text style={styles.sectionTitle}>Pelacakan Tidur</Text>
             {category.data.sleepData.map((entry: any, index: number) => (
               <Card key={index} style={styles.trackingCard}>
                 <Card.Content>
@@ -753,7 +868,7 @@ const WellnessDetailsScreen = ({ navigation }: any) => {
       case 'meal':
         return (
           <View style={styles.sectionContainer}>
-            <Text style={styles.sectionTitle}>Meal Tracking</Text>
+            <Text style={styles.sectionTitle}>Pelacakan Makan</Text>
             {category.data.entries.map((entry: any, index: number) => (
               <Card key={index} style={styles.trackingCard}>
                 <Card.Content>
@@ -823,16 +938,101 @@ const WellnessDetailsScreen = ({ navigation }: any) => {
           </View>
         );
 
+      case 'anthropometry':
+        return (
+          <View style={styles.sectionContainer}>
+            <Text style={styles.sectionTitle}>Antropometri</Text>
+            {category.data?.entries?.filter((entry: any) => entry).map((entry: any, index: number) => (
+              <Card key={index} style={styles.trackingCard}>
+                <Card.Content>
+                  <View style={styles.trackingHeader}>
+                    <View style={styles.trackingIconContainer}>
+                      <Icon name="human-male-height" size={24} color="#795548" />
+                    </View>
+                    <View style={styles.trackingInfo}>
+                      <Text style={styles.trackingTitle}>
+                        Pengukuran Antropometri
+                      </Text>
+                      <Text style={styles.trackingSubtitle}>
+                        {entry.measured_date ? new Date(entry.measured_date).toLocaleDateString('id-ID') : 'N/A'}
+                      </Text>
+                    </View>
+                    <View style={styles.trackingScore}>
+                      <Text style={[styles.trackingScoreValue, { color: "#795548" }]}>
+                        {entry.bmi && (typeof entry.bmi === 'number' || !isNaN(parseFloat(entry.bmi))) ? parseFloat(entry.bmi).toFixed(1) : 'N/A'}
+                      </Text>
+                      <Text style={styles.trackingScoreLabel}>BMI</Text>
+                    </View>
+                  </View>
+                  
+                  {/* Anthropometry Details */}
+                  <View style={styles.anthropometryDetails}>
+                    <View style={styles.anthropometryRow}>
+                      <View style={styles.anthropometryItem}>
+                        <Text style={styles.anthropometryLabel}>Berat Badan</Text>
+                        <Text style={styles.anthropometryValue}>
+                          {entry.weight && (typeof entry.weight === 'number' || !isNaN(parseFloat(entry.weight))) ? `${parseFloat(entry.weight)} kg` : 'N/A'}
+                        </Text>
+                      </View>
+                      <View style={styles.anthropometryItem}>
+                        <Text style={styles.anthropometryLabel}>Tinggi Badan</Text>
+                        <Text style={styles.anthropometryValue}>
+                          {entry.height && (typeof entry.height === 'number' || !isNaN(parseFloat(entry.height))) ? `${parseFloat(entry.height)} cm` : 'N/A'}
+                        </Text>
+                      </View>
+                    </View>
+                    
+                    <View style={styles.anthropometryRow}>
+                      <View style={styles.anthropometryItem}>
+                        <Text style={styles.anthropometryLabel}>BMI</Text>
+                        <Text style={styles.anthropometryValue}>
+                          {entry.bmi && (typeof entry.bmi === 'number' || !isNaN(parseFloat(entry.bmi))) ? `${parseFloat(entry.bmi).toFixed(1)} kg/m²` : 'N/A'}
+                        </Text>
+                      </View>
+                      <View style={styles.anthropometryItem}>
+                        <Text style={styles.anthropometryLabel}>Kategori</Text>
+                        <Text style={[styles.anthropometryValue, { color: getBMICategoryColor(entry.bmi_category || '') }]}>
+                          {entry.bmi_category || 'N/A'}
+                        </Text>
+                      </View>
+                    </View>
+                    
+                    {/* Progress Information */}
+                    {(entry.weight_change !== null || entry.bmi_change !== null) && (
+                      <View style={styles.progressInfo}>
+                        <Text style={styles.progressTitle}>Progress:</Text>
+                        {entry.weight_change !== null && (typeof entry.weight_change === 'number' || !isNaN(parseFloat(entry.weight_change))) && (
+                          <Text style={[styles.progressText, { color: parseFloat(entry.weight_change) < 0 ? '#4CAF50' : '#F44336' }]}>
+                            Berat: {parseFloat(entry.weight_change) > 0 ? '+' : ''}{parseFloat(entry.weight_change).toFixed(1)} kg
+                            {entry.weight_change_percentage && (typeof entry.weight_change_percentage === 'number' || !isNaN(parseFloat(entry.weight_change_percentage))) && 
+                              ` (${parseFloat(entry.weight_change_percentage) > 0 ? '+' : ''}${parseFloat(entry.weight_change_percentage).toFixed(1)}%)`}
+                          </Text>
+                        )}
+                        {entry.bmi_change !== null && (typeof entry.bmi_change === 'number' || !isNaN(parseFloat(entry.bmi_change))) && (
+                          <Text style={[styles.progressText, { color: parseFloat(entry.bmi_change) < 0 ? '#4CAF50' : '#F44336' }]}>
+                            BMI: {parseFloat(entry.bmi_change) > 0 ? '+' : ''}{parseFloat(entry.bmi_change).toFixed(2)}
+                          </Text>
+                        )}
+                      </View>
+                    )}
+                  </View>
+                  
+                  {entry.notes && (
+                    <Text style={styles.trackingNotes}>{entry.notes}</Text>
+                  )}
+                </Card.Content>
+              </Card>
+            ))}
+          </View>
+        );
+
       default:
         return null;
     }
   };
 
-  const handleDateChange = (event: any, selectedDate?: Date) => {
-    setShowDatePicker(false);
-    if (selectedDate) {
-      setSelectedDate(selectedDate);
-    }
+  const handleDateChange = (date: Date) => {
+    setSelectedDate(date);
   };
 
   const formatDate = (date: Date) => {
@@ -875,6 +1075,16 @@ const WellnessDetailsScreen = ({ navigation }: any) => {
     return moodIcons[moodLevel] || 'emoticon-neutral';
   };
 
+  const getBMICategoryColor = (category: string) => {
+    const categoryColors: { [key: string]: string } = {
+      'Kurus': '#FF9800',
+      'Normal': '#4CAF50',
+      'Gemuk': '#FF5722',
+      'Obesitas': '#F44336'
+    };
+    return categoryColors[category] || '#757575';
+  };
+
   const getMoodColor = (moodLevel: string) => {
     const moodColors: { [key: string]: string } = {
       'very_happy': '#10B981',
@@ -900,6 +1110,129 @@ const WellnessDetailsScreen = ({ navigation }: any) => {
     return activityIcons[activityType] || 'run';
   };
 
+  // Function to extract workout parameters from notes
+  const getWorkoutParameters = (entry: any) => {
+    const workoutType = entry.workout_type || entry.activity_type;
+    const workoutConfig = WORKOUT_TYPES[workoutType as keyof typeof WORKOUT_TYPES];
+    
+    if (!workoutConfig) {
+      console.log(`⚠️ No workout config found for: ${workoutType}`);
+      return [];
+    }
+
+    const parameters: Array<{label: string, value: string, unit: string}> = [];
+    console.log(`🔍 Processing parameters for ${workoutType}:`, {
+      id: entry.id,
+      workout_type: workoutType,
+      exercise_minutes: entry.exercise_minutes,
+      duration_minutes: entry.duration_minutes,
+      distance_km: entry.distance_km,
+      steps: entry.steps,
+      intensity: entry.intensity,
+      notes: entry.notes
+    });
+    
+    // Track which parameters we've already added to avoid duplicates
+    const addedParams = new Set<string>();
+    
+    // Add duration (always available)
+    const duration = entry.exercise_minutes || entry.duration_minutes;
+    if (duration && typeof duration === 'number' && duration > 0) {
+      parameters.push({
+        label: "Durasi",
+        value: duration.toString(),
+        unit: "menit"
+      });
+      addedParams.add("duration");
+    }
+
+    // Try to extract additional parameters from notes if it's JSON
+    if (entry.notes) {
+      try {
+        const notesData = JSON.parse(entry.notes);
+        if (notesData.workoutParameters) {
+          const workoutParams = notesData.workoutParameters;
+          
+          console.log(`🔍 Workout params for ${workoutType}:`, workoutParams);
+          
+          // Add parameters based on workout type
+          workoutConfig.parameters.forEach(param => {
+            console.log(`🔍 Checking param ${param.name} for ${workoutType}:`, workoutParams[param.name]);
+            
+            if (workoutParams[param.name] && workoutParams[param.name] !== "") {
+              parameters.push({
+                label: param.label,
+                value: workoutParams[param.name],
+                unit: param.unit
+              });
+              addedParams.add(param.name);
+            }
+          });
+        }
+      } catch (error) {
+        // If notes is not JSON, it's just a regular note
+        // We'll handle this in the notes display
+        console.log(`📝 Notes is not JSON for ${workoutType}:`, entry.notes);
+      }
+    }
+
+    // Add fallback parameters from database fields if not already added from JSON
+    // Only add distance for workout types that use distance (not Yoga)
+    if (workoutType !== "Yoga" && !addedParams.has("distance_km") && entry.distance_km && typeof entry.distance_km === 'number' && entry.distance_km > 0) {
+      parameters.push({
+        label: "Jarak",
+        value: entry.distance_km.toFixed(1),
+        unit: "km"
+      });
+    }
+
+    // Only add steps for workout types that use steps (Walking, Running)
+    if ((workoutType === "Walking" || workoutType === "Running") && !addedParams.has("steps") && entry.steps && typeof entry.steps === 'number' && entry.steps > 0) {
+      parameters.push({
+        label: "Langkah",
+        value: entry.steps.toLocaleString(),
+        unit: "langkah"
+      });
+    }
+
+    // Add intensity only for Yoga (from database field)
+    if (workoutType === "Yoga" && !addedParams.has("intensity") && entry.intensity && typeof entry.intensity === 'string' && entry.intensity.trim() !== '') {
+      parameters.push({
+        label: "Intensitas",
+        value: entry.intensity.charAt(0).toUpperCase() + entry.intensity.slice(1),
+        unit: ""
+      });
+    }
+
+    // Special handling for Swimming distance (convert to meters if stored as km)
+    if (workoutType === "Swimming" && !addedParams.has("distance_m") && entry.distance_km && typeof entry.distance_km === 'number' && entry.distance_km > 0) {
+      parameters.push({
+        label: "Jarak",
+        value: (entry.distance_km * 1000).toString(),
+        unit: "m"
+      });
+    }
+
+
+
+    return parameters;
+  };
+
+  // Function to get actual notes (not JSON parameters)
+  const getActualNotes = (entry: any) => {
+    if (!entry.notes) {
+      return "";
+    }
+
+    try {
+      const notesData = JSON.parse(entry.notes);
+      return notesData.userNotes || "";
+    } catch (error) {
+      // If notes is not JSON, return as is
+      return entry.notes;
+    }
+  };
+
   if (loading) {
     return (
       <LinearGradient
@@ -910,7 +1243,7 @@ const WellnessDetailsScreen = ({ navigation }: any) => {
         <SafeAreaView style={styles.safeArea}>
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color="#FFFFFF" />
-            <Text style={styles.loadingText}>Loading tracking history...</Text>
+            <Text style={styles.loadingText}>Memuat riwayat pelacakan...</Text>
           </View>
         </SafeAreaView>
       </LinearGradient>
@@ -929,7 +1262,7 @@ const WellnessDetailsScreen = ({ navigation }: any) => {
             <Icon name="alert-circle" size={48} color="#FFFFFF" />
             <Text style={styles.errorText}>{error}</Text>
             <TouchableOpacity style={styles.retryButton} onPress={() => fetchTrackingData(false)}>
-              <Text style={styles.retryButtonText}>Tap to retry</Text>
+              <Text style={styles.retryButtonText}>Tekan untuk mencoba lagi</Text>
             </TouchableOpacity>
           </View>
         </SafeAreaView>
@@ -952,7 +1285,7 @@ const WellnessDetailsScreen = ({ navigation }: any) => {
           >
             <Icon name="arrow-left" size={24} color="#FFFFFF" />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Tracking History</Text>
+          <Text style={styles.headerTitle}>Riwayat Pelacakan</Text>
           <View style={styles.headerSpacer} />
         </View>
 
@@ -970,28 +1303,28 @@ const WellnessDetailsScreen = ({ navigation }: any) => {
           }
         >
           {/* Date Selector */}
-          <View style={styles.dateSelectorContainer}>
-            <TouchableOpacity
-              style={styles.dateSelectorButton}
-              onPress={() => setShowDatePicker(true)}
-            >
-              <Icon name="calendar" size={20} color="#FFFFFF" />
-              <Text style={styles.dateSelectorText}>{formatDate(selectedDate)}</Text>
-              <Icon name="chevron-down" size={20} color="#FFFFFF" />
-            </TouchableOpacity>
-          </View>
+          <SimpleDatePicker
+            selectedDate={selectedDate}
+            onDateChange={handleDateChange}
+            title="Pilih Tanggal Tracking"
+            variant="dark"
+          />
 
           {/* Category Slider */}
-          {hasData && trackingCategories.length > 0 && <CategorySlider />}
+          {hasData && trackingCategories.length > 0 && (
+            <View style={styles.categorySliderWrapper}>
+              <CategorySlider />
+            </View>
+          )}
 
           {/* Content based on selected category */}
           {hasData ? renderContent() : (
             <View style={styles.noDataContainer}>
               <Icon name="calendar-blank" size={64} color="rgba(255, 255, 255, 0.6)" />
-              <Text style={styles.noDataTitle}>No Tracking Data</Text>
+              <Text style={styles.noDataTitle}>Tidak ada data pelacakan</Text>
               <Text style={styles.noDataText}>
-                No tracking data found for {formatDate(selectedDate)}. 
-                Start tracking your wellness activities to see your history here.
+                Tidak ada data pelacakan ditemukan untuk {formatDate(selectedDate)}. 
+                Mulai melacak aktivitas kesehatan Anda untuk melihat riwayatnya di sini.
               </Text>
             </View>
           )}
@@ -999,36 +1332,7 @@ const WellnessDetailsScreen = ({ navigation }: any) => {
 
         </ScrollView>
 
-        {/* Date Picker Modal */}
-        {showDatePicker && (
-          <View style={styles.datePickerModal}>
-            <View style={styles.datePickerContent}>
-              <Text style={styles.datePickerTitle}>Select Date</Text>
-              <DateTimePicker
-                value={selectedDate}
-                mode="date"
-                display="spinner"
-                onChange={handleDateChange}
-                maximumDate={new Date()}
-                style={styles.datePicker}
-              />
-              <View style={styles.datePickerButtons}>
-                <TouchableOpacity
-                  style={styles.datePickerButton}
-                  onPress={() => setShowDatePicker(false)}
-                >
-                  <Text style={styles.datePickerButtonText}>Cancel</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.datePickerButton, styles.datePickerButtonPrimary]}
-                  onPress={() => setShowDatePicker(false)}
-                >
-                  <Text style={styles.datePickerButtonTextPrimary}>Confirm</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          </View>
-        )}
+
       </SafeAreaView>
     </LinearGradient>
   );
@@ -1065,6 +1369,7 @@ const styles = StyleSheet.create({
   },
   contentContainer: {
     paddingBottom: 30,
+    paddingTop: 8,
   },
   loadingContainer: {
     flex: 1,
@@ -1316,11 +1621,17 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
   },
   // Category Slider Styles
+  categorySliderWrapper: {
+    marginTop: 16,
+    marginBottom: 8,
+  },
   categorySlider: {
-    marginVertical: 16,
+    marginTop: 8,
+    marginBottom: 8,
   },
   categorySliderContent: {
     paddingHorizontal: 20,
+    paddingVertical: 8,
     gap: 12,
   },
   categoryItem: {
@@ -1329,6 +1640,8 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(255, 255, 255, 0.1)",
     paddingHorizontal: 16,
     paddingVertical: 12,
+    paddingTop: 16,
+    paddingBottom: 16,
     borderRadius: 25,
     borderWidth: 1,
     borderColor: "rgba(255, 255, 255, 0.2)",
@@ -1355,8 +1668,8 @@ const styles = StyleSheet.create({
   },
   categoryBadge: {
     position: "absolute",
-    top: -5,
-    right: -5,
+    top: -8,
+    right: -8,
     minWidth: 18,
     height: 18,
     borderRadius: 9,
@@ -1427,6 +1740,94 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "600",
     color: "#374151",
+  },
+  // Anthropometry Styles
+  anthropometryDetails: {
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: "#E5E7EB",
+  },
+  anthropometryRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: 12,
+  },
+  anthropometryItem: {
+    flex: 1,
+    alignItems: "center",
+    paddingHorizontal: 8,
+  },
+  anthropometryLabel: {
+    fontSize: 12,
+    color: "#6B7280",
+    fontWeight: "500",
+    marginBottom: 4,
+    textAlign: "center",
+  },
+  anthropometryValue: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#374151",
+    textAlign: "center",
+  },
+  progressInfo: {
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: "#E5E7EB",
+  },
+  progressTitle: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#374151",
+    marginBottom: 8,
+  },
+  progressText: {
+    fontSize: 12,
+    fontWeight: "500",
+    marginBottom: 4,
+  },
+  // Workout Parameters Styles
+  workoutParametersContainer: {
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: "#E5E7EB",
+  },
+  workoutParametersTitle: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#374151",
+    marginBottom: 8,
+  },
+  workoutParametersGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 12,
+  },
+  workoutParameterItem: {
+    backgroundColor: "#F9FAFB",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    minWidth: 80,
+    alignItems: "center",
+  },
+  workoutParameterLabel: {
+    fontSize: 10,
+    color: "#6B7280",
+    fontWeight: "500",
+    marginBottom: 2,
+    textAlign: "center",
+  },
+  workoutParameterValue: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#374151",
+    textAlign: "center",
   },
 });
 

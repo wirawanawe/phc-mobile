@@ -20,6 +20,7 @@ import { CustomTheme } from "../theme/theme";
 import ProgressRing from "../components/ProgressRing";
 import MissionPromptCard from "../components/MissionPromptCard";
 import TodaySummaryCard from "../components/TodaySummaryCard";
+import WellnessInvitationCard from "../components/WellnessInvitationCard";
 
 import GradientButton from "../components/GradientButton";
 import ModernIconButton from "../components/ModernIconButton";
@@ -36,6 +37,7 @@ import FeaturedArticleCard from "../components/FeaturedArticleCard";
 import eventEmitter from "../utils/eventEmitter";
 import { getTimeBasedGreeting } from "../utils/greetingUtils";
 import dateChangeDetector from "../utils/dateChangeDetector";
+import { getTodayDate } from "../utils/dateUtils";
 
 const { width } = Dimensions.get("window");
 const Tab = createBottomTabNavigator();
@@ -101,6 +103,7 @@ const HomeTab = ({ navigation }: any) => {
   const [articlesLoading, setArticlesLoading] = useState(false);
   const [hasJoinedWellnessProgram, setHasJoinedWellnessProgram] = useState(false);
   const [currentGreeting, setCurrentGreeting] = useState(getTimeBasedGreeting());
+  const [summaryRefreshTrigger, setSummaryRefreshTrigger] = useState(0);
 
   useEffect(() => {
     // Initialize date change detector
@@ -109,6 +112,7 @@ const HomeTab = ({ navigation }: any) => {
     if (isAuthenticated) {
       loadMissionData();
       checkWellnessProgramStatus();
+      setSummaryRefreshTrigger(prev => prev + 1);
     }
     
     // Load activity data
@@ -141,6 +145,7 @@ const HomeTab = ({ navigation }: any) => {
       if (isAuthenticated) {
         loadMissionData();
         checkWellnessProgramStatus();
+        setSummaryRefreshTrigger(prev => prev + 1);
       }
     };
     
@@ -207,6 +212,14 @@ const HomeTab = ({ navigation }: any) => {
         checkWellnessProgramStatus();
       }
     };
+
+      const handleWellnessProgramJoined = () => {
+    console.log('MainScreen - User joined wellness program, refreshing status...');
+    if (isAuthenticated) {
+      console.log('MainScreen - Checking wellness program status after user joined...');
+      checkWellnessProgramStatus();
+    }
+  };
     
     // Listen for daily reset events
     const handleDailyReset = () => {
@@ -224,6 +237,39 @@ const HomeTab = ({ navigation }: any) => {
         checkWellnessProgramStatus();
       }
     };
+
+    // Listen for cache cleared events
+    const handleCacheCleared = () => {
+      console.log('MainScreen - Cache cleared event detected, refreshing all data...');
+      setTimeout(() => {
+        if (isAuthenticated) {
+          loadMissionData();
+          checkWellnessProgramStatus();
+        }
+      }, 200);
+    };
+
+    // Listen for force refresh events
+    const handleForceRefreshAllData = () => {
+      console.log('MainScreen - Force refresh all data event detected...');
+      setTimeout(() => {
+        if (isAuthenticated) {
+          loadMissionData();
+          checkWellnessProgramStatus();
+        }
+      }, 300);
+    };
+
+    // Listen for cache refreshed events
+    const handleCacheRefreshed = () => {
+      console.log('MainScreen - Cache refreshed event detected...');
+      setTimeout(() => {
+        if (isAuthenticated) {
+          loadMissionData();
+          checkWellnessProgramStatus();
+        }
+      }, 150);
+    };
     
     // Add event listeners
     eventEmitter.on('dataRefresh', handleDataRefresh);
@@ -235,7 +281,12 @@ const HomeTab = ({ navigation }: any) => {
     eventEmitter.on('wellnessActivityCompleted', handleWellnessActivityCompleted);
     eventEmitter.on('wellnessActivityUpdated', handleWellnessActivityUpdated);
     eventEmitter.on('wellnessActivityDeleted', handleWellnessActivityDeleted);
+    eventEmitter.on('wellnessProgramJoined', handleWellnessProgramJoined);
+    eventEmitter.on('dataRefresh', handleDataRefresh);
     eventEmitter.on('dailyReset', handleDailyReset);
+    eventEmitter.on('cacheCleared', handleCacheCleared);
+    eventEmitter.on('forceRefreshAllData', handleForceRefreshAllData);
+    eventEmitter.on('cacheRefreshed', handleCacheRefreshed);
     
     return () => {
       clearInterval(greetingInterval);
@@ -249,7 +300,12 @@ const HomeTab = ({ navigation }: any) => {
       eventEmitter.off('wellnessActivityCompleted', handleWellnessActivityCompleted);
       eventEmitter.off('wellnessActivityUpdated', handleWellnessActivityUpdated);
       eventEmitter.off('wellnessActivityDeleted', handleWellnessActivityDeleted);
+      eventEmitter.off('wellnessProgramJoined', handleWellnessProgramJoined);
+      eventEmitter.off('dataRefresh', handleDataRefresh);
       eventEmitter.off('dailyReset', handleDailyReset);
+      eventEmitter.off('cacheCleared', handleCacheCleared);
+      eventEmitter.off('forceRefreshAllData', handleForceRefreshAllData);
+      eventEmitter.off('cacheRefreshed', handleCacheRefreshed);
     };
   }, [isAuthenticated]);
 
@@ -273,20 +329,20 @@ const HomeTab = ({ navigation }: any) => {
       setLoading(true);
       setSummaryLoading(true);
       
-      // Use withRetry for better error handling with longer delays for mobile networks
-      const [statsResponse, userMissionsResponse, todaySummaryResponse] = await Promise.all([
-        withRetry(() => api.getMissionStats({ date: new Date().toISOString().split('T')[0] }), 3, 3000),
-        withRetry(() => api.getMyMissions(), 3, 3000),
-        withRetry(() => api.getTodaySummary(), 3, 3000),
-      ]);
+              // Use withRetry for better error handling with longer delays for mobile networks
+        const [statsResponse, userMissionsResponse, todaySummaryResponse] = await Promise.all([
+          withRetry(() => api.getMissionStats({ date: getTodayDate() }), 3, 3000),
+          withRetry(() => api.getMyMissions(), 3, 3000),
+          withRetry(() => api.getTodaySummary(), 3, 3000),
+        ]);
 
-      if (statsResponse.success) {
-        setMissionStats(statsResponse.data);
-      }
+        if (statsResponse.success) {
+          setMissionStats(statsResponse.data);
+        }
 
-      if (userMissionsResponse.success) {
-        setUserMissions(userMissionsResponse.data);
-      }
+        if (userMissionsResponse.success) {
+          setUserMissions(userMissionsResponse.data);
+        }
 
       if (todaySummaryResponse.success && todaySummaryResponse.data) {
         const summaryData = todaySummaryResponse.data;
@@ -352,8 +408,11 @@ const HomeTab = ({ navigation }: any) => {
       
       if (wellnessResponse.success && wellnessResponse.data) {
         const wellnessData = wellnessResponse.data;
-        setHasJoinedWellnessProgram(wellnessData.has_joined);
+        const hasJoined = wellnessData.has_joined === true;
+        console.log('MainScreen - Wellness program status:', { hasJoined, wellnessData });
+        setHasJoinedWellnessProgram(hasJoined);
       } else {
+        console.log('MainScreen - Wellness program status: not joined (no data)');
         setHasJoinedWellnessProgram(false);
       }
     } catch (error) {
@@ -361,6 +420,11 @@ const HomeTab = ({ navigation }: any) => {
       // Don't show alert for background status checks
       setHasJoinedWellnessProgram(false);
     }
+  };
+
+  const refreshTodaySummary = () => {
+    console.log('MainScreen - Manually refreshing today summary...');
+    setSummaryRefreshTrigger(prev => prev + 1);
   };
 
   const loadRSSArticles = async () => {
@@ -603,7 +667,7 @@ const HomeTab = ({ navigation }: any) => {
     {
       id: "1",
       title: "BMI Calculator",
-      description: "Calculate your Body Mass Index",
+      description: "Hitung Indeks Massa Tubuh Anda",
       icon: "scale-bathroom",
       color: "#38A169",
       bgColor: "#F0FDF4",
@@ -611,7 +675,7 @@ const HomeTab = ({ navigation }: any) => {
     {
       id: "2",
       title: "PHQ-9 Assessment",
-      description: "Depression screening tool",
+      description: "Alat Pengukur Depresi",
       icon: "brain",
       color: "#3182CE",
       bgColor: "#EBF8FF",
@@ -619,7 +683,7 @@ const HomeTab = ({ navigation }: any) => {
     {
       id: "3",
       title: "GAD-7 Assessment",
-      description: "Anxiety screening tool",
+      description: "Alat Pengukur Kecemasan",
       icon: "heart-pulse",
       color: "#E53E3E",
       bgColor: "#FEF2F2",
@@ -627,7 +691,7 @@ const HomeTab = ({ navigation }: any) => {
     {
       id: "4",
       title: "Calorie Calculator",
-      description: "Calculate daily calorie needs",
+      description: "Hitung Kebutuhan Kalori Harian",
       icon: "calculator",
       color: "#D69E2E",
       bgColor: "#FFFAF0",
@@ -635,7 +699,7 @@ const HomeTab = ({ navigation }: any) => {
     {
       id: "5",
       title: "Water Intake",
-      description: "Calculate daily water needs",
+      description: "Hitung Kebutuhan Air Harian",
       icon: "water",
       color: "#06B6D4",
       bgColor: "#ECFEFF",
@@ -643,7 +707,7 @@ const HomeTab = ({ navigation }: any) => {
     {
       id: "6",
       title: "Sleep Tracker",
-      description: "Track your sleep patterns",
+      description: "Pelacak Pola Tidur Anda",
       icon: "sleep",
       color: "#9F7AEA",
       bgColor: "#FAF5FF",
@@ -680,11 +744,17 @@ const HomeTab = ({ navigation }: any) => {
       activeOpacity={0.8}
     >
       <View style={styles.featuredArticleImageContainerSlider}>
-        <Image
-          source={{ uri: item.image }}
-          style={styles.featuredArticleImageSlider}
-          resizeMode="cover"
-        />
+        {item.imageUrl ? (
+          <Image
+            source={{ uri: item.imageUrl }}
+            style={styles.featuredArticleImageSlider}
+            resizeMode="cover"
+          />
+        ) : (
+          <View style={[styles.featuredArticleIconFallback, { backgroundColor: item.bgColor }]}>
+            <Icon name={item.image} size={32} color={item.color} />
+          </View>
+        )}
         <View style={styles.featuredArticleOverlaySlider}>
           <Text style={styles.featuredArticleCategorySlider}>
             {item.category || "Health"}
@@ -739,7 +809,10 @@ const HomeTab = ({ navigation }: any) => {
         refreshControl={
           <RefreshControl
             refreshing={loading}
-            onRefresh={loadMissionData}
+            onRefresh={() => {
+              loadMissionData();
+              refreshTodaySummary();
+            }}
             colors={["#E53E3E"]}
             tintColor="#E53E3E"
           />
@@ -915,18 +988,40 @@ const HomeTab = ({ navigation }: any) => {
           </TouchableOpacity>
         )} */}
 
-        {/* Today Summary Card - Only for authenticated users */}
+        {/* Today Summary Card or Wellness Invitation - Only for authenticated users */}
         {isAuthenticated && (
-          <TodaySummaryCard 
-            onMoreDetailsPress={() => {
-              try {
-                navigation.navigate("WellnessDetails");
-              } catch (error) {
-                console.warn("WellnessDetails screen not found, navigating to WellnessApp instead");
-                navigation.navigate("WellnessApp");
-              }
-            }} 
-          />
+          (() => {
+            console.log('MainScreen - Rendering wellness card decision:', { 
+              hasJoinedWellnessProgram, 
+              isAuthenticated,
+              user: user?.name 
+            });
+            
+            return hasJoinedWellnessProgram ? (
+              <TodaySummaryCard 
+                refreshTrigger={summaryRefreshTrigger}
+                onMoreDetailsPress={() => {
+                  try {
+                    navigation.navigate("WellnessDetails");
+                  } catch (error) {
+                    console.warn("WellnessDetails screen not found, navigating to WellnessApp instead");
+                    navigation.navigate("WellnessApp");
+                  }
+                }} 
+              />
+            ) : (
+              <WellnessInvitationCard
+                onJoinPress={() => {
+                  try {
+                    navigation.navigate("WellnessApp");
+                  } catch (error) {
+                    console.warn("WellnessApp screen not found, navigating to Login instead");
+                    navigation.navigate("Login");
+                  }
+                }}
+              />
+            );
+          })()
         )}
 
         {/* Quick Actions - Only show if user has joined wellness program */}
@@ -947,7 +1042,7 @@ const HomeTab = ({ navigation }: any) => {
 
         {/* Calculator Programs */}
         <View style={styles.calculatorContainer}>
-          <Text style={styles.sectionTitle}>Health Calculators</Text>
+          <Text style={styles.sectionTitle}>Kalkulator Kesehatan</Text>
           <View style={styles.calculatorGrid}>
             {calculatorPrograms.slice(0, 3).map((program) => (
               <TouchableOpacity
@@ -989,7 +1084,7 @@ const HomeTab = ({ navigation }: any) => {
         <View style={styles.featuredContainer}>
           <View style={styles.featuredSectionHeader}>
             <View style={styles.featuredHeaderLeft}>
-              <Text style={styles.featuredSectionTitle}>Health Articles</Text>
+              <Text style={styles.featuredSectionTitle}>Artikel Kesehatan</Text>
             </View>
             <View style={styles.featuredHeaderRight}>
               <TouchableOpacity
@@ -1013,7 +1108,7 @@ const HomeTab = ({ navigation }: any) => {
                   }
                 }}
               >
-                <Text style={styles.seeAllText}>See all</Text>
+                <Text style={styles.seeAllText}>Lihat Semua</Text>
                 <Icon name="arrow-right" size={16} color="#E53E3E" />
               </TouchableOpacity>
             </View>
@@ -1022,7 +1117,7 @@ const HomeTab = ({ navigation }: any) => {
           {articlesLoading ? (
             <View style={styles.articlesLoadingContainer}>
               <Icon name="loading" size={24} color="#E53E3E" />
-              <Text style={styles.loadingText}>Loading health articles...</Text>
+              <Text style={styles.loadingText}>Memuat artikel kesehatan...</Text>
             </View>
           ) : featuredArticles.length > 0 ? (
             <FlatList
@@ -1038,12 +1133,12 @@ const HomeTab = ({ navigation }: any) => {
           ) : (
             <View style={styles.articlesErrorContainer}>
               <Icon name="newspaper-variant" size={32} color="#E53E3E" />
-              <Text style={styles.errorText}>Unable to load articles</Text>
+              <Text style={styles.errorText}>Tidak dapat memuat artikel</Text>
               <TouchableOpacity 
                 style={styles.retryButton}
                 onPress={loadRSSArticles}
               >
-                <Text style={styles.retryButtonText}>Retry</Text>
+                <Text style={styles.retryButtonText}>Coba Lagi</Text>
               </TouchableOpacity>
             </View>
           )}
@@ -1326,7 +1421,42 @@ const DailyMissionTab = ({ navigation }: any) => {
 
 // Tracking Tab Component
 const TrackingTab = ({ navigation }: any) => {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, user } = useAuth();
+  const [wellnessProgramStatus, setWellnessProgramStatus] = useState({
+    has_joined: false,
+    needs_onboarding: true
+  });
+  const [isLoading, setIsLoading] = useState(true);
+
+  // Check wellness program status when component mounts
+  useEffect(() => {
+    const checkWellnessStatus = async () => {
+      if (!isAuthenticated) {
+        setIsLoading(false);
+        return;
+      }
+
+      try {
+        const response = await apiService.getWellnessProgramStatus();
+        if (response.success && response.data) {
+          setWellnessProgramStatus(response.data);
+        }
+      } catch (error) {
+        console.error('Error checking wellness status:', error);
+        // Fallback to user data from AuthContext
+        if (user) {
+          setWellnessProgramStatus({
+            has_joined: (user as any).wellness_program_joined === true,
+            needs_onboarding: !(user as any).wellness_program_joined
+          });
+        }
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    checkWellnessStatus();
+  }, [isAuthenticated, user]);
 
   const trackingOptions = [
     {
@@ -1401,6 +1531,44 @@ const TrackingTab = ({ navigation }: any) => {
             onPress={() => navigation.navigate("Login")}
           >
             <Text style={styles.loginButtonText}>Login</Text>
+          </TouchableOpacity>
+        </View>
+      </LinearGradient>
+    );
+  }
+
+  // Show loading state while checking wellness status
+  if (isLoading) {
+    return (
+      <LinearGradient colors={["#FAFBFC", "#F7FAFC"]} style={styles.container}>
+        <StatusBar barStyle="dark-content" backgroundColor="#FAFBFC" />
+        <View style={styles.authPrompt}>
+          <Icon name="loading" size={64} color="#E22345" />
+          <Text style={styles.authPromptTitle}>Memuat...</Text>
+          <Text style={styles.authPromptSubtitle}>
+            Memeriksa status program wellness Anda
+          </Text>
+        </View>
+      </LinearGradient>
+    );
+  }
+
+  // Show wellness program registration prompt if user hasn't joined
+  if (!wellnessProgramStatus.has_joined) {
+    return (
+      <LinearGradient colors={["#FAFBFC", "#F7FAFC"]} style={styles.container}>
+        <StatusBar barStyle="dark-content" backgroundColor="#FAFBFC" />
+        <View style={styles.authPrompt}>
+          <Icon name="heart-pulse" size={64} color="#E22345" />
+          <Text style={styles.authPromptTitle}>Program Wellness Diperlukan</Text>
+          <Text style={styles.authPromptSubtitle}>
+            Anda perlu mendaftar program wellness terlebih dahulu untuk mengakses fitur tracking kesehatan
+          </Text>
+          <TouchableOpacity
+            style={styles.loginButton}
+            onPress={() => navigation.navigate("WellnessApp")}
+          >
+            <Text style={styles.loginButtonText}>Daftar Program Wellness</Text>
           </TouchableOpacity>
         </View>
       </LinearGradient>
@@ -1579,12 +1747,7 @@ const MainScreen = ({ navigation }: any) => {
                   <TouchableOpacity
                     onPress={() => {
                       if (isAuthenticated) {
-                        try {
-                          navigation.navigate("WellnessApp");
-                        } catch (error) {
-                          console.warn("WellnessApp screen not found, opening debug screen");
-                          navigation.navigate("WellnessDebug");
-                        }
+                        navigation.navigate("WellnessApp");
                       } else {
                         navigation.navigate("Login");
                       }
@@ -2672,6 +2835,7 @@ const styles = StyleSheet.create({
   welcomeCard: {
     marginHorizontal: 20,
     marginBottom: 25,
+    marginTop: 25,
     borderRadius: 20,
     overflow: "hidden",
     shadowColor: "#E53E3E",
@@ -3068,7 +3232,7 @@ const styles = StyleSheet.create({
     flexGrow: 1, // Ensure content can grow to fill available space
   },
   featuredArticleCard: {
-    width: "48%",
+    width: "50%",
     backgroundColor: "#FFFFFF",
     borderRadius: 16,
     shadowColor: "#000",
@@ -3166,6 +3330,13 @@ const styles = StyleSheet.create({
   featuredArticleImageSlider: {
     width: "100%",
     height: 100,
+    backgroundColor: "#F3F4F6",
+  },
+  featuredArticleIconFallback: {
+    width: "100%",
+    height: 100,
+    justifyContent: "center",
+    alignItems: "center",
     backgroundColor: "#F3F4F6",
   },
   featuredArticleOverlaySlider: {

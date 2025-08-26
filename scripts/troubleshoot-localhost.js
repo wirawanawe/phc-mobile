@@ -11,7 +11,7 @@ function checkBackendServer() {
   
   try {
     // Test health endpoint
-    const healthResponse = execSync('curl -s http://localhost:3000/api/health', { 
+    const healthResponse = execSync('curl -s https://dash.doctorphc.id/api/health', { 
       encoding: 'utf8',
       timeout: 5000 
     });
@@ -35,7 +35,7 @@ function checkMobileAPIEndpoint() {
   console.log('🔍 Checking mobile API endpoint...');
   
   try {
-    const apiResponse = execSync('curl -s http://localhost:3000/api/mobile/auth/me', { 
+    const apiResponse = execSync('curl -s https://dash.doctorphc.id/api/mobile/auth/me', { 
       encoding: 'utf8',
       timeout: 5000 
     });
@@ -63,10 +63,10 @@ function checkCurrentConfiguration() {
     const apiPath = path.join(__dirname, '../src/services/api.js');
     const apiContent = fs.readFileSync(apiPath, 'utf8');
     
-    if (apiContent.includes('return "localhost"')) {
-      console.log('✅ API service configured for localhost');
+    if (apiContent.includes('return "dash.doctorphc.id"')) {
+      console.log('✅ API service configured for production server');
     } else {
-      console.log('❌ API service not configured for localhost');
+      console.log('❌ API service not configured for production server');
       console.log('Current configuration needs to be updated');
     }
     
@@ -74,9 +74,8 @@ function checkCurrentConfiguration() {
     const networkHelperPath = path.join(__dirname, '../src/utils/networkHelper.js');
     const networkContent = fs.readFileSync(networkHelperPath, 'utf8');
     
-    if (networkContent.includes("'http://localhost:3000'") && 
-        networkContent.includes('Local development (primary)')) {
-      console.log('✅ NetworkHelper configured for localhost priority');
+    if (networkContent.includes("'https://dash.doctorphc.id'")) {
+      console.log('✅ NetworkHelper configured for production server');
     } else {
       console.log('❌ NetworkHelper not properly configured');
     }
@@ -133,17 +132,17 @@ function provideSolutions() {
   
   console.log('4. 🔍 Check network in app:');
   console.log('   - Look for console logs starting with "🚀 Development mode"');
-  console.log('   - Should show "Using local server: localhost"');
+  console.log('   - Should show "Using production server: dash.doctorphc.id"');
   console.log('   - Check for any "Network request failed" errors\n');
   
   console.log('5. 🆘 If still failing:');
-  console.log('   - Check if firewall is blocking localhost:3000');
-  console.log('   - Try accessing http://localhost:3000 in browser');
+  console.log('   - Check if firewall is blocking dash.doctorphc.id');
+  console.log('   - Try accessing https://dash.doctorphc.id in browser');
   console.log('   - Restart backend server: cd dash-app && npm run dev');
 }
 
 function runDiagnostics() {
-  console.log('🚀 Running localhost connection diagnostics...\n');
+  console.log('🚀 Running production server connection diagnostics...\n');
   
   const backendOk = checkBackendServer();
   const mobileApiOk = checkMobileAPIEndpoint();

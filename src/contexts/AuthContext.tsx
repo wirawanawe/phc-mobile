@@ -1,8 +1,9 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import apiService from "../services/api";
-import { handleAuthError, handleError } from "../utils/errorHandler";
+import { handleAuthError, handleError, handleSessionExpiration } from "../utils/errorHandler";
 import { testNetworkConnectivity } from "../utils/networkTest";
+import BackgroundServiceManager from "../utils/backgroundServiceManager";
 
 interface User {
   id: string;
@@ -14,6 +15,7 @@ interface User {
   points: number;
   level?: number;
   role?: "user" | "admin" | "doctor";
+  created_at?: string;
 }
 
 interface AuthContextType {
@@ -25,6 +27,7 @@ interface AuthContextType {
   logout: () => Promise<void>;
   register: (userData: any) => Promise<{ success: boolean; message?: string }>;
   refreshAuth: () => Promise<void>;
+  setNavigation: (navigation: any) => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -41,7 +44,7 @@ export const useAuth = () => {
 const getAuthToken = async (): Promise<string | null> => {
   try {
     const token = await AsyncStorage.getItem('authToken');
-    console.log('🔍 Auth: Token retrieved:', !!token);
+
     return token;
   } catch (error) {
     console.error('❌ Auth: Error getting auth token:', error);
@@ -81,7 +84,7 @@ const clearAuthData = async (): Promise<void> => {
 
 const validateToken = async (token: string): Promise<boolean> => {
   try {
-    console.log('🔍 Auth: Validating token...');
+
     
     // Ensure API service is initialized
     if (!apiService.isInitialized) {
@@ -154,7 +157,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
         setIsLoading(false);
         setIsInitialized(true);
       }
-    }, 10000); // 10 second timeout
+    }, 5000); // Reduced from 10 to 5 seconds for faster initialization
 
     return () => clearTimeout(timeoutId);
   }, [isLoading]);
@@ -172,13 +175,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     try {
       console.log("🔍 Auth: Checking authentication status...");
       
-      // Test network connectivity first
-      console.log("🌐 Auth: Testing network connectivity...");
-      const networkTest = await testNetworkConnectivity();
-      if (!networkTest.success) {
-        console.log("⚠️ Auth: Network connectivity issues detected");
-      } else {
-        console.log("✅ Auth: Network connectivity OK");
+      // Test network connectivity first with shorter timeout
+      try {
+        const networkTest = await testNetworkConnectivity();
+        if (!networkTest.success) {
+          console.log("⚠️ Auth: Network connectivity issues detected");
+        } else {
+          console.log("✅ Auth: Network connectivity OK");
+        }
+      } catch (networkError) {
+        console.log("⚠️ Auth: Network test failed, proceeding with cached data");
       }
       
       const token = await getAuthToken();
@@ -203,17 +209,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
         }
       }
 
-      // Get user profile
+      // Try to get user profile with timeout and fallback
       try {
-        console.log("🔍 Auth: Getting user profile...");
+        console.log("🔍 Auth: Fetching user profile...");
         const response = await apiService.getUserProfile();
         
         if (response.success && response.data) {
           console.log("✅ Auth: User profile retrieved successfully");
           setUser(response.data);
           
-          // Update stored user data
-          await setUserData(response.data);
+          // Update stored user data if not from cache
+          if (!response.fromCache) {
+            await setUserData(response.data);
+          }
         } else {
           console.log("❌ Auth: Failed to get user profile");
           throw new Error('Failed to get user profile');
@@ -221,22 +229,33 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       } catch (profileError: any) {
         console.log("❌ Auth: Profile request failed:", profileError.message);
         
-        // Try to load cached user data as fallback
+        // Only logout if it's an authentication error, not network/timeout errors
+        const isAuthError = profileError.message.includes('Authentication failed') || 
+                           profileError.message.includes('401') ||
+                           profileError.message.includes('Unauthorized') ||
+                           profileError.message.includes('Token');
+        
+        if (isAuthError) {
+          console.log("❌ Auth: Authentication error detected, logging out");
+          await clearAuthData();
+          setUser(null);
+          return;
+        }
+        
+        // For network/timeout errors, try to load cached user data as fallback
         try {
           const cachedUserData = await AsyncStorage.getItem('userData');
           if (cachedUserData) {
             const userData = JSON.parse(cachedUserData);
-            console.log("🔄 Auth: Loading cached user data");
+            console.log("🔄 Auth: Loading cached user data due to network error");
             setUser(userData);
           } else {
             console.log("❌ Auth: No cached user data available");
-            await clearAuthData();
-            setUser(null);
+            // Don't logout for network errors, just keep current state
           }
         } catch (cacheError) {
           console.log("❌ Auth: Error loading cached data");
-          await clearAuthData();
-          setUser(null);
+          // Don't logout for cache errors, just keep current state
         }
       }
     } catch (error: any) {
@@ -249,8 +268,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
   const login = useCallback(async (email: string, password: string) => {
     try {
       setIsLoading(true);
-      console.log("🔍 Auth: Attempting login...");
-      
+  
+      console.log("🔐 Auth: Starting login process...");
       const response = await apiService.login(email, password);
       
       if (response.success && response.data) {
@@ -267,9 +286,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
           }
         }
         
-        // Store and set user data
+        // Store and set user data immediately
         await setUserData(response.data.user);
         setUser(response.data.user);
+        
+        // Don't wait for additional profile fetch - use the data from login response
+        console.log("✅ Auth: Login completed successfully");
         
         return { success: true };
       } else {
@@ -290,7 +312,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
   const socialLogin = useCallback(async (userData: any, token: string) => {
     try {
       setIsLoading(true);
-      console.log("🔍 Auth: Attempting social login...");
+  
       
       // Store the social login data
       await setAuthToken(token);
@@ -311,7 +333,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
   const register = useCallback(async (userData: any) => {
     try {
       setIsLoading(true);
-      console.log("🔍 Auth: Attempting registration...");
+  
       
       const response = await apiService.register(userData);
       
@@ -351,7 +373,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
 
   const logout = useCallback(async () => {
     try {
-      console.log("🔍 Auth: Logging out...");
+      console.log("🔄 Auth: Starting logout process...");
+      
+      // Stop all background services first
+      try {
+        await BackgroundServiceManager.stopAllServices();
+      } catch (serviceError) {
+        console.log("⚠️ Auth: Error stopping background services:", serviceError);
+        // Continue with logout even if stopping services fails
+      }
       
       // Try to call logout API
       try {
@@ -382,6 +412,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     }
   }, [checkAuthStatus]);
 
+  const setNavigation = useCallback((navigation: any) => {
+    console.log("🔗 Auth: Setting navigation reference for session expiration handling");
+    apiService.setNavigation(navigation);
+  }, []);
+
   const value: AuthContextType = {
     user,
     isLoading,
@@ -391,6 +426,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     logout,
     register,
     refreshAuth,
+    setNavigation,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

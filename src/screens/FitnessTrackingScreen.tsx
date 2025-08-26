@@ -18,10 +18,12 @@ import Icon from "react-native-vector-icons/MaterialCommunityIcons";
 import { CustomTheme } from "../theme/theme";
 import { useAuth } from "../contexts/AuthContext";
 import api from "../services/api";
+
 import { handleError, handleAuthError } from "../utils/errorHandler";
 import eventEmitter from "../utils/eventEmitter";
 import dateChangeDetector from "../utils/dateChangeDetector";
 import { safeGoBack } from "../utils/safeNavigation";
+import { getTodayDate } from "../utils/dateUtils";
 
 const { width } = Dimensions.get("window");
 
@@ -41,12 +43,12 @@ interface WorkoutParameters {
 
 // Workout types with their parameters and calorie calculation formulas
 const WORKOUT_TYPES = {
-  "Weight Lifting": {
+  "Angkat Beban": {
     icon: "dumbbell",
     parameters: [
-      { name: "weight_kg", label: "Weight (kg)", type: "number", unit: "kg" },
-      { name: "sets", label: "Number of Sets", type: "number", unit: "sets" },
-      { name: "reps", label: "Reps per Set", type: "number", unit: "reps" }
+      { name: "weight_kg", label: "Berat (kg)", type: "number", unit: "kg" },
+      { name: "sets", label: "Set", type: "number", unit: "set" },
+      { name: "reps", label: "Repetisi/Set", type: "number", unit: "reps" }
     ],
     calorieFormula: (params: WorkoutParameters, duration: number) => {
       const weight = parseFloat(params.weight_kg || "0") || 0;
@@ -56,10 +58,10 @@ const WORKOUT_TYPES = {
       return Math.round((weight * totalReps * 0.1) + (duration * 3));
     }
   },
-  "Running": {
+  "Lari": {
     icon: "run",
     parameters: [
-      { name: "distance_km", label: "Distance (km)", type: "number", unit: "km" },
+      { name: "distance_km", label: "Jarak (km)", type: "number", unit: "km" },
       { name: "pace_min_km", label: "Pace (min/km)", type: "number", unit: "min/km" }
     ],
     calorieFormula: (params: WorkoutParameters, duration: number) => {
@@ -69,11 +71,11 @@ const WORKOUT_TYPES = {
       return Math.round(distance * 60 + (duration * 8));
     }
   },
-  "Cycling": {
+  "Bersepeda": {
     icon: "bike",
     parameters: [
-      { name: "distance_km", label: "Distance (km)", type: "number", unit: "km" },
-      { name: "speed_kmh", label: "Average Speed (km/h)", type: "number", unit: "km/h" }
+      { name: "distance_km", label: "Jarak (km)", type: "number", unit: "km" },
+      { name: "speed_kmh", label: "Kecepatan Rata-rata (km/h)", type: "number", unit: "km/h" }
     ],
     calorieFormula: (params: WorkoutParameters, duration: number) => {
       const distance = parseFloat(params.distance_km || "0") || 0;
@@ -81,44 +83,44 @@ const WORKOUT_TYPES = {
       return Math.round(distance * 30 + (duration * 5));
     }
   },
-  "Swimming": {
+  "Berenang": {
     icon: "swim",
     parameters: [
-      { name: "distance_m", label: "Distance (m)", type: "number", unit: "m" },
-      { name: "stroke_type", label: "Stroke Type", type: "select", options: ["Freestyle", "Breaststroke", "Butterfly", "Backstroke"] }
+      { name: "distance_m", label: "Jarak (m)", type: "number", unit: "m" },
+      { name: "stroke_type", label: "Gaya Berenang", type: "select", options: ["Bebas", "Dada", "Kupu-Kupu", "Punggung"] }
     ],
     calorieFormula: (params: WorkoutParameters, duration: number) => {
       const distance = parseFloat(params.distance_m || "0") || 0;
-      const strokeType = params.stroke_type || "Freestyle";
+      const strokeType = params.stroke_type || "Bebas";
       const strokeMultiplier: { [key: string]: number } = {
-        "Freestyle": 1,
-        "Breaststroke": 1.2,
-        "Butterfly": 1.5,
-        "Backstroke": 1.1
+        "Bebas": 1,
+        "Dada": 1.2,
+        "Kupu-Kupu": 1.5,
+        "Punggung": 1.1
       };
       return Math.round((distance * 0.5) * (strokeMultiplier[strokeType] || 1) + (duration * 6));
     }
   },
-  "Yoga": {
+  "Yoga/Pilates": {
     icon: "yoga",
     parameters: [
-      { name: "intensity", label: "Intensity Level", type: "select", options: ["Light", "Moderate", "Intense"] }
+      { name: "intensity", label: "Intensitas", type: "select", options: ["Ringan", "Sedang", "Berat"] }
     ],
     calorieFormula: (params: WorkoutParameters, duration: number) => {
       const intensity = params.intensity || "Moderate";
       const intensityMultiplier: { [key: string]: number } = {
-        "Light": 2,
-        "Moderate": 3,
-        "Intense": 4
+        "Ringan": 2,
+        "Sedang": 3,
+        "Berat": 4
       };
       return Math.round(duration * (intensityMultiplier[intensity] || 3));
     }
   },
-  "Walking": {
+  "Berjalan": {
     icon: "walk",
     parameters: [
-      { name: "distance_km", label: "Distance (km)", type: "number", unit: "km" },
-      { name: "steps", label: "Steps", type: "number", unit: "steps" }
+      { name: "distance_km", label: "Jarak (km)", type: "number", unit: "km" },
+      { name: "steps", label: "Langkah", type: "number", unit: "langkah" }
     ],
     calorieFormula: (params: WorkoutParameters, duration: number) => {
       const distance = parseFloat(params.distance_km || "0") || 0;
@@ -175,13 +177,49 @@ const FitnessTrackingScreen = ({ navigation }: any) => {
         loadTodayData();
       }
     };
+
+    // Listen for cache cleared events
+    const handleCacheCleared = () => {
+      console.log('FitnessTrackingScreen - Cache cleared event detected, refreshing fitness data...');
+      setTimeout(() => {
+        if (isAuthenticated) {
+          loadTodayData();
+        }
+      }, 200);
+    };
+
+    // Listen for force refresh events
+    const handleForceRefreshAllData = () => {
+      console.log('FitnessTrackingScreen - Force refresh all data event detected...');
+      setTimeout(() => {
+        if (isAuthenticated) {
+          loadTodayData();
+        }
+      }, 300);
+    };
+
+    // Listen for cache refreshed events
+    const handleCacheRefreshed = () => {
+      console.log('FitnessTrackingScreen - Cache refreshed event detected...');
+      setTimeout(() => {
+        if (isAuthenticated) {
+          loadTodayData();
+        }
+      }, 150);
+    };
     
     // Add event listeners
     eventEmitter.on('dailyReset', handleDailyReset);
+    eventEmitter.on('cacheCleared', handleCacheCleared);
+    eventEmitter.on('forceRefreshAllData', handleForceRefreshAllData);
+    eventEmitter.on('cacheRefreshed', handleCacheRefreshed);
     
     return () => {
       // Remove event listeners
       eventEmitter.off('dailyReset', handleDailyReset);
+      eventEmitter.off('cacheCleared', handleCacheCleared);
+      eventEmitter.off('forceRefreshAllData', handleForceRefreshAllData);
+      eventEmitter.off('cacheRefreshed', handleCacheRefreshed);
     };
   }, [isAuthenticated]);
 
@@ -271,7 +309,7 @@ const FitnessTrackingScreen = ({ navigation }: any) => {
         distance_km: workoutParameters.distance_km ? parseFloat(workoutParameters.distance_km) : null,
         steps: workoutParameters.steps ? parseInt(workoutParameters.steps) : null,
         notes: JSON.stringify(notesData),
-        tracking_date: new Date().toISOString().split('T')[0]
+        tracking_date: getTodayDate()
       };
 
       const response = await api.createFitnessEntry(workoutData);
@@ -334,12 +372,13 @@ const FitnessTrackingScreen = ({ navigation }: any) => {
         distance_km: workoutParameters.distance_km ? parseFloat(workoutParameters.distance_km) : null,
         steps: workoutParameters.steps ? parseInt(workoutParameters.steps) : null,
         notes: JSON.stringify(notesData),
-        tracking_date: new Date().toISOString().split('T')[0]
+        tracking_date: getTodayDate()
       };
 
-      const response = await api.createFitnessEntry(fitnessData);
+      // Create fitness tracking entry
+      const fitnessResponse = await api.createFitnessEntry(fitnessData);
 
-      if (response.success) {
+      if (fitnessResponse.success) {
         Alert.alert(
           "Success",
           "Fitness data saved successfully!",
@@ -355,6 +394,8 @@ const FitnessTrackingScreen = ({ navigation }: any) => {
         
         // Emit event to notify other components that fitness data has been updated
         eventEmitter.emitFitnessLogged();
+      } else {
+        Alert.alert("Error", "Failed to save fitness data. Please try again.");
       }
     } catch (error) {
       console.error("Error saving fitness data:", error);
@@ -369,16 +410,13 @@ const FitnessTrackingScreen = ({ navigation }: any) => {
   };
 
   const workoutTypes = [
-    "Walking",
-    "Running",
-    "Cycling",
-    "Swimming",
-    "Gym Workout",
-    "Yoga",
-    "Pilates",
-    "Dancing",
-    "Hiking",
-    "Other",
+    "Berjalan",
+    "Lari",
+    "Bersepeda",
+    "Berenang",
+    "Angkat Beban",
+    "Yoga/Pilates",
+    "Lainnya",
   ];
 
   return (
@@ -395,11 +433,11 @@ const FitnessTrackingScreen = ({ navigation }: any) => {
 
             {/* Enhanced Manual Entry Form */}
             <View style={styles.formContainer}>
-              <Text style={styles.sectionTitle}>Manual Entry</Text>
+              <Text style={styles.sectionTitle}>Pencatatan Aktivitas Fisik</Text>
               
               {/* Step 1: Select Workout Type */}
               <View style={styles.section}>
-                <Text style={styles.sectionTitle}>1. Select Workout Type</Text>
+                <Text style={styles.sectionTitle}>1. Pilih Jenis Aktivitas</Text>
                 <View style={styles.workoutTypeGrid}>
                   {Object.keys(WORKOUT_TYPES).map((type) => (
                     <TouchableOpacity
@@ -429,7 +467,7 @@ const FitnessTrackingScreen = ({ navigation }: any) => {
               {/* Step 2: Workout Parameters */}
               {workoutType && (
                 <View style={styles.section}>
-                  <Text style={styles.sectionTitle}>2. Workout Parameters</Text>
+                  <Text style={styles.sectionTitle}>2. Parameter Aktivitas</Text>
                   {WORKOUT_TYPES[workoutType as keyof typeof WORKOUT_TYPES]?.parameters?.map((param) => (
                     <View key={param.name} style={styles.parameterContainer}>
                       <Text style={styles.parameterLabel}>{param.label}</Text>
@@ -456,7 +494,7 @@ const FitnessTrackingScreen = ({ navigation }: any) => {
                       ) : (
                         <TextInput
                           style={styles.parameterInput}
-                          placeholder={`Enter ${param.label.toLowerCase()}`}
+                          placeholder={`Masukkan ${param.label.toLowerCase()}`}
                           placeholderTextColor="#9CA3AF"
                           value={workoutParameters[param.name] || ""}
                           onChangeText={(value) => handleParameterChange(param.name, value)}
@@ -470,40 +508,40 @@ const FitnessTrackingScreen = ({ navigation }: any) => {
 
               {/* Step 3: Duration */}
               <View style={styles.section}>
-                <Text style={styles.sectionTitle}>3. Duration</Text>
+                <Text style={styles.sectionTitle}>3. Durasi</Text>
                 <View style={styles.durationContainer}>
                   <TextInput
                     style={styles.durationInput}
-                    placeholder="Enter duration in minutes"
+                    placeholder="Masukkan durasi dalam menit"
                     placeholderTextColor="#9CA3AF"
                     value={exerciseMinutes}
                     onChangeText={setExerciseMinutes}
                     keyboardType="numeric"
                   />
-                  <Text style={styles.durationUnit}>minutes</Text>
+                  <Text style={styles.durationUnit}>menit</Text>
                 </View>
               </View>
 
               {/* Step 4: Calculated Calories */}
               {calculatedCalories > 0 && (
                 <View style={styles.section}>
-                  <Text style={styles.sectionTitle}>4. Calories Burned</Text>
+                  <Text style={styles.sectionTitle}>4. Kalori Terbakar</Text>
                   <View style={styles.caloriesContainer}>
                     <Text style={styles.caloriesValue}>{calculatedCalories}</Text>
-                    <Text style={styles.caloriesUnit}>calories</Text>
+                    <Text style={styles.caloriesUnit}>kalori</Text>
                   </View>
                   <Text style={styles.caloriesNote}>
-                    *Calculated based on your workout parameters and duration
+                    *Dihitung berdasarkan parameter aktivitas dan durasi
                   </Text>
                 </View>
               )}
 
               {/* Notes */}
               <View style={styles.section}>
-                <Text style={styles.sectionTitle}>Notes (Optional)</Text>
+                <Text style={styles.sectionTitle}>Catatan (Opsional)</Text>
                 <TextInput
                   style={styles.notesInput}
-                  placeholder="Add any notes about your workout..."
+                  placeholder="Masukkan catatan tentang aktivitas Anda..."
                   placeholderTextColor="#9CA3AF"
                   value={notes}
                   onChangeText={setNotes}
@@ -511,32 +549,6 @@ const FitnessTrackingScreen = ({ navigation }: any) => {
                   numberOfLines={3}
                 />
               </View>
-
-              {/* Real-time Tracking Button */}
-              <Button
-                mode="outlined"
-                onPress={() => navigation.navigate('RealtimeFitness')}
-                style={styles.realtimeButton}
-                labelStyle={styles.realtimeButtonText}
-                buttonColor="#10B981"
-                textColor="#ffffff"
-                icon="fire"
-              >
-                Start Real-time Tracking
-              </Button>
-
-              {/* View History Button */}
-              <Button
-                mode="outlined"
-                onPress={() => navigation.navigate('ExerciseHistory')}
-                style={styles.historyButton}
-                labelStyle={styles.historyButtonText}
-                buttonColor="#3B82F6"
-                textColor="#ffffff"
-                icon="history"
-              >
-                View Exercise History
-              </Button>
 
               {/* Save Button */}
               <Button
@@ -549,7 +561,21 @@ const FitnessTrackingScreen = ({ navigation }: any) => {
                 buttonColor="#E22345"
                 textColor="#FFFFFF"
               >
-                {isLoading ? "Saving..." : "Save Fitness Data"}
+                {isLoading ? "Menyimpan..." : "Simpan Data"}
+              </Button>
+
+              
+                {/* View History Button */}
+                <Button
+                mode="outlined"
+                onPress={() => navigation.navigate('ExerciseHistory')}
+                style={styles.historyButton}
+                labelStyle={styles.historyButtonText}
+                buttonColor="#3B82F6"
+                textColor="#ffffff"
+                icon="history"
+              >
+                Lihat Riwayat
               </Button>
             </View>
           </ScrollView>
@@ -577,14 +603,14 @@ const FitnessTrackingScreen = ({ navigation }: any) => {
                 >
                   <Icon name="close" size={24} color="#FFFFFF" />
                 </TouchableOpacity>
-                <Text style={styles.modalTitle}>Log Workout</Text>
+                <Text style={styles.modalTitle}>Pencatatan Aktivitas Fisik</Text>
                 <View style={styles.modalHeaderSpacer} />
               </View>
 
               <ScrollView style={styles.modalContent} showsVerticalScrollIndicator={false}>
                 {/* Step 1: Select Workout Type */}
                 <View style={styles.modalSection}>
-                  <Text style={styles.modalSectionTitle}>1. Select Workout Type</Text>
+                  <Text style={styles.modalSectionTitle}>1. Pilih Jenis Aktivitas</Text>
                   <View style={styles.workoutTypeGrid}>
                     {Object.keys(WORKOUT_TYPES).map((workoutType) => (
                       <TouchableOpacity
@@ -614,7 +640,7 @@ const FitnessTrackingScreen = ({ navigation }: any) => {
                 {/* Step 2: Workout Parameters */}
                 {selectedWorkoutType && (
                   <View style={styles.modalSection}>
-                    <Text style={styles.modalSectionTitle}>2. Workout Parameters</Text>
+                    <Text style={styles.modalSectionTitle}>2. Parameter Aktivitas</Text>
                     {WORKOUT_TYPES[selectedWorkoutType as keyof typeof WORKOUT_TYPES].parameters.map((param) => (
                       <View key={param.name} style={styles.parameterContainer}>
                         <Text style={styles.parameterLabel}>{param.label}</Text>
@@ -655,40 +681,40 @@ const FitnessTrackingScreen = ({ navigation }: any) => {
 
                 {/* Step 3: Duration */}
                 <View style={styles.modalSection}>
-                  <Text style={styles.modalSectionTitle}>3. Duration</Text>
+                  <Text style={styles.modalSectionTitle}>3. Durasi</Text>
                   <View style={styles.durationContainer}>
                     <TextInput
                       style={styles.durationInput}
-                      placeholder="Enter duration in minutes"
+                      placeholder="Masukkan durasi dalam menit"
                       placeholderTextColor="#9CA3AF"
                       value={workoutDuration}
                       onChangeText={setWorkoutDuration}
                       keyboardType="numeric"
                     />
-                    <Text style={styles.durationUnit}>minutes</Text>
+                    <Text style={styles.durationUnit}>menit</Text>
                   </View>
                 </View>
 
                 {/* Step 4: Calculated Calories */}
                 {calculatedCalories > 0 && (
                   <View style={styles.modalSection}>
-                    <Text style={styles.modalSectionTitle}>4. Calories Burned</Text>
+                    <Text style={styles.modalSectionTitle}>4. Kalori Terbakar</Text>
                     <View style={styles.caloriesContainer}>
                       <Text style={styles.caloriesValue}>{calculatedCalories}</Text>
-                      <Text style={styles.caloriesUnit}>calories</Text>
+                      <Text style={styles.caloriesUnit}>kalori</Text>
                     </View>
                     <Text style={styles.caloriesNote}>
-                      *Calculated based on your workout parameters and duration
+                      *Dihitung berdasarkan parameter aktivitas dan durasi
                     </Text>
                   </View>
                 )}
 
                 {/* Notes */}
                 <View style={styles.modalSection}>
-                  <Text style={styles.modalSectionTitle}>Notes (Optional)</Text>
+                  <Text style={styles.modalSectionTitle}>Catatan (Opsional)</Text>
                   <TextInput
                     style={styles.notesInput}
-                    placeholder="Add any notes about your workout..."
+                    placeholder="Masukkan catatan tentang aktivitas Anda..."
                     placeholderTextColor="#9CA3AF"
                     value={workoutNotes}
                     onChangeText={setWorkoutNotes}
@@ -707,7 +733,7 @@ const FitnessTrackingScreen = ({ navigation }: any) => {
                     style={styles.saveButton}
                     labelStyle={styles.saveButtonLabel}
                   >
-                    {savingWorkout ? "Saving..." : "Save Workout"}
+                    {savingWorkout ? "Menyimpan..." : "Simpan Data"}
                   </Button>
                 </View>
               </ScrollView>
@@ -994,7 +1020,7 @@ const styles = StyleSheet.create({
   historyButton: {
     borderRadius: 12,
     paddingVertical: 4,
-    marginBottom: 12,
+    marginBottom: 20,
     borderColor: "#3B82F6",
     borderWidth: 2,
   },
@@ -1007,7 +1033,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     paddingVertical: 4,
     marginTop: 12,
-    marginBottom: 40,
+    marginBottom: 20,
     shadowColor: "#000",
     shadowOffset: {
       width: 0,

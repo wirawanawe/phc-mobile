@@ -42,9 +42,9 @@ export class ConnectionTest {
   }
 
   static async testAllEndpoints() {
-    const endpoints = [
-      'https://dash.doctorphc.id/api/mobile/auth/me' // Production server (primary)
-    ];
+      const endpoints = [
+    'http://localhost:3000/api/mobile/auth/me' // Local server (primary)
+  ];
 
     console.log('🔍 Testing all endpoints...');
     
@@ -111,7 +111,7 @@ export class ConnectionTest {
       platform: Platform.OS,
       version: Platform.Version,
       isEmulator: false,
-      localhost: 'https://dash.doctorphc.id'
+      localhost: 'http://localhost:3000'
     };
   }
 }

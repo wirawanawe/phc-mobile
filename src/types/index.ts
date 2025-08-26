@@ -8,6 +8,10 @@ export interface User {
   points: number;
   level: number;
   role: "user" | "admin" | "doctor";
+  created_at?: string;
+  wellness_program_joined?: boolean;
+  wellness_join_date?: string;
+  wellness_program_duration?: number;
 }
 
 export interface HealthAssessment {

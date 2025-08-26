@@ -1,74 +1,79 @@
 import { Platform } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 class LoginDiagnostic {
   constructor() {
-    this.testResults = [];
+    this.diagnostics = [];
+    this.maxDiagnostics = 20;
   }
 
   // Run comprehensive login diagnostics
   async runDiagnostics() {
-    console.log('🔍 LoginDiagnostic: Starting comprehensive diagnostics...');
+    console.log('🔍 LoginDiagnostic: Starting diagnostics...');
     
-    const results = {
+    const diagnostic = {
       timestamp: new Date().toISOString(),
       platform: Platform.OS,
-      isDev: __DEV__,
+      version: Platform.Version,
       tests: []
     };
 
-    // Test 1: Basic network connectivity
-    const networkTest = await this.testBasicNetwork();
-    results.tests.push({
-      name: 'Basic Network',
+    // Test 1: Network connectivity
+    const networkTest = await this.testNetworkConnectivity();
+    diagnostic.tests.push({
+      name: 'Network Connectivity',
       ...networkTest
     });
 
-    // Test 2: Server health check
-    const healthTest = await this.testServerHealth();
-    results.tests.push({
-      name: 'Server Health',
-      ...healthTest
+    // Test 2: Server reachability
+    const serverTest = await this.testServerReachability();
+    diagnostic.tests.push({
+      name: 'Server Reachability',
+      ...serverTest
     });
 
-    // Test 3: Login endpoint accessibility
+    // Test 3: Login endpoint
     const loginTest = await this.testLoginEndpoint();
-    results.tests.push({
+    diagnostic.tests.push({
       name: 'Login Endpoint',
       ...loginTest
     });
 
-    // Test 4: Platform-specific URL test
-    const urlTest = await this.testPlatformUrls();
-    results.tests.push({
-      name: 'Platform URLs',
-      ...urlTest
-    });
-
-    // Test 5: Authentication flow test
+    // Test 4: Authentication flow
     const authTest = await this.testAuthenticationFlow();
-    results.tests.push({
+    diagnostic.tests.push({
       name: 'Authentication Flow',
       ...authTest
     });
 
-    // Calculate overall status
-    const passedTests = results.tests.filter(test => test.success).length;
-    const totalTests = results.tests.length;
-    results.overall = {
+    // Test 5: Token storage
+    const storageTest = await this.testTokenStorage();
+    diagnostic.tests.push({
+      name: 'Token Storage',
+      ...storageTest
+    });
+
+    // Calculate overall health
+    const passedTests = diagnostic.tests.filter(test => test.success).length;
+    const totalTests = diagnostic.tests.length;
+    diagnostic.overall = {
       success: passedTests === totalTests,
       passed: passedTests,
       total: totalTests,
       percentage: Math.round((passedTests / totalTests) * 100)
     };
 
-    console.log('🔍 LoginDiagnostic: Diagnostics completed:', results);
-    this.testResults.push(results);
+    // Generate recommendations
+    diagnostic.recommendations = this.generateRecommendations(diagnostic.tests);
+
+    this.addDiagnostic(diagnostic);
+    console.log('🔍 LoginDiagnostic: Diagnostics completed:', diagnostic);
     
-    return results;
+    return diagnostic;
   }
 
-  // Test basic network connectivity
-  async testBasicNetwork() {
+  // Test network connectivity
+  async testNetworkConnectivity() {
     try {
       const startTime = Date.now();
       const controller = new AbortController();
@@ -78,6 +83,7 @@ class LoginDiagnostic {
         method: 'GET',
         signal: controller.signal
       });
+      
       clearTimeout(timeoutId);
       const endTime = Date.now();
       
@@ -90,195 +96,137 @@ class LoginDiagnostic {
     } catch (error) {
       return {
         success: false,
-        responseTime: 0,
         error: error.message,
         message: 'No internet connection'
       };
     }
   }
 
-  // Test server health endpoint
-  async testServerHealth() {
+  // Test server reachability
+  async testServerReachability() {
     try {
       const startTime = Date.now();
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 10000);
       
-      const response = await fetch('http://localhost:3000/api/health', {
+      const response = await fetch('http://localhost:3000/api/mobile/health', {
         method: 'GET',
         signal: controller.signal
       });
+      
       clearTimeout(timeoutId);
       const endTime = Date.now();
       
-      if (response.ok) {
-        const data = await response.json();
-        return {
-          success: true,
-          responseTime: endTime - startTime,
-          status: response.status,
-          data: data,
-          message: 'Server is healthy'
-        };
-      } else {
-        return {
-          success: false,
-          responseTime: endTime - startTime,
-          status: response.status,
-          message: 'Server responded with error'
-        };
-      }
+      return {
+        success: response.ok,
+        responseTime: endTime - startTime,
+        status: response.status,
+        message: response.ok ? 'Server reachable' : 'Server not reachable'
+      };
     } catch (error) {
       return {
         success: false,
-        responseTime: 0,
         error: error.message,
-        message: 'Cannot connect to server'
+        message: 'Server unreachable'
       };
     }
   }
 
-  // Test login endpoint accessibility
+  // Test login endpoint
   async testLoginEndpoint() {
     try {
       const startTime = Date.now();
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 10000);
       
+      const testData = {
+        email: 'test@example.com',
+        password: 'testpass123'
+      };
+      
       const response = await fetch('http://localhost:3000/api/mobile/auth/login', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          email: 'test@example.com',
-          password: 'test123'
-        }),
+        body: JSON.stringify(testData),
         signal: controller.signal
       });
+      
       clearTimeout(timeoutId);
       const endTime = Date.now();
       
-      if (response.ok) {
-        const data = await response.json();
+      // 401 is expected for invalid credentials
+      if (response.status === 401) {
         return {
           success: true,
           responseTime: endTime - startTime,
           status: response.status,
-          data: data,
-          message: 'Login endpoint accessible'
+          message: 'Login endpoint working (401 expected for invalid credentials)'
+        };
+      } else if (response.ok) {
+        return {
+          success: true,
+          responseTime: endTime - startTime,
+          status: response.status,
+          message: 'Login endpoint working'
         };
       } else {
-        const errorText = await response.text();
         return {
           success: false,
           responseTime: endTime - startTime,
           status: response.status,
-          error: errorText,
           message: 'Login endpoint error'
         };
       }
     } catch (error) {
       return {
         success: false,
-        responseTime: 0,
         error: error.message,
-        message: 'Cannot connect to login endpoint'
+        message: 'Login endpoint unreachable'
       };
     }
-  }
-
-  // Test different platform-specific URLs
-  async testPlatformUrls() {
-    const urls = [
-      'http://localhost:3000/api/health',
-      'http://127.0.0.1:3000/api/health',
-      'http://10.0.2.2:3000/api/health', // Android emulator
-    ];
-
-    const results = [];
-    
-    for (const url of urls) {
-      try {
-        const startTime = Date.now();
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 5000);
-        
-        const response = await fetch(url, {
-          method: 'GET',
-          signal: controller.signal
-        });
-        clearTimeout(timeoutId);
-        const endTime = Date.now();
-        
-        results.push({
-          url: url,
-          success: response.ok,
-          responseTime: endTime - startTime,
-          status: response.status
-        });
-      } catch (error) {
-        results.push({
-          url: url,
-          success: false,
-          responseTime: 0,
-          error: error.message
-        });
-      }
-    }
-
-    const workingUrls = results.filter(r => r.success);
-    
-    return {
-      success: workingUrls.length > 0,
-      data: results,
-      message: workingUrls.length > 0 
-        ? `${workingUrls.length} URL(s) working` 
-        : 'No URLs accessible'
-    };
   }
 
   // Test authentication flow
   async testAuthenticationFlow() {
     try {
-      // Test 1: Check if we can reach the auth endpoint
+      // Test with invalid token
+      const startTime = Date.now();
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 10000);
       
-      const authResponse = await fetch('http://localhost:3000/api/mobile/auth/login', {
-        method: 'POST',
+      const response = await fetch('http://localhost:3000/api/mobile/health', {
+        method: 'GET',
         headers: {
-          'Content-Type': 'application/json',
+          'Authorization': 'Bearer invalid_token'
         },
-        body: JSON.stringify({
-          email: 'test@example.com',
-          password: 'test123'
-        }),
         signal: controller.signal
       });
+      
       clearTimeout(timeoutId);
-
-      // Test 2: Check if we get proper error response (expected for invalid credentials)
-      if (authResponse.status === 401 || authResponse.status === 400) {
-        const errorData = await authResponse.json();
+      const endTime = Date.now();
+      
+      // 401 is expected for invalid token
+      if (response.status === 401) {
         return {
           success: true,
-          status: authResponse.status,
-          data: errorData,
-          message: 'Authentication flow working (expected error for invalid credentials)'
+          responseTime: endTime - startTime,
+          status: response.status,
+          message: 'Authentication flow working (401 expected for invalid token)'
         };
-      } else if (authResponse.ok) {
-        const data = await authResponse.json();
+      } else if (response.ok) {
         return {
           success: true,
-          status: authResponse.status,
-          data: data,
-          message: 'Authentication flow working (unexpected success)'
+          responseTime: endTime - startTime,
+          status: response.status,
+          message: 'Authentication flow working'
         };
       } else {
         return {
           success: false,
-          status: authResponse.status,
+          responseTime: endTime - startTime,
+          status: response.status,
           message: 'Authentication flow error'
         };
       }
@@ -286,59 +234,132 @@ class LoginDiagnostic {
       return {
         success: false,
         error: error.message,
-        message: 'Authentication flow failed'
+        message: 'Authentication flow unreachable'
       };
     }
   }
 
-  // Get diagnostic recommendations
-  getRecommendations(results) {
+  // Test token storage
+  async testTokenStorage() {
+    try {
+      const testToken = 'test_token_' + Date.now();
+      
+      // Test writing
+      await AsyncStorage.setItem('authToken', testToken);
+      
+      // Test reading
+      const storedToken = await AsyncStorage.getItem('authToken');
+      
+      // Clean up
+      await AsyncStorage.removeItem('authToken');
+      
+      return {
+        success: storedToken === testToken,
+        message: storedToken === testToken ? 'Token storage working' : 'Token storage failed'
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: error.message,
+        message: 'Token storage error'
+      };
+    }
+  }
+
+  // Generate recommendations based on test results
+  generateRecommendations(tests) {
     const recommendations = [];
     
-    if (!results.overall.success) {
-      recommendations.push('🔧 Some tests failed. Check the detailed results below.');
-    }
-
-    const networkTest = results.tests.find(t => t.name === 'Basic Network');
+    // Check network connectivity
+    const networkTest = tests.find(t => t.name === 'Network Connectivity');
     if (networkTest && !networkTest.success) {
-      recommendations.push('🌐 No internet connection detected. Check your network settings.');
+      recommendations.push('Check your internet connection');
+      recommendations.push('Try connecting to a different network');
     }
-
-    const healthTest = results.tests.find(t => t.name === 'Server Health');
-    if (healthTest && !healthTest.success) {
-      recommendations.push('🖥️ Server is not accessible. Make sure the backend server is running.');
+    
+    // Check server reachability
+    const serverTest = tests.find(t => t.name === 'Server Reachability');
+    if (serverTest && !serverTest.success) {
+      recommendations.push('Server is not reachable');
+      recommendations.push('Check if the server is running on http://localhost:3000');
+      recommendations.push('Verify server configuration');
     }
-
-    const loginTest = results.tests.find(t => t.name === 'Login Endpoint');
+    
+    // Check login endpoint
+    const loginTest = tests.find(t => t.name === 'Login Endpoint');
     if (loginTest && !loginTest.success) {
-      recommendations.push('🔐 Login endpoint is not accessible. Check server configuration.');
+      recommendations.push('Login endpoint is not working');
+      recommendations.push('Check server authentication configuration');
     }
-
-    const urlTest = results.tests.find(t => t.name === 'Platform URLs');
-    if (urlTest && !urlTest.success) {
-      recommendations.push('🔗 No URLs are accessible. Check network configuration and firewall settings.');
+    
+    // Check authentication flow
+    const authTest = tests.find(t => t.name === 'Authentication Flow');
+    if (authTest && !authTest.success) {
+      recommendations.push('Authentication flow is not working');
+      recommendations.push('Check JWT configuration on server');
     }
-
-    if (recommendations.length === 0) {
-      recommendations.push('✅ All tests passed. Login should work correctly.');
+    
+    // Check token storage
+    const storageTest = tests.find(t => t.name === 'Token Storage');
+    if (storageTest && !storageTest.success) {
+      recommendations.push('Token storage is not working');
+      recommendations.push('Check AsyncStorage configuration');
     }
-
+    
+    // If all tests pass
+    if (tests.every(t => t.success)) {
+      recommendations.push('All login diagnostics passed');
+      recommendations.push('Login system is working correctly');
+    }
+    
     return recommendations;
   }
 
-  // Get test history
-  getTestHistory() {
-    return this.testResults;
+  // Add diagnostic to history
+  addDiagnostic(diagnostic) {
+    this.diagnostics.push(diagnostic);
+    
+    if (this.diagnostics.length > this.maxDiagnostics) {
+      this.diagnostics = this.diagnostics.slice(-this.maxDiagnostics);
+    }
   }
 
-  // Clear test history
-  clearTestHistory() {
-    this.testResults = [];
+  // Get diagnostic history
+  getDiagnostics() {
+    return this.diagnostics;
   }
 
-  // Get latest test result
-  getLatestResult() {
-    return this.testResults.length > 0 ? this.testResults[this.testResults.length - 1] : null;
+  // Get latest diagnostic
+  getLatestDiagnostic() {
+    return this.diagnostics.length > 0 ? this.diagnostics[this.diagnostics.length - 1] : null;
+  }
+
+  // Clear diagnostic history
+  clearDiagnostics() {
+    this.diagnostics = [];
+  }
+
+  // Save diagnostics to storage
+  async saveDiagnostics() {
+    try {
+      await AsyncStorage.setItem('loginDiagnostics', JSON.stringify(this.diagnostics));
+      console.log('🔍 LoginDiagnostic: Diagnostics saved to storage');
+    } catch (error) {
+      console.error('🔍 LoginDiagnostic: Failed to save diagnostics:', error);
+    }
+  }
+
+  // Load diagnostics from storage
+  async loadDiagnostics() {
+    try {
+      const data = await AsyncStorage.getItem('loginDiagnostics');
+      if (data) {
+        this.diagnostics = JSON.parse(data);
+        console.log('🔍 LoginDiagnostic: Diagnostics loaded from storage');
+      }
+    } catch (error) {
+      console.error('🔍 LoginDiagnostic: Failed to load diagnostics:', error);
+    }
   }
 }
 

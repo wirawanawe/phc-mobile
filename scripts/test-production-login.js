@@ -2,127 +2,189 @@
 
 /**
  * Test Production Login Script
- * Tests the login functionality in production mode
+ * Tests different login credentials on the production server
+ * Usage: node scripts/test-production-login.js
  */
 
 const fetch = require('node-fetch').default;
 
-const PRODUCTION_BASE_URL = 'https://dash.doctorphc.id/api/mobile';
+const PRODUCTION_URL = 'https://dash.doctorphc.id/api/mobile';
 
-async function testProductionHealth() {
-  console.log('🏥 Testing production health endpoint...');
-  
+// Test credentials to try
+const testCredentials = [
+  { email: 'test@mobile.com', password: 'password123', description: 'Development test user' },
+  { email: 'john.doe@example.com', password: 'password123', description: 'John Doe test user' },
+  { email: 'admin@doctorphc.id', password: 'admin123', description: 'Admin user' },
+  { email: 'user@doctorphc.id', password: 'user123', description: 'Regular user' },
+  { email: 'doctor@doctorphc.id', password: 'doctor123', description: 'Doctor user' },
+  { email: 'patient@doctorphc.id', password: 'patient123', description: 'Patient user' }
+];
+
+async function testLogin(credentials) {
   try {
-    const response = await fetch('https://dash.doctorphc.id/api/health');
-    const data = await response.json();
+    console.log(`🔐 Testing: ${credentials.description}`);
+    console.log(`   Email: ${credentials.email}`);
     
-    console.log(`📊 Health status: ${response.status}`);
-    console.log(`📊 Health data:`, data);
+    const response = await fetch(`${PRODUCTION_URL}/auth/login`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        email: credentials.email,
+        password: credentials.password
+      }),
+      timeout: 10000
+    });
+    
+    if (response.status === 200) {
+      const data = await response.json();
+      console.log('✅ SUCCESS - Login successful!');
+      console.log('📊 Response:', JSON.stringify(data, null, 2));
+      return { success: true, credentials, data };
+    } else if (response.status === 401) {
+      console.log('❌ FAILED - Invalid credentials');
+      return { success: false, credentials, error: 'Invalid credentials' };
+    } else if (response.status === 429) {
+      console.log('⚠️ RATE LIMITED - Too many attempts');
+      return { success: false, credentials, error: 'Rate limited' };
+    } else {
+      const errorText = await response.text();
+      console.log(`❌ FAILED - HTTP ${response.status}: ${errorText}`);
+      return { success: false, credentials, error: `HTTP ${response.status}` };
+    }
+    
+  } catch (error) {
+    console.log(`❌ ERROR - ${error.message}`);
+    return { success: false, credentials, error: error.message };
+  }
+}
+
+async function testRegistration() {
+  try {
+    console.log('\n📝 Testing Registration...');
+    
+    const testUser = {
+      email: `test${Date.now()}@example.com`,
+      password: 'password123',
+      name: 'Test User',
+      phone: '+6281234567890'
+    };
+    
+    console.log(`   Email: ${testUser.email}`);
+    
+    const response = await fetch(`${PRODUCTION_URL}/auth/register`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(testUser),
+      timeout: 10000
+    });
+    
+    if (response.status === 201 || response.status === 200) {
+      const data = await response.json();
+      console.log('✅ SUCCESS - Registration successful!');
+      console.log('📊 Response:', JSON.stringify(data, null, 2));
+      return { success: true, user: testUser, data };
+    } else {
+      const errorText = await response.text();
+      console.log(`❌ FAILED - HTTP ${response.status}: ${errorText}`);
+      return { success: false, error: `HTTP ${response.status}` };
+    }
+    
+  } catch (error) {
+    console.log(`❌ ERROR - ${error.message}`);
+    return { success: false, error: error.message };
+  }
+}
+
+async function checkServerStatus() {
+  try {
+    console.log('🏥 Checking server status...');
+    
+    const response = await fetch(`${PRODUCTION_URL}/health`, {
+      method: 'GET',
+      timeout: 5000
+    });
     
     if (response.ok) {
-      console.log('✅ Production health endpoint working correctly!');
+      const data = await response.json();
+      console.log('✅ Server is healthy');
+      console.log('📊 Status:', data);
       return true;
     } else {
-      console.log('❌ Production health endpoint failed');
+      console.log(`❌ Server error: HTTP ${response.status}`);
       return false;
     }
   } catch (error) {
-    console.error('❌ Production health endpoint error:', error.message);
+    console.log(`❌ Server error: ${error.message}`);
     return false;
   }
 }
 
-async function testProductionLogin() {
-  console.log('🔍 Testing production login functionality...');
-  
-  const testUsers = [
-    {
-      email: 'test@mobile.com',
-      password: 'password123',
-      name: 'Test User'
-    },
-    {
-      email: 'john.doe@example.com',
-      password: 'password123',
-      name: 'John Doe'
-    }
-  ];
-
-  for (const user of testUsers) {
-    console.log(`\n🧪 Testing production login for: ${user.name} (${user.email})`);
-    
-    try {
-      const response = await fetch(`${PRODUCTION_BASE_URL}/auth/login`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          email: user.email,
-          password: user.password
-        })
-      });
-
-      const data = await response.json();
-      
-      console.log(`📊 Response status: ${response.status}`);
-      
-      if (response.ok && data.success) {
-        console.log(`✅ Production login successful for ${user.name}!`);
-        console.log(`👤 User ID: ${data.data?.user?.id}`);
-        console.log(`🔑 Token: ${data.data?.accessToken ? 'Present' : 'Missing'}`);
-        console.log(`🔄 Refresh Token: ${data.data?.refreshToken ? 'Present' : 'Missing'}`);
-      } else {
-        console.log(`❌ Production login failed for ${user.name}:`, data.message || 'Unknown error');
-      }
-      
-    } catch (error) {
-      console.error(`❌ Error testing production login for ${user.name}:`, error.message);
-    }
-  }
-}
-
-async function testProductionEndpoints() {
-  console.log('\n🔍 Testing other production endpoints...');
-  
-  const endpoints = [
-    '/missions',
-    '/clinics',
-    '/doctors',
-    '/news'
-  ];
-
-  for (const endpoint of endpoints) {
-    console.log(`\n🧪 Testing endpoint: ${endpoint}`);
-    
-    try {
-      const response = await fetch(`${PRODUCTION_BASE_URL}${endpoint}`);
-      console.log(`📊 ${endpoint} status: ${response.status}`);
-      
-      if (response.ok) {
-        console.log(`✅ ${endpoint} working correctly!`);
-      } else {
-        console.log(`❌ ${endpoint} failed`);
-      }
-    } catch (error) {
-      console.error(`❌ Error testing ${endpoint}:`, error.message);
-    }
-  }
-}
-
 async function main() {
-  console.log('🚀 Starting production mode testing...\n');
+  console.log('🚀 Production Login Test');
+  console.log('========================');
+  console.log(`🌐 Server: ${PRODUCTION_URL}`);
+  console.log('');
   
-  const healthOk = await testProductionHealth();
-  
-  if (healthOk) {
-    await testProductionLogin();
-    await testProductionEndpoints();
-  } else {
-    console.log('\n⚠️ Skipping login tests due to health check failure');
+  // Check server status first
+  const serverOk = await checkServerStatus();
+  if (!serverOk) {
+    console.log('❌ Server is not responding. Cannot test login.');
+    return;
   }
   
-  console.log('\n✅ Production mode testing completed!');
+  console.log('\n🔐 Testing Login Credentials...');
+  console.log('=' .repeat(50));
+  
+  const results = [];
+  
+  for (const credentials of testCredentials) {
+    const result = await testLogin(credentials);
+    results.push(result);
+    console.log(''); // Add spacing between tests
+    
+    // Add delay to avoid rate limiting
+    await new Promise(resolve => setTimeout(resolve, 1000));
+  }
+  
+  // Test registration
+  const registrationResult = await testRegistration();
+  results.push(registrationResult);
+  
+  // Summary
+  console.log('\n📊 Test Summary:');
+  console.log('=' .repeat(50));
+  
+  const successfulLogins = results.filter(r => r.success && r.credentials);
+  const failedLogins = results.filter(r => !r.success && r.credentials);
+  const registrationSuccess = results.find(r => r.success && r.user);
+  
+  console.log(`✅ Successful logins: ${successfulLogins.length}`);
+  console.log(`❌ Failed logins: ${failedLogins.length}`);
+  console.log(`📝 Registration: ${registrationSuccess ? 'SUCCESS' : 'FAILED'}`);
+  
+  if (successfulLogins.length > 0) {
+    console.log('\n🎉 Working credentials found:');
+    successfulLogins.forEach(result => {
+      console.log(`   - ${result.credentials.email} / ${result.credentials.password}`);
+    });
+  } else {
+    console.log('\n⚠️ No working credentials found');
+    console.log('💡 You may need to:');
+    console.log('   1. Create a new user account');
+    console.log('   2. Contact admin for credentials');
+    console.log('   3. Use the registration endpoint');
+  }
+  
+  if (registrationSuccess) {
+    console.log('\n📝 New user created:');
+    console.log(`   Email: ${registrationSuccess.user.email}`);
+    console.log(`   Password: ${registrationSuccess.user.password}`);
+    console.log('💡 You can use these credentials to login!');
+  }
 }
 
 main().catch(console.error);

@@ -16,9 +16,12 @@ import Icon from "react-native-vector-icons/MaterialCommunityIcons";
 import { LinearGradient } from "expo-linear-gradient";
 import { CustomTheme } from "../theme/theme";
 import apiService from "../services/api";
+
 import { useAuth } from "../contexts/AuthContext";
 import eventEmitter from "../utils/eventEmitter";
 import { safeGoBack } from "../utils/safeNavigation";
+import { getLocalTimestamp } from "../utils/dateUtils";
+import SimpleDatePicker from "../components/SimpleDatePicker";
 
 const { width } = Dimensions.get("window");
 
@@ -55,31 +58,39 @@ const MealLoggingScreen = ({ navigation }: any) => {
   const [isProcessingImage, setIsProcessingImage] = useState(false);
   const [selectedFoods, setSelectedFoods] = useState<FoodItem[]>([]);
   const [recentMeals, setRecentMeals] = useState<any[]>([]);
+  const [filteredRecentMeals, setFilteredRecentMeals] = useState<any[]>([]);
   const [selectedRecentMealTab, setSelectedRecentMealTab] = useState("all");
+  
+  // Date filter state for meal history - initialize with current date
+  const [selectedDate, setSelectedDate] = useState(() => {
+    const today = new Date();
+
+    return today;
+  });
 
   const meals = [
     {
-      id: "breakfast",
-      name: "Breakfast",
+      id: "sarapan",
+      name: "Sarapan",
       icon: "weather-sunny",
       color: "#F59E0B",
     },
-    { id: "lunch", name: "Lunch", icon: "sun-wireless", color: "#EF4444" },
+    { id: "makan siang", name: "Makan Siang", icon: "sun-wireless", color: "#EF4444" },
     {
-      id: "dinner",
-      name: "Dinner",
+      id: "makan malam",
+      name: "Makan Malam",
       icon: "moon-waning-crescent",
       color: "#8B5CF6",
     },
-    { id: "snack", name: "Snacks", icon: "food-apple", color: "#10B981" },
+    { id: "snack", name: "Snack", icon: "food-apple", color: "#10B981" },
   ];
 
   const recentMealTabs = [
     { id: "all", name: "All", icon: "food-variant", color: "#6B7280" },
-    { id: "breakfast", name: "Breakfast", icon: "weather-sunny", color: "#F59E0B" },
-    { id: "lunch", name: "Lunch", icon: "sun-wireless", color: "#EF4444" },
-    { id: "dinner", name: "Dinner", icon: "moon-waning-crescent", color: "#8B5CF6" },
-    { id: "snack", name: "Snacks", icon: "food-apple", color: "#10B981" },
+    { id: "sarapan", name: "Sarapan", icon: "weather-sunny", color: "#F59E0B" },
+    { id: "makan siang", name: "Makan Siang", icon: "sun-wireless", color: "#EF4444" },
+    { id: "makan malam", name: "Makan Malam", icon: "moon-waning-crescent", color: "#8B5CF6" },
+    { id: "snack", name: "Snack", icon: "food-apple", color: "#10B981" },
   ];
 
   // Search food from database
@@ -326,9 +337,10 @@ const MealLoggingScreen = ({ navigation }: any) => {
         return [...prev, { ...food, quantity: 1 }];
       }
     });
-    setSearchQuery("");
-    setSearchResults([]);
-    setShowSearchModal(false);
+    // Don't clear search results so users can add multiple foods
+    // setSearchQuery("");
+    // setSearchResults([]);
+    // setShowSearchModal(false);
   };
 
   // Add quick food to meal
@@ -336,13 +348,13 @@ const MealLoggingScreen = ({ navigation }: any) => {
     // Convert quick food to FoodItem format
     // Quick foods already contain actual nutrition values (not per 100g)
     const foodItem: FoodItem = {
-      id: parseInt(quickFood.id),
+      id: parseInt(quickFood.food_id), // Use food_id instead of id to get the actual food database ID
       name: quickFood.name,
       category: quickFood.category || "Quick Food",
-      calories_per_100g: quickFood.calories || 0, // These are already actual values
-      protein_per_100g: quickFood.protein || 0,
-      carbs_per_100g: quickFood.carbs || 0,
-      fat_per_100g: quickFood.fat || 0,
+      calories_per_100g: quickFood.calories_per_100g || 0, // Use per 100g values from food database
+      protein_per_100g: quickFood.protein_per_100g || 0,
+      carbs_per_100g: quickFood.carbs_per_100g || 0,
+      fat_per_100g: quickFood.fat_per_100g || 0,
       fiber_per_100g: quickFood.fiber_per_100g || 0,
       sugar_per_100g: quickFood.sugar_per_100g || 0,
       sodium_per_100g: quickFood.sodium_per_100g || 0,
@@ -465,64 +477,32 @@ const MealLoggingScreen = ({ navigation }: any) => {
       const totalCalories = selectedFoods.reduce((sum, food) => {
         const servingSize = food.serving_weight || 100;
         const quantity = food.quantity || 1; // Use food.quantity or default to 1
-        
-        let actualCalories;
-        if (food.serving_weight === 100) {
-          // Quick foods - values are already actual
-          actualCalories = Math.round(food.calories_per_100g || 0);
-        } else {
-          // Search results - convert from per 100g to actual
-          const actualWeight = (servingSize * quantity) / 100;
-          actualCalories = Math.round((food.calories_per_100g || 0) * actualWeight);
-        }
+        const actualWeight = (servingSize * quantity) / 100;
+        const actualCalories = Math.round((food.calories_per_100g || 0) * actualWeight);
         return sum + actualCalories;
       }, 0);
       
       const totalProtein = selectedFoods.reduce((sum, food) => {
         const servingSize = food.serving_weight || 100;
         const quantity = food.quantity || 1; // Use food.quantity or default to 1
-        
-        let actualProtein;
-        if (food.serving_weight === 100) {
-          // Quick foods - values are already actual
-          actualProtein = Math.round((food.protein_per_100g || 0) * 10) / 10;
-        } else {
-          // Search results - convert from per 100g to actual
-          const actualWeight = (servingSize * quantity) / 100;
-          actualProtein = Math.round((food.protein_per_100g || 0) * actualWeight * 10) / 10;
-        }
+        const actualWeight = (servingSize * quantity) / 100;
+        const actualProtein = Math.round((food.protein_per_100g || 0) * actualWeight * 10) / 10;
         return sum + actualProtein;
       }, 0);
       
       const totalCarbs = selectedFoods.reduce((sum, food) => {
         const servingSize = food.serving_weight || 100;
         const quantity = food.quantity || 1; // Use food.quantity or default to 1
-        
-        let actualCarbs;
-        if (food.serving_weight === 100) {
-          // Quick foods - values are already actual
-          actualCarbs = Math.round((food.carbs_per_100g || 0) * 10) / 10;
-        } else {
-          // Search results - convert from per 100g to actual
-          const actualWeight = (servingSize * quantity) / 100;
-          actualCarbs = Math.round((food.carbs_per_100g || 0) * actualWeight * 10) / 10;
-        }
+        const actualWeight = (servingSize * quantity) / 100;
+        const actualCarbs = Math.round((food.carbs_per_100g || 0) * actualWeight * 10) / 10;
         return sum + actualCarbs;
       }, 0);
       
       const totalFat = selectedFoods.reduce((sum, food) => {
         const servingSize = food.serving_weight || 100;
         const quantity = food.quantity || 1; // Use food.quantity or default to 1
-        
-        let actualFat;
-        if (food.serving_weight === 100) {
-          // Quick foods - values are already actual
-          actualFat = Math.round((food.fat_per_100g || 0) * 10) / 10;
-        } else {
-          // Search results - convert from per 100g to actual
-          const actualWeight = (servingSize * quantity) / 100;
-          actualFat = Math.round((food.fat_per_100g || 0) * actualWeight * 10) / 10;
-        }
+        const actualWeight = (servingSize * quantity) / 100;
+        const actualFat = Math.round((food.fat_per_100g || 0) * actualWeight * 10) / 10;
         return sum + actualFat;
       }, 0);
       
@@ -556,24 +536,12 @@ const MealLoggingScreen = ({ navigation }: any) => {
         const servingSize = food.serving_weight || 100; // Default to 100g if not specified
         const quantity = food.quantity || 1; // Default quantity
         
-        // For quick foods, values are already actual values (not per 100g)
-        // For search results, values are per 100g and need to be converted
-        let actualCalories, actualProtein, actualCarbs, actualFat;
-        
-        if (food.serving_weight === 100) {
-          // Quick foods - values are already actual
-          actualCalories = Math.round(food.calories_per_100g || 0);
-          actualProtein = Math.round((food.protein_per_100g || 0) * 10) / 10;
-          actualCarbs = Math.round((food.carbs_per_100g || 0) * 10) / 10;
-          actualFat = Math.round((food.fat_per_100g || 0) * 10) / 10;
-        } else {
-          // Search results - convert from per 100g to actual
-          const actualWeight = (servingSize * quantity) / 100;
-          actualCalories = Math.round((food.calories_per_100g || 0) * actualWeight);
-          actualProtein = Math.round((food.protein_per_100g || 0) * actualWeight * 10) / 10;
-          actualCarbs = Math.round((food.carbs_per_100g || 0) * actualWeight * 10) / 10;
-          actualFat = Math.round((food.fat_per_100g || 0) * actualWeight * 10) / 10;
-        }
+        // All foods now use per 100g values and need to be converted to actual values
+        const actualWeight = (servingSize * quantity) / 100;
+        const actualCalories = Math.round((food.calories_per_100g || 0) * actualWeight);
+        const actualProtein = Math.round((food.protein_per_100g || 0) * actualWeight * 10) / 10;
+        const actualCarbs = Math.round((food.carbs_per_100g || 0) * actualWeight * 10) / 10;
+        const actualFat = Math.round((food.fat_per_100g || 0) * actualWeight * 10) / 10;
         
         return {
           food_id: food.id,
@@ -590,81 +558,30 @@ const MealLoggingScreen = ({ navigation }: any) => {
         meal_type: selectedMeal,
         foods: foods,
         notes: `${selectedMeal.charAt(0).toUpperCase() + selectedMeal.slice(1)} - Total: ${totalCalories} cal`,
-        recorded_at: new Date().toISOString()
+        recorded_at: getLocalTimestamp()
       };
 
-      // Debug logging
-      console.log('🍽️ Selected foods:', selectedFoods.map(food => ({
-        name: food.name,
-        calories_per_100g: food.calories_per_100g,
-        protein_per_100g: food.protein_per_100g,
-        carbs_per_100g: food.carbs_per_100g,
-        fat_per_100g: food.fat_per_100g,
-        serving_weight: food.serving_weight,
-        quantity: food.quantity
-      })));
-      console.log('🍽️ Transformed foods:', foods);
-      console.log('🍽️ Meal data to send:', JSON.stringify(mealData, null, 2));
-      console.log('📊 Nutrition totals:', {
-        calories: totalCalories,
-        protein: totalProtein,
-        carbs: totalCarbs,
-        fat: totalFat
-      });
-      
-      // Test calculation for first food
-      if (selectedFoods.length > 0) {
-        const testFood = selectedFoods[0];
-        console.log('🧪 Test calculation for:', testFood.name);
-        console.log('   Original values:', {
-          calories: testFood.calories_per_100g,
-          protein: testFood.protein_per_100g,
-          carbs: testFood.carbs_per_100g,
-          fat: testFood.fat_per_100g,
-          serving_weight: testFood.serving_weight,
-          quantity: testFood.quantity
-        });
-        
-        const servingSize = testFood.serving_weight || 100;
-        const quantity = testFood.quantity || 1;
-        
-        if (testFood.serving_weight === 100) {
-          console.log('   Quick food - using values directly');
-          console.log('   Calculated:', {
-            calories: Math.round(testFood.calories_per_100g || 0),
-            protein: Math.round((testFood.protein_per_100g || 0) * 10) / 10,
-            carbs: Math.round((testFood.carbs_per_100g || 0) * 10) / 10,
-            fat: Math.round((testFood.fat_per_100g || 0) * 10) / 10
-          });
-        } else {
-          const actualWeight = (servingSize * quantity) / 100;
-          console.log('   Search result - converting from per 100g');
-          console.log('   actualWeight:', actualWeight);
-          console.log('   Calculated:', {
-            calories: Math.round((testFood.calories_per_100g || 0) * actualWeight),
-            protein: Math.round((testFood.protein_per_100g || 0) * actualWeight * 10) / 10,
-            carbs: Math.round((testFood.carbs_per_100g || 0) * actualWeight * 10) / 10,
-            fat: Math.round((testFood.fat_per_100g || 0) * actualWeight * 10) / 10
-          });
-        }
-      }
 
-      console.log('📡 About to call API...');
-      const response = await apiService.createMealEntry(mealData);
-      console.log('📡 API Response received:', response);
       
-      if (response.success) {
-        Alert.alert("Success", `Meal logged successfully!\nTotal calories: ${totalCalories} kcal`);
+      // Call meal logging API directly with proper format
+      const result = await apiService.createMealEntry(mealData);
+      console.log('📡 Meal logging result:', result);
+      
+      if (result.success) {
+        // Show success message
+        const successMessage = `Meal logged successfully!\nTotal calories: ${totalCalories} kcal`;
+        Alert.alert("Success", successMessage);
+        
         setSelectedFoods([]);
         setSearchQuery("");
-        // Refresh nutrition data and recent meals immediately
+        // Refresh nutrition data and meal history immediately
         await loadNutritionData();
         await loadRecentMeals();
         
         // Emit event to notify other components that meal data has been updated
         eventEmitter.emitMealLogged();
       } else {
-        Alert.alert("Error", response.message || "Failed to save meal");
+        Alert.alert("Error", result.message || "Failed to save meal");
       }
     } catch (error: any) {
       console.error('❌ Error saving meal:', error);
@@ -723,26 +640,135 @@ const MealLoggingScreen = ({ navigation }: any) => {
     fat: { consumed: 0, goal: 65 },
   });
   const [isLoadingNutrition, setIsLoadingNutrition] = useState(false);
+  const [isLoadingMealHistory, setIsLoadingMealHistory] = useState(false);
   const [quickFoods, setQuickFoods] = useState<any[]>([]);
   const [isLoadingQuickFoods, setIsLoadingQuickFoods] = useState(false);
 
   // Load nutrition data and recent meals
   useEffect(() => {
-    loadNutritionData();
-    loadRecentMeals();
-    loadQuickFoods();
+    console.log('🔍 MealLoggingScreen - Initial useEffect triggered');
+    console.log('🔍 MealLoggingScreen - Initial isAuthenticated:', isAuthenticated);
+    
+    if (isAuthenticated) {
+      console.log('🔍 MealLoggingScreen - User is authenticated, loading initial data');
+      loadNutritionData();
+      loadRecentMeals();
+      loadQuickFoods();
+    } else {
+      console.log('🔍 MealLoggingScreen - User is not authenticated, skipping initial data load');
+      // Set empty states when not authenticated
+      setRecentMeals([]);
+      setFilteredRecentMeals([]);
+      setDailyNutrition({
+        calories: { consumed: 0, goal: 2000 },
+        protein: { consumed: 0, goal: 120 },
+        carbs: { consumed: 0, goal: 250 },
+        fat: { consumed: 0, goal: 65 },
+      });
+    }
     
     // Clean up old meal data (older than 24 hours)
     cleanupOldMealData();
     
-    // Set up interval to refresh recent meals every hour
-    const interval = setInterval(() => {
-      loadRecentMeals();
+    // Listen for daily reset events
+    const handleDailyReset = () => {
+      console.log('MealLoggingScreen - Daily reset detected, clearing meal data...');
+      
+      // Update selectedDate to current date
+      const currentDate = new Date();
+  
+      setSelectedDate(currentDate);
+      
+      // Clear all meal-related state AGGRESSIVELY
+      setSelectedFoods([]);
+      setRecentMeals([]);
+      setFilteredRecentMeals([]);
+      setSearchResults([]);
+      setSearchResultsWithQuickStatus([]);
+      setDailyNutrition({
+        calories: { consumed: 0, goal: 2000 },
+        protein: { consumed: 0, goal: 120 },
+        carbs: { consumed: 0, goal: 250 },
+        fat: { consumed: 0, goal: 65 },
+      });
+      
+      // Clear search query
+      setSearchQuery("");
+      
+      // Force reload fresh data with longer delay to ensure API cache is cleared
+      setTimeout(() => {
+        console.log('MealLoggingScreen - Forcing fresh data reload after reset...');
+        loadNutritionData();
+        loadRecentMeals();
+      }, 500); // Increased delay to ensure cache clearing
+    };
+
+    // Listen for cache cleared events
+    const handleCacheCleared = () => {
+      console.log('MealLoggingScreen - Cache cleared event detected, refreshing meal data...');
+      setTimeout(() => {
+        loadNutritionData();
+        loadRecentMeals();
+      }, 200);
+    };
+
+    // Listen for force refresh events
+    const handleForceRefreshAllData = () => {
+      console.log('MealLoggingScreen - Force refresh all data event detected...');
+      setTimeout(() => {
+        loadNutritionData();
+        loadRecentMeals();
+      }, 300);
+    };
+
+    // Listen for cache refreshed events
+    const handleCacheRefreshed = () => {
+      console.log('MealLoggingScreen - Cache refreshed event detected...');
+      setTimeout(() => {
+        loadNutritionData();
+        loadRecentMeals();
+      }, 150);
+    };
+    
+    // Add event listener for daily reset
+    eventEmitter.on('dailyReset', handleDailyReset);
+    eventEmitter.on('cacheCleared', handleCacheCleared);
+    eventEmitter.on('forceRefreshAllData', handleForceRefreshAllData);
+    eventEmitter.on('cacheRefreshed', handleCacheRefreshed);
+    
+            // Set up interval to refresh meal history every hour
+        const interval = setInterval(() => {
+          loadRecentMeals();
       cleanupOldMealData(); // Clean up old data every hour
     }, 60 * 60 * 1000); // Refresh every hour
     
-    return () => clearInterval(interval);
-  }, []);
+    return () => {
+      clearInterval(interval);
+      eventEmitter.off('dailyReset', handleDailyReset);
+      eventEmitter.off('cacheCleared', handleCacheCleared);
+      eventEmitter.off('forceRefreshAllData', handleForceRefreshAllData);
+      eventEmitter.off('cacheRefreshed', handleCacheRefreshed);
+    };
+  }, [isAuthenticated]);
+
+  // Reload meal history when selected date changes or authentication state changes
+  useEffect(() => {
+    console.log('🔍 MealLoggingScreen - useEffect triggered for selectedDate or isAuthenticated');
+    console.log('🔍 MealLoggingScreen - selectedDate:', selectedDate);
+    console.log('🔍 MealLoggingScreen - isAuthenticated:', isAuthenticated);
+    
+    if (isAuthenticated) {
+      console.log('🔍 MealLoggingScreen - User is authenticated, calling loadRecentMeals');
+      loadRecentMeals();
+      // Also reload nutrition data when authentication changes
+      loadNutritionData();
+    } else {
+      console.log('🔍 MealLoggingScreen - User is not authenticated, not loading meal history');
+      // Clear data when not authenticated
+      setRecentMeals([]);
+      setFilteredRecentMeals([]);
+    }
+  }, [selectedDate, isAuthenticated]);
 
   // Clean up old meal data
   const cleanupOldMealData = async () => {
@@ -970,16 +996,59 @@ const MealLoggingScreen = ({ navigation }: any) => {
 
   const loadRecentMeals = async () => {
     try {
+      console.log('🔍 MealLoggingScreen - loadRecentMeals called');
+      console.log('🔍 MealLoggingScreen - isAuthenticated:', isAuthenticated);
+      
+      setIsLoadingMealHistory(true);
+      
       if (isAuthenticated) {
         const userId = await apiService.getUserId();
+        console.log('🔍 MealLoggingScreen - userId:', userId);
+        
+        // Convert selected date to string format for API
+        const dateString = selectedDate.toLocaleDateString('en-CA'); // YYYY-MM-DD format
+        console.log('🔍 MealLoggingScreen - selectedDate:', selectedDate);
+        console.log('🔍 MealLoggingScreen - dateString:', dateString);
+    
+        
+        // For meal history, load data for the selected date
+        console.log('🔍 MealLoggingScreen - Calling getMealHistory with params:', { limit: 50, date: dateString });
         const response = await apiService.getMealHistory({ 
           limit: 50, // Get more meals to filter by time
+          date: dateString // Add date parameter for specific date filtering
         });
         
-        if (response.success && response.data && Array.isArray(response.data)) {
+        console.log('🔍 MealLoggingScreen - Meal history response:', response);
+        
+        // Handle both response formats: response.data (array) and response.data.entries (array)
+        let mealData = null;
+        console.log('🔍 MealLoggingScreen - Processing response data...');
+        console.log('🔍 MealLoggingScreen - response.success:', response.success);
+        console.log('🔍 MealLoggingScreen - response.data:', response.data);
+        
+        if (response.success && response.data) {
+          if (Array.isArray(response.data)) {
+            // Direct array format
+            console.log('🔍 MealLoggingScreen - Using direct array format');
+            mealData = response.data;
+          } else if (response.data.entries && Array.isArray(response.data.entries)) {
+            // Nested entries format
+            console.log('🔍 MealLoggingScreen - Using nested entries format');
+            mealData = response.data.entries;
+          } else {
+            console.log('🔍 MealLoggingScreen - Unknown response data format');
+          }
+        } else {
+          console.log('🔍 MealLoggingScreen - Response not successful or no data');
+        }
+        
+        console.log('🔍 MealLoggingScreen - mealData:', mealData);
+        console.log('🔍 MealLoggingScreen - mealData length:', mealData?.length || 0);
+        
+        if (mealData && mealData.length > 0) {
           const allMeals: any[] = [];
           
-          response.data.forEach((meal: any) => {
+          mealData.forEach((meal: any) => {
             if (meal.foods && meal.foods.length > 0) {
               // Format time from recorded_at
               const mealTime = meal.recorded_at ? 
@@ -1014,17 +1083,29 @@ const MealLoggingScreen = ({ navigation }: any) => {
             .sort((a, b) => new Date(b.recordedAt).getTime() - new Date(a.recordedAt).getTime())
             .slice(0, 10);
           
+          console.log('🔍 MealLoggingScreen - Processed meal history:', sortedMeals);
+          console.log('🔍 MealLoggingScreen - Setting recentMeals with', sortedMeals.length, 'items');
           setRecentMeals(sortedMeals);
         } else {
+          console.log('🔍 MealLoggingScreen - No meal history found for selected date');
+          console.log('🔍 MealLoggingScreen - Setting recentMeals to empty array');
           setRecentMeals([]);
         }
       } else {
         // If not authenticated, show empty list
+        console.log('🔍 MealLoggingScreen - User not authenticated for meal history');
         setRecentMeals([]);
       }
     } catch (error) {
-      console.error('Error loading recent meals:', error);
+      console.error('❌ MealLoggingScreen - Error loading meal history:', error);
+      console.error('❌ MealLoggingScreen - Error details:', {
+        message: error?.message || 'Unknown error',
+        name: error?.name || 'Unknown',
+        stack: error?.stack || 'No stack trace'
+      });
       setRecentMeals([]);
+    } finally {
+      setIsLoadingMealHistory(false);
     }
   };
 
@@ -1094,11 +1175,6 @@ const MealLoggingScreen = ({ navigation }: any) => {
       <View style={styles.recentMealInfo}>
         <View style={styles.recentMealHeader}>
           <Text style={styles.recentMealName}>{item.name}</Text>
-          <View style={styles.mealTypeBadge}>
-            <Text style={styles.mealTypeText}>
-              {item.meal.charAt(0).toUpperCase() + item.meal.slice(1)}
-            </Text>
-          </View>
         </View>
         <View style={styles.recentMealDetails}>
           <Text style={styles.recentMealQuantity}>
@@ -1111,19 +1187,26 @@ const MealLoggingScreen = ({ navigation }: any) => {
         <Text style={styles.recentMealCaloriesText}>
           {item.calories} cal
         </Text>
-        <Icon
-          name={
-            item.meal === "breakfast"
-              ? "weather-sunny"
-              : item.meal === "lunch"
-              ? "sun-wireless"
-              : item.meal === "dinner"
-              ? "moon-waning-crescent"
-              : "food-apple"
-          }
-          size={16}
-          color="#6B7280"
-        />
+        <View style={styles.recentMealIconContainer}>
+          <Icon
+            name={
+              item.meal === "sarapan"
+                ? "weather-sunny"
+                : item.meal === "makan siang"
+                ? "sun-wireless"
+                : item.meal === "makan malam"
+                ? "moon-waning-crescent"
+                : "food-apple"
+            }
+            size={16}
+            color="#6B7280"
+          />
+          <View style={styles.mealTypeBadge}>
+            <Text style={styles.mealTypeText}>
+              {item.meal.charAt(0).toUpperCase() + item.meal.slice(1)}
+            </Text>
+          </View>
+        </View>
       </View>
     </View>
   );
@@ -1160,17 +1243,33 @@ const MealLoggingScreen = ({ navigation }: any) => {
   );
 
   const getFilteredRecentMeals = () => {
+    let filtered = recentMeals;
+    
+    // Remove client-side date filtering since we're now loading data for the specific date from server
+    // const selectedDateString = selectedDate.toLocaleDateString('en-CA'); // YYYY-MM-DD format
+    // filtered = recentMeals.filter(meal => {
+    //   const mealDate = new Date(meal.recordedAt);
+    //   const mealDateString = mealDate.toLocaleDateString('en-CA');
+    //   return mealDateString === selectedDateString;
+    // });
+    
+    // Apply meal type filter only
     if (selectedRecentMealTab === "all") {
-      return recentMeals;
+      return filtered;
     }
-    return recentMeals.filter(meal => meal.meal === selectedRecentMealTab);
+    return filtered.filter(meal => meal.meal === selectedRecentMealTab);
   };
 
   const getMealCountByType = (mealType: string) => {
+    const filteredMeals = getFilteredRecentMeals();
     if (mealType === "all") {
-      return recentMeals.length;
+      return filteredMeals.length;
     }
-    return recentMeals.filter(meal => meal.meal === mealType).length;
+    return filteredMeals.filter(meal => meal.meal === mealType).length;
+  };
+
+  const handleDateChange = (date: Date) => {
+    setSelectedDate(date);
   };
 
   return (
@@ -1188,7 +1287,7 @@ const MealLoggingScreen = ({ navigation }: any) => {
           >
             <Icon name="arrow-left" size={24} color="#FFFFFF" />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Log Meal</Text>
+          <Text style={styles.headerTitle}>Catatan Makanan</Text>
           <TouchableOpacity 
             style={styles.saveButton} 
             onPress={() => {
@@ -1198,7 +1297,7 @@ const MealLoggingScreen = ({ navigation }: any) => {
               saveMeal();
             }}
           >
-            <Text style={styles.saveButtonText}>Save</Text>
+            <Text style={styles.saveButtonText}>Simpan</Text>
           </TouchableOpacity>
         </View>
 
@@ -1209,22 +1308,22 @@ const MealLoggingScreen = ({ navigation }: any) => {
               <Icon name="magnify" size={20} color="#9CA3AF" />
               <TextInput
                 style={styles.searchInput}
-                placeholder="Search for food..."
+                placeholder="Cari makanan..."
                 value={searchQuery}
                 onChangeText={handleSearchChange}
                 placeholderTextColor="#9CA3AF"
               />
-              <TouchableOpacity
+              {/* <TouchableOpacity
                 style={styles.cameraButton}
                 onPress={() => setShowCameraModal(true)}
               >
                 <Icon name="camera" size={20} color="#3B82F6" />
-              </TouchableOpacity>
+              </TouchableOpacity> */}
             </View>
             {isSearching && (
               <View style={styles.searchingIndicator}>
                 <ActivityIndicator size="small" color="#3B82F6" />
-                <Text style={styles.searchingText}>Searching...</Text>
+                <Text style={styles.searchingText}>Mencari...</Text>
               </View>
             )}
           </View>
@@ -1232,7 +1331,7 @@ const MealLoggingScreen = ({ navigation }: any) => {
           {/* Selected Foods */}
           {selectedFoods.length > 0 && (
             <View style={styles.selectedFoodsContainer}>
-              <Text style={styles.sectionTitle}>Selected Foods</Text>
+              <Text style={styles.sectionTitle}>Makanan yang Dipilih</Text>
               {selectedFoods.map((food, index) => (
                 <View key={index} style={styles.selectedFoodCard}>
                   <View style={styles.selectedFoodInfo}>
@@ -1281,7 +1380,7 @@ const MealLoggingScreen = ({ navigation }: any) => {
             <View style={styles.searchResultsContainer}>
               <View style={styles.loadingContainer}>
                 <ActivityIndicator size="small" color="#E22345" />
-                <Text style={styles.loadingText}>Searching for foods...</Text>
+                <Text style={styles.loadingText}>Mencari makanan...</Text>
               </View>
             </View>
           ) : searchResultsWithQuickStatus.length > 0 && (
@@ -1363,16 +1462,16 @@ const MealLoggingScreen = ({ navigation }: any) => {
 
           {/* Today's Nutrition Summary */}
           <View style={styles.nutritionSummaryContainer}>
-            <Text style={styles.sectionTitle}>Today's Nutrition</Text>
+            <Text style={styles.sectionTitle}>Konsumsi Makanan Hari Ini</Text>
             {isLoadingNutrition ? (
               <View style={styles.loadingContainer}>
                 <ActivityIndicator size="small" color="#E22345" />
-                <Text style={styles.loadingText}>Loading nutrition data...</Text>
+                <Text style={styles.loadingText}>Memuat data konsumsi makanan...</Text>
               </View>
             ) : (
             <View style={styles.nutritionSummaryCard}>
               <View style={styles.caloriesContainer}>
-                <Text style={styles.caloriesLabel}>Calories</Text>
+                <Text style={styles.caloriesLabel}>Kalori</Text>
                 <Text style={styles.caloriesValue}>
                   {dailyNutrition.calories.consumed}
                   <Text style={styles.caloriesGoal}>
@@ -1397,8 +1496,8 @@ const MealLoggingScreen = ({ navigation }: any) => {
               <View style={styles.macrosContainer}>
                 {[
                   { label: "Protein", ...dailyNutrition.protein },
-                  { label: "Carbs", ...dailyNutrition.carbs },
-                  { label: "Fat", ...dailyNutrition.fat },
+                  { label: "Karbohidrat", ...dailyNutrition.carbs },
+                  { label: "Lemak", ...dailyNutrition.fat },
                 ].map((macro, index) => (
                   <View key={index} style={styles.macroItem}>
                     <Text style={styles.macroLabel}>{macro.label}</Text>
@@ -1424,11 +1523,11 @@ const MealLoggingScreen = ({ navigation }: any) => {
 
           {/* Quick Foods */}
           <View style={styles.quickFoodsContainer}>
-            <Text style={styles.sectionTitle}>Quick Add</Text>
+            <Text style={styles.sectionTitle}>Tambah Cepat</Text>
             {isLoadingQuickFoods ? (
               <View style={styles.loadingContainer}>
                 <ActivityIndicator size="small" color="#E22345" />
-                <Text style={styles.loadingText}>Loading quick foods...</Text>
+                <Text style={styles.loadingText}>Memuat makanan cepat...</Text>
               </View>
             ) : (
             <View style={styles.quickFoodsGrid}>
@@ -1441,17 +1540,27 @@ const MealLoggingScreen = ({ navigation }: any) => {
             )}
           </View>
 
-          {/* Recent Meals */}
+          {/* Meal History */}
           <View style={styles.recentMealsContainer}>
             <View style={styles.recentMealsHeader}>
-              <Text style={styles.sectionTitle}>Recent Meals</Text>
-              <View style={styles.recentMealsInfo}>
-                <Icon name="clock-outline" size={16} color="#ffffff" />
-                <Text style={styles.recentMealsInfoText}>Last 24 hours only</Text>
-              </View>
+              <Text style={styles.sectionTitle}>Riwayat Makanan</Text>
+            </View>
+            <View style={styles.recentMealsSubtitle}>
+              <Icon name="clock-outline" size={16} color="#ffffff" />
+              <Text style={styles.recentMealsInfoText}>
+                Riwayat makanan untuk tanggal yang dipilih
+              </Text>
             </View>
             
-            {/* Recent Meals Tabs */}
+            {/* Date Picker for Meal History */}
+            <SimpleDatePicker
+              selectedDate={selectedDate}
+              onDateChange={handleDateChange}
+              theme={theme}
+              title="Pilih Tanggal"
+            />
+            
+            {/* Meal History Tabs */}
             <View style={styles.recentMealTabsContainer}>
               <ScrollView
                 horizontal
@@ -1467,21 +1576,38 @@ const MealLoggingScreen = ({ navigation }: any) => {
             </View>
             
             <View style={styles.recentMealsList}>
-              {getFilteredRecentMeals().length > 0 ? (
+              {isLoadingMealHistory ? (
+                <View style={styles.loadingContainer}>
+                  <ActivityIndicator size="small" color="#3B82F6" />
+                  <Text style={styles.loadingText}>Memuat riwayat makanan...</Text>
+                </View>
+              ) : getFilteredRecentMeals().length > 0 ? (
                 getFilteredRecentMeals().map((meal) => renderRecentMeal({ item: meal }))
               ) : (
                 <View style={styles.emptyStateContainer}>
                   <Icon name="food-variant" size={32} color="#9CA3AF" />
                   <Text style={styles.emptyStateText}>
                     {selectedRecentMealTab === "all" 
-                      ? "No recent meals" 
-                      : `No ${selectedRecentMealTab} meals`}
+                      ? "Tidak ada riwayat makanan" 
+                      : `Tidak ada ${selectedRecentMealTab} riwayat makanan`}
                   </Text>
                   <Text style={styles.emptyStateSubtext}>
                     {selectedRecentMealTab === "all" 
-                      ? "Your recent meals will appear here" 
-                      : `Your recent ${selectedRecentMealTab} meals will appear here`}
+                      ? "Riwayat makanan Anda akan muncul di sini" 
+                      : `Riwayat makanan Anda akan muncul di sini`}
                   </Text>
+                  {isAuthenticated && (
+                    <TouchableOpacity
+                      style={styles.refreshButton}
+                      onPress={() => {
+                        console.log('🔍 MealLoggingScreen - Manual refresh triggered');
+                        loadRecentMeals();
+                      }}
+                    >
+                      <Icon name="refresh" size={16} color="#3B82F6" />
+                      <Text style={styles.refreshButtonText}>Refresh</Text>
+                    </TouchableOpacity>
+                  )}
                 </View>
               )}
             </View>
@@ -1495,10 +1621,10 @@ const MealLoggingScreen = ({ navigation }: any) => {
             onDismiss={() => setShowSearchModal(false)}
             contentContainerStyle={styles.modalContainer}
           >
-            <Text style={styles.modalTitle}>Search Food Database</Text>
+            <Text style={styles.modalTitle}>Cari Makanan</Text>
             <TextInput
               style={styles.modalSearchInput}
-              placeholder="Search for food..."
+              placeholder="Cari makanan..."
               value={searchQuery}
               onChangeText={handleSearchChange}
             />
@@ -1516,7 +1642,7 @@ const MealLoggingScreen = ({ navigation }: any) => {
                 </TouchableOpacity>
               ))}
             </ScrollView>
-            <Button onPress={() => setShowSearchModal(false)}>Close</Button>
+            <Button onPress={() => setShowSearchModal(false)}>Tutup</Button>
           </Modal>
         </Portal>
 
@@ -2014,9 +2140,10 @@ const styles = StyleSheet.create({
     marginBottom: 32,
   },
   recentMealsHeader: {
+  },
+  recentMealsSubtitle: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
     marginBottom: 16,
   },
   recentMealsInfo: {
@@ -2143,6 +2270,11 @@ const styles = StyleSheet.create({
     color: "#E22345",
     marginBottom: 4,
   },
+  recentMealIconContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
   modalContainer: {
     backgroundColor: "#FFFFFF",
     padding: 20,
@@ -2228,6 +2360,21 @@ const styles = StyleSheet.create({
   emptyStateText: {
     fontSize: 16,
     color: "#ffffff",
+    fontWeight: "600",
+  },
+  refreshButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#3B82F6",
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+    marginTop: 12,
+    gap: 6,
+  },
+  refreshButtonText: {
+    fontSize: 14,
+    color: "#FFFFFF",
     fontWeight: "600",
   },
   emptyStateSubtext: {

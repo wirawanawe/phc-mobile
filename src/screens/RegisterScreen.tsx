@@ -187,7 +187,7 @@ const RegisterScreen = ({ navigation }: any) => {
               >
                 <Icon name="arrow-left" size={24} color="#FFFFFF" />
               </TouchableOpacity>
-              <LogoPutih size="large" />
+              <LogoPutih size={400} />
               <Text style={styles.welcomeText}>
                 Buat Akun
               </Text>
@@ -368,21 +368,21 @@ const RegisterScreen = ({ navigation }: any) => {
               </Button>
 
               {/* Divider */}
-              <View style={styles.dividerContainer}>
+              {/* <View style={styles.dividerContainer}>
                 <View style={styles.dividerLine} />
                 <Text style={styles.dividerText}>
                   atau
                 </Text>
                 <View style={styles.dividerLine} />
-              </View>
+              </View> */}
 
               {/* Social Login Buttons */}
-              <View style={styles.socialContainer}>
+              {/* <View style={styles.socialContainer}>
                 <Text style={styles.socialText}>
                   Daftar dengan media sosial
-                </Text>
+                </Text> */}
                 {/* Add social login buttons here */}
-              </View>
+              {/* </View> */}
             </View>
 
             {/* Footer */}
@@ -452,7 +452,7 @@ const styles = StyleSheet.create({
   },
   backButton: {
     position: "absolute",
-    top: 0,
+    top: 60,
     left: 0,
     padding: 8,
     zIndex: 1,

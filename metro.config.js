@@ -1,13 +1,10 @@
-const { getDefaultConfig } = require('@react-native/metro-config');
+const { getDefaultConfig } = require('expo/metro-config');
 
-/** @type {import('@react-native/metro-config').MetroConfig} */
+/** @type {import('expo/metro-config').MetroConfig} */
 const config = getDefaultConfig(__dirname);
 
 // Fix pretty-format bundling issue by resolving missing DOM plugins
 config.resolver.resolverMainFields = ['react-native', 'browser', 'main'];
-config.resolver.alias = {
-  ...config.resolver.alias,
-};
 
 // Add custom resolver to handle pretty-format DOM plugins
 const originalResolveRequest = config.resolver.resolveRequest;

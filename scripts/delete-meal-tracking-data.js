@@ -7,7 +7,7 @@ async function deleteMealTrackingData() {
   try {
     // Create database connection
     connection = await mysql.createConnection({
-      host: process.env.DB_HOST || 'localhost',
+      host: process.env.DB_HOST || 'dash.doctorphc.id',
       user: process.env.DB_USER || 'root',
       password: process.env.DB_PASSWORD || 'pr1k1t1w',
       database: process.env.DB_NAME || 'phc_dashboard',
@@ -28,7 +28,8 @@ async function deleteMealTrackingData() {
     const [foodDatabaseCount] = await connection.execute('SELECT COUNT(*) as count FROM food_database');
     console.log(`- food_database: ${foodDatabaseCount[0].count} records`);
     
-    const [mealLoggingCount] = await connection.execute('    console.log(`- meal_tracking: ${mealLoggingCount[0].count} records`);
+    const [mealLoggingCount] = await connection.execute('SELECT COUNT(*) as count FROM meal_logging');
+    console.log(`- meal_logging: ${mealLoggingCount[0].count} records`);
     
     console.log('\n⚠️  WARNING: This will delete ALL meal tracking data!');
     console.log('Press Ctrl+C to cancel, or wait 5 seconds to continue...');
@@ -54,10 +55,11 @@ async function deleteMealTrackingData() {
     const foodDatabaseResult = await connection.execute('DELETE FROM food_database');
     console.log(`   ✅ Deleted ${foodDatabaseResult[0].affectedRows} food_database records`);
     
-    // 4. Delete meal_tracking records (old table) - handle if table doesn't exist
-    console.log('4. Deleting meal_tracking records (old table)...');
+    // 4. Delete meal_logging records (old table) - handle if table doesn't exist
+    console.log('4. Deleting meal_logging records (old table)...');
     try {
-      const mealLoggingResult = await connection.execute('      console.log(`   ✅ Deleted ${mealLoggingResult[0].affectedRows} meal_tracking records`);
+      const mealLoggingResult = await connection.execute('DELETE FROM meal_logging');
+      console.log(`   ✅ Deleted ${mealLoggingResult[0].affectedRows} meal_logging records`);
     } catch (error) {
       if (error.code === 'ER_NO_SUCH_TABLE') {
         console.log('   ℹ️  meal_tracking table does not exist (normal)');
@@ -78,7 +80,8 @@ async function deleteMealTrackingData() {
     const [foodDatabaseCountAfter] = await connection.execute('SELECT COUNT(*) as count FROM food_database');
     console.log(`- food_database: ${foodDatabaseCountAfter[0].count} records`);
     
-    const [mealLoggingCountAfter] = await connection.execute('    console.log(`- meal_tracking: ${mealLoggingCountAfter[0].count} records`);
+    const [mealLoggingCountAfter] = await connection.execute('SELECT COUNT(*) as count FROM meal_logging');
+    console.log(`- meal_logging: ${mealLoggingCountAfter[0].count} records`);
     
     console.log('\n✅ All meal tracking data has been successfully deleted!');
     console.log('📝 Note: The table structures remain intact, only the data has been removed.');

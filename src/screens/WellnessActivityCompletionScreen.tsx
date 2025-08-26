@@ -114,7 +114,7 @@ const WellnessActivityCompletionScreen = ({ route, navigation }: WellnessActivit
             {
               text: 'OK',
               onPress: () => {
-                safeGoBack(navigation, 'Activity');
+                navigation.goBack();
               },
             },
           ]
@@ -154,7 +154,7 @@ const WellnessActivityCompletionScreen = ({ route, navigation }: WellnessActivit
       <SafeAreaView style={styles.header}>
         <View style={styles.headerContent}>
           <TouchableOpacity
-            onPress={() => safeGoBack(navigation, 'Activity')}
+            onPress={() => navigation.goBack()}
             style={styles.backButton}
           >
             <Icon name="arrow-left" size={24} color="#1F2937" />

@@ -15,6 +15,7 @@ import { CustomTheme } from "../theme/theme";
 import { useAuth } from "../contexts/AuthContext";
 import api from "../services/api";
 import { safeGoBack } from "../utils/safeNavigation";
+import SimpleDatePicker from "../components/SimpleDatePicker";
 
 interface MedicalVisit {
   id: string;
@@ -35,31 +36,73 @@ const MedicalHistoryScreen = ({ navigation }: any) => {
   const theme = useTheme<CustomTheme>();
   const { user } = useAuth();
   const [visits, setVisits] = useState<MedicalVisit[]>([]);
+  const [filteredVisits, setFilteredVisits] = useState<MedicalVisit[]>([]);
   const [loading, setLoading] = useState(false);
   const [selectedVisit, setSelectedVisit] = useState<MedicalVisit | null>(null);
   const [showDetail, setShowDetail] = useState(false);
+  
+  // Date filter state
+  const [selectedDate, setSelectedDate] = useState(new Date());
 
   useEffect(() => {
     loadMedicalHistory();
   }, []);
 
+  // Load data when selected date changes
+  useEffect(() => {
+    loadMedicalHistory();
+  }, [selectedDate]);
+
+  // Remove the old filter effect since we're now loading data directly for the selected date
+  // useEffect(() => {
+  //   filterMedicalHistory();
+  // }, [visits, selectedDate]);
+
+  const filterMedicalHistory = () => {
+    const selectedDateString = selectedDate.toLocaleDateString('en-CA'); // YYYY-MM-DD format
+    
+    const filtered = visits.filter((visit) => {
+      const visitDate = new Date(visit.date);
+      const visitDateString = visitDate.toLocaleDateString('en-CA');
+      return visitDateString === selectedDateString;
+    });
+
+    setFilteredVisits(filtered);
+  };
+
   const loadMedicalHistory = async () => {
     setLoading(true);
     try {
+      // Convert selected date to string format for API
+      const dateString = selectedDate.toLocaleDateString('en-CA'); // YYYY-MM-DD format
+      console.log(`🔍 MedicalHistoryScreen - Loading data for date: ${dateString}`);
+      
       const response = await api.getMedicalHistory({
         page: 1,
-        limit: 50
+        limit: 50,
+        date: dateString
       });
       
       if (response.success && response.data) {
+        // Filter the visits to show only those for the selected date
+        const selectedDateString = selectedDate.toLocaleDateString('en-CA');
+        const filteredVisits = response.data.filter((visit: any) => {
+          const visitDate = new Date(visit.date);
+          const visitDateString = visitDate.toLocaleDateString('en-CA');
+          return visitDateString === selectedDateString;
+        });
+        
         setVisits(response.data);
+        setFilteredVisits(filteredVisits);
       } else {
         setVisits([]);
+        setFilteredVisits([]);
       }
     } catch (error) {
       console.error("Error loading medical history:", error);
       Alert.alert("Error", "Gagal memuat riwayat medis");
       setVisits([]);
+      setFilteredVisits([]);
     } finally {
       setLoading(false);
     }
@@ -132,6 +175,10 @@ const MedicalHistoryScreen = ({ navigation }: any) => {
       style: "currency",
       currency: "IDR",
     }).format(amount);
+  };
+
+  const handleDateChange = (date: Date) => {
+    setSelectedDate(date);
   };
 
   const renderVisitCard = ({ item }: { item: MedicalVisit }) => (
@@ -316,11 +363,20 @@ const MedicalHistoryScreen = ({ navigation }: any) => {
           <View style={styles.summaryInfo}>
             <Text style={styles.summaryTitle}>Riwayat Kunjungan</Text>
             <Text style={styles.summarySubtitle}>
-              {visits.length} kunjungan • {visits.filter(v => v.status === "completed").length} selesai
+              {filteredVisits.length} kunjungan • {filteredVisits.filter(v => v.status === "completed").length} selesai
             </Text>
           </View>
         </View>
       </LinearGradient>
+
+      {/* Date Picker */}
+      <SimpleDatePicker
+        selectedDate={selectedDate}
+        onDateChange={handleDateChange}
+        theme={theme}
+        title="Pilih Tanggal Kunjungan"
+        variant="light"
+      />
 
       {/* Visits List */}
       <View style={styles.visitsSection}>
@@ -328,17 +384,22 @@ const MedicalHistoryScreen = ({ navigation }: any) => {
           <View style={styles.loadingContainer}>
             <Text style={styles.loadingText}>Memuat riwayat medis...</Text>
           </View>
-        ) : visits.length === 0 ? (
+        ) : filteredVisits.length === 0 ? (
           <View style={styles.emptyContainer}>
             <Icon name="medical-bag" size={48} color="#9CA3AF" />
-            <Text style={styles.emptyTitle}>Belum ada riwayat</Text>
+            <Text style={styles.emptyTitle}>
+              {visits.length === 0 ? 'Belum ada riwayat' : 'Tidak ada kunjungan untuk tanggal ini'}
+            </Text>
             <Text style={styles.emptySubtitle}>
-              Riwayat kunjungan medis Anda akan muncul di sini
+              {visits.length === 0 
+                ? 'Riwayat kunjungan medis Anda akan muncul di sini'
+                : 'Tidak ada kunjungan medis pada tanggal yang dipilih'
+              }
             </Text>
           </View>
         ) : (
           <FlatList
-            data={visits}
+            data={filteredVisits}
             renderItem={renderVisitCard}
             keyExtractor={(item) => item.id}
             showsVerticalScrollIndicator={false}

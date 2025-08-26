@@ -3,10 +3,7 @@ import { Platform } from 'react-native';
 // Simple network test utility
 export const testNetworkConnectivity = async () => {
   const testUrls = [
-    'http://localhost:3000/api/health',
-    'http://192.168.18.30:3000/api/health',
-    'http://10.242.90.103:3000/api/health',
-    'http://192.168.193.150:3000/api/health'
+    'http://192.168.193.150:3000/api/mobile/test-connection'
   ];
 
   console.log('🔍 Network Test: Starting connectivity test...');
@@ -50,22 +47,21 @@ export const testNetworkConnectivity = async () => {
 
 // Get the best available URL for the current platform
 export const getBestEndpoint = async () => {
+  // Temporary development mode - production server is down
   if (__DEV__) {
     if (Platform.OS === 'android') {
-      return 'http://10.0.2.2:3000/api/mobile';
+      return 'http://192.168.193.150:3000/api/mobile';
     }
     
     if (Platform.OS === 'ios') {
       return 'http://localhost:3000/api/mobile';
     }
     
-    // For physical devices, test connectivity
     const testResult = await testNetworkConnectivity();
     if (testResult.success) {
-      return testResult.url.replace('/api/health', '/api/mobile');
+      return testResult.url.replace('/api/mobile/health', '/api/mobile');
     }
   }
   
-  // Fallback to production
-  return 'https://dash.doctorphc.id/api/mobile';
+  return 'http://localhost:3000/api/mobile';
 }; 

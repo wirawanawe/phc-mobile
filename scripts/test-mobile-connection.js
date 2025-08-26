@@ -1,72 +1,135 @@
-import fetch from 'node-fetch';
+const axios = require('axios');
 
-const testConnection = async () => {
-  console.log('🔍 Testing mobile app connection to server...\n');
-  
-  const endpoint = 'http://192.168.18.30:3000/api/mobile/auth/login';
+const BASE_URL = 'http://localhost:3000';
+
+async function testServerConnection() {
+  console.log('🔍 Testing server connection...');
   
   try {
-    console.log(`📡 Testing endpoint: ${endpoint}`);
-    const startTime = Date.now();
+    const response = await axios.get(`${BASE_URL}/api/mobile/health`);
+    console.log('✅ Server is running:', response.data);
+    return true;
+  } catch (error) {
+    console.error('❌ Server connection failed:', error.message);
+    return false;
+  }
+}
+
+async function testSocialAuthEndpoints() {
+  console.log('\n🧪 Testing social auth endpoints...');
+  
+  const testData = {
+    google_user_id: 'mobile_test_google_123',
+    name: 'Mobile Test User',
+    email: 'mobile.test@gmail.com',
+    phone: '+6281234567890'
+  };
+
+  try {
+    // Test Google auth
+    const googleResponse = await axios.post(`${BASE_URL}/api/mobile/auth/google`, testData);
+    console.log('✅ Google auth working:', {
+      success: googleResponse.data.success,
+      message: googleResponse.data.message,
+      userId: googleResponse.data.data?.user?.id
+    });
+
+    // Test Facebook auth
+    const facebookData = {
+      ...testData,
+      facebook_user_id: 'mobile_test_facebook_456',
+      email: 'mobile.test@facebook.com'
+    };
     
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 15000);
-    
-    try {
-      const response = await fetch(endpoint, {
-        method: 'POST',
+    const facebookResponse = await axios.post(`${BASE_URL}/api/mobile/auth/facebook`, facebookData);
+    console.log('✅ Facebook auth working:', {
+      success: facebookResponse.data.success,
+      message: facebookResponse.data.message,
+      userId: facebookResponse.data.data?.user?.id
+    });
+
+    return true;
+  } catch (error) {
+    console.error('❌ Social auth test failed:', error.response?.data || error.message);
+    return false;
+  }
+}
+
+async function testTokenValidation() {
+  console.log('\n🔐 Testing token validation...');
+  
+  try {
+    // First get a token
+    const authResponse = await axios.post(`${BASE_URL}/api/mobile/auth/google`, {
+      google_user_id: 'token_test_123',
+      name: 'Token Test User',
+      email: 'token.test@gmail.com',
+      phone: '+6281234567890'
+    });
+
+    if (authResponse.data.success && authResponse.data.data.accessToken) {
+      const token = authResponse.data.data.accessToken;
+      
+      // Test token with /me endpoint
+      const meResponse = await axios.get(`${BASE_URL}/api/mobile/auth/me`, {
         headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          email: 'test@mobile.com',
-          password: 'password123'
-        }),
-        signal: controller.signal
+          'Authorization': `Bearer ${token}`
+        }
       });
       
-      clearTimeout(timeoutId);
-      const endTime = Date.now();
-      const responseTime = endTime - startTime;
+      console.log('✅ Token validation working:', {
+        success: meResponse.data.success,
+        userId: meResponse.data.data?.id,
+        email: meResponse.data.data?.email
+      });
       
-      console.log(`✅ Connection successful!`);
-      console.log(`📊 Response time: ${responseTime}ms`);
-      console.log(`📊 Status code: ${response.status}`);
-      
-      if (response.ok) {
-        const data = await response.json();
-        console.log(`✅ Login successful: ${data.message}`);
-        console.log(`👤 User: ${data.data?.user?.name}`);
-        console.log(`🔑 Access Token: ${data.data?.accessToken ? '✅ Received' : '❌ Missing'}`);
-        console.log(`🔄 Refresh Token: ${data.data?.refreshToken ? '✅ Received' : '❌ Missing'}`);
-        
-        console.log('\n🎉 Mobile app should now be able to connect successfully!');
-        console.log('💡 If you\'re still getting timeout errors, try:');
-        console.log('   1. Restart your mobile app (expo start --clear)');
-        console.log('   2. Clear the app cache');
-        console.log('   3. Make sure your mobile device is on the same WiFi network');
-        console.log('   4. Try the login again with the updated configuration');
-      }
-      
-    } catch (fetchError) {
-      clearTimeout(timeoutId);
-      throw fetchError;
+      return true;
+    } else {
+      console.log('❌ No token received');
+      return false;
     }
-    
   } catch (error) {
-    console.log(`❌ Connection failed: ${error.message}`);
-    
-    if (error.name === 'AbortError') {
-      console.log('⏰ Timeout after 15 seconds');
-      console.log('💡 Try restarting the server: cd dash-app && npm run dev');
-    } else if (error.message.includes('ECONNREFUSED')) {
-      console.log('🚫 Connection refused - server may not be running');
-      console.log('💡 Start the server: cd dash-app && npm run dev');
-    } else if (error.message.includes('ENOTFOUND')) {
-      console.log('🔍 Host not found - check network configuration');
-    }
+    console.error('❌ Token validation failed:', error.response?.data || error.message);
+    return false;
   }
-};
+}
 
-// Run the test
-testConnection().catch(console.error);
+async function runMobileTests() {
+  console.log('🚀 Starting Mobile Connection Tests...\n');
+  
+  const serverOk = await testServerConnection();
+  if (!serverOk) {
+    console.log('❌ Server is not running. Please start the server first.');
+    return;
+  }
+  
+  const socialAuthOk = await testSocialAuthEndpoints();
+  const tokenOk = await testTokenValidation();
+  
+  console.log('\n📊 Test Results:');
+  console.log(`Server Connection: ${serverOk ? '✅' : '❌'}`);
+  console.log(`Social Auth: ${socialAuthOk ? '✅' : '❌'}`);
+  console.log(`Token Validation: ${tokenOk ? '✅' : '❌'}`);
+  
+  if (serverOk && socialAuthOk && tokenOk) {
+    console.log('\n🎉 All tests passed! Mobile app should work properly.');
+    console.log('\n📱 Next steps:');
+    console.log('1. Start the mobile app with: npx expo start');
+    console.log('2. Test the social login buttons in the app');
+    console.log('3. Verify that users can login with Google/Facebook');
+  } else {
+    console.log('\n⚠️  Some tests failed. Please check the errors above.');
+  }
+}
+
+// Run tests if this file is executed directly
+if (require.main === module) {
+  runMobileTests().catch(console.error);
+}
+
+module.exports = {
+  testServerConnection,
+  testSocialAuthEndpoints,
+  testTokenValidation,
+  runMobileTests
+};

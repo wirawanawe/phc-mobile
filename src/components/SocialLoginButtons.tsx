@@ -1,15 +1,9 @@
 import React from 'react';
-import {
-  View,
-  Text,
-  TouchableOpacity,
-  StyleSheet,
-  Alert,
-  Platform,
-} from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-// Use development service for now
-import socialAuthService from '../services/socialAuthDev';
+import { View, TouchableOpacity, StyleSheet, Platform } from 'react-native';
+import { Text } from 'react-native-paper';
+import Ionicons from 'react-native-vector-icons/Ionicons';
+import socialAuthService from '../services/socialAuth';
+import socialAuthDevService from '../services/socialAuthDev';
 
 interface SocialLoginButtonsProps {
   onSocialLoginSuccess: (data: any) => void;
@@ -22,20 +16,31 @@ const SocialLoginButtons: React.FC<SocialLoginButtonsProps> = ({
   onSocialLoginError,
   loading = false,
 }) => {
+  // Use real social auth service for Google sign-in, mock service for other features
+  const authService = socialAuthService; // Always use real service for Google sign-in
+  const devService = socialAuthDevService; // Use dev service for other features if needed
+
   const handleGoogleLogin = async () => {
     try {
-      const result = await socialAuthService.signInWithGoogle();
+      console.log('🔐 Starting Google sign-in process...');
+      const result = await authService.signInWithGoogle();
       if (result?.success) {
+        console.log('✅ Google sign-in successful:', result.data);
         onSocialLoginSuccess(result.data);
+      } else {
+        console.log('❌ Google sign-in failed:', result);
+        onSocialLoginError('Google sign-in failed. Please try again.');
       }
     } catch (error) {
+      console.error('❌ Google sign-in error:', error);
       onSocialLoginError('Google login failed. Please try again.');
     }
   };
 
   const handleAppleLogin = async () => {
     try {
-      const result = await socialAuthService.signInWithApple();
+      // Use real Apple sign-in service
+      const result = await authService.signInWithApple();
       if (result?.success) {
         onSocialLoginSuccess(result.data);
       }
@@ -46,7 +51,8 @@ const SocialLoginButtons: React.FC<SocialLoginButtonsProps> = ({
 
   const handleFacebookLogin = async () => {
     try {
-      const result = await socialAuthService.signInWithFacebook();
+      // Use real Facebook sign-in service
+      const result = await authService.signInWithFacebook();
       if (result?.success) {
         onSocialLoginSuccess(result.data);
       }
@@ -57,6 +63,7 @@ const SocialLoginButtons: React.FC<SocialLoginButtonsProps> = ({
 
   return (
     <View style={styles.container}>
+      <Text style={styles.orText}>atau</Text>
       
       <View style={styles.buttonContainer}>
         {/* Google Login */}

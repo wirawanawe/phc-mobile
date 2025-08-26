@@ -14,6 +14,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useAuth } from '../contexts/AuthContext';
 import api from '../services/api';
+
 import { handleAuthError } from '../utils/errorHandler';
 
 interface ExerciseType {
@@ -173,6 +174,14 @@ const ExerciseLogScreen = ({ navigation }: any) => {
           type: 'number',
           required: false,
         },
+        {
+          id: 'steps',
+          name: 'Steps',
+          nameId: 'Langkah',
+          unit: 'langkah',
+          type: 'number',
+          required: false,
+        },
       ],
       calorieFormula: (params, duration) => {
         const speed = params.speed || 0;
@@ -264,17 +273,21 @@ const ExerciseLogScreen = ({ navigation }: any) => {
         exercise_minutes: durationType === 'minutes' ? durationValue : durationValue * 5,
         calories_burned: calculatedCalories,
         distance_km: exerciseParams.distance || 0,
-        steps: 0,
+        steps: exerciseParams.steps ? parseInt(exerciseParams.steps) : 0,
         notes: JSON.stringify(notesData),
         tracking_date: new Date().toISOString().split('T')[0],
       };
 
-      const response = await api.createFitnessEntry(activityData);
+      // Create fitness tracking entry
+      const result = await api.createFitnessEntry(activityData);
 
-      if (response.success) {
+      if (result.success) {
+        // Show success message
+        const successMessage = `Activity logged successfully!\nCalories burned: ${calculatedCalories} cal`;
+
         Alert.alert(
           'Success',
-          `Activity logged successfully!\nCalories burned: ${calculatedCalories} cal`,
+          successMessage,
           [
             {
               text: 'OK',
@@ -288,7 +301,7 @@ const ExerciseLogScreen = ({ navigation }: any) => {
           ]
         );
       } else {
-        Alert.alert('Error', response.message || 'Failed to log activity');
+        Alert.alert('Error', result.message || 'Failed to log activity');
       }
     } catch (error) {
       console.error('Error logging activity:', error);
@@ -329,21 +342,7 @@ const ExerciseLogScreen = ({ navigation }: any) => {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.contentContainer}
       >
-        {/* Header */}
-        <View style={styles.header}>
-          <View style={styles.headerLeft}>
-            <View style={styles.logoContainer}>
-              <Icon name="dumbbell" size={28} color="#E53E3E" />
-            </View>
-            <View style={styles.headerText}>
-              <Text style={styles.greetingText}>Log Olahraga</Text>
-              <Text style={styles.subtitleText}>
-                {isAuthenticated ? "Catat aktivitas olahraga Anda" : "Login untuk memulai"}
-              </Text>
-            </View>
-          </View>
-        </View>
-
+       
         {/* Exercise Selection */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>1. Pilih Jenis Olahraga</Text>

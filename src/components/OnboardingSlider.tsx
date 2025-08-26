@@ -34,33 +34,33 @@ const OnboardingSlider: React.FC<OnboardingSliderProps> = ({ onComplete }) => {
   const slides: OnboardingSlide[] = [
     {
       id: "1",
-      title: "Pendaftaran Klinik online",
+      title: "Monitoring Pola Asupan Makanan dan Minuman",
       description:
-        "Daftar klinik online dengan mudah. Tersedia klinik terdepan di Indonesia.",
-      icon: "🏥",
+        "Lacak dan pantau pola makan dan minuman Anda sehari-hari. Dapatkan insight nutrisi yang tepat untuk kesehatan optimal.",
+      icon: "🍽️",
       gradient: ((theme as any).customColors?.primaryGradient as string[]) || ["#E22345", "#C53030"],
     },
     {
       id: "2",
-      title: "Konsultasi dengan Dokter",
+      title: "Monitoring Pola Aktifitas Kesehatan",
       description:
-        "Konsultasi langsung dengan dokter berpengalaman. Layanan kesehatan yang cepat dan terpercaya.",
-      icon: "👨‍⚕️",
+        "Pantau aktivitas fisik dan kesehatan Anda secara real-time. Dapatkan motivasi untuk mencapai target kebugaran harian.",
+      icon: "🏃‍♂️",
       gradient: ((theme as any).customColors?.primaryGradient as string[]) || ["#E22345", "#C53030"],
     },
     {
       id: "3",
-      title: "Fitness & Wellness",
+      title: "Misi Program Kesehatan",
       description:
-        "Program kebugaran yang menyenangkan dengan gamifikasi dan tantangan yang memotivasi untuk gaya hidup sehat.",
-      icon: "🏃‍♂️",
+        "Ikuti misi dan tantangan kesehatan yang menarik. Raih poin dan hadiah sambil membangun kebiasaan hidup sehat.",
+      icon: "🎯",
       gradient: ((theme as any).customColors?.primaryGradient as string[]) || ["#E22345", "#C53030"],
     },
     {
       id: "4",
       title: "Siap Memulai?",
       description:
-        "Bergabunglah dengan ribuan karyawan yang telah merasakan manfaat platform kesehatan PHC. Mari mulai perjalanan sehat Anda!",
+        "Bergabunglah dengan ribuan pengguna yang telah merasakan manfaat platform kesehatan PHC. Mari mulai perjalanan sehat Anda!",
       icon: "🚀",
       gradient: ((theme as any).customColors?.primaryGradient as string[]) || ["#E22345", "#C53030"],
     },
@@ -112,7 +112,7 @@ const OnboardingSlider: React.FC<OnboardingSliderProps> = ({ onComplete }) => {
                 { transform: [{ scale: logoScale }] },
               ]}
             >
-              <LogoPutih size="large" showText={index === 0} />
+              <LogoPutih size={500} />
             </Animated.View>
 
             <View style={styles.iconContainer}>

@@ -1,6 +1,6 @@
 import fetch from 'node-fetch';
 
-const BASE_URL = 'http://localhost:3000';
+const BASE_URL = 'https://dash.doctorphc.id';
 
 // Test the mood data processing logic from WellnessDetailsScreen
 async function testWellnessMoodDisplay() {

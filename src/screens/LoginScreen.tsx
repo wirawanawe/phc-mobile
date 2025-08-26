@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   StyleSheet,
@@ -9,6 +9,7 @@ import {
   Platform,
   TextInput,
 } from "react-native";
+import NetInfo from "@react-native-community/netinfo";
 import { Text, useTheme, Button } from "react-native-paper";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
@@ -16,14 +17,16 @@ import Icon from "react-native-vector-icons/MaterialCommunityIcons";
 import { CustomTheme } from "../theme/theme";
 import LogoPutih from "../components/LogoPutih";
 import LoginErrorDisplay from "../components/LoginErrorDisplay";
+import LoginAlert from "../components/LoginAlert";
 import SocialLoginButtons from "../components/SocialLoginButtons";
-import OTPVerification from "../components/OTPVerification";
+
 import { safeGoBack } from "../utils/safeNavigation";
 import { useAuth } from "../contexts/AuthContext";
+import { parseAuthError } from "../utils/authErrorHandler";
+import { handleError, parseError } from "../utils/errorHandler";
+import { showSuccessAlert, showErrorAlert, showWarningAlert, showInfoAlert, ALERT_MESSAGES } from "../utils/alertUtils";
 
 import { CommonActions } from "@react-navigation/native";
-import { handleError } from "../utils/errorHandler";
-
 
 const LoginScreen = ({ navigation }: any) => {
   const theme = useTheme<CustomTheme>();
@@ -34,80 +37,157 @@ const LoginScreen = ({ navigation }: any) => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
   
+  // Login alert states
+  const [showLoginAlert, setShowLoginAlert] = useState(false);
+  const [alertMessage, setAlertMessage] = useState("");
+  const [alertType, setAlertType] = useState<'error' | 'warning' | 'info'>('error');
+  
   // Social login states
-  const [showOTPVerification, setShowOTPVerification] = useState(false);
-  const [socialLoginData, setSocialLoginData] = useState<any>(null);
   const [socialLoading, setSocialLoading] = useState(false);
 
-  const handleLogin = async () => {
-    // Clear any previous errors
-    setError("");
+  // Network connectivity state
+  const [isConnected, setIsConnected] = useState(true);
 
-    // Client-side validation
-    if (!email.trim() || !password.trim()) {
-      setError("Mohon isi semua field yang diperlukan");
-      return;
+  // Check network connectivity on mount
+  useEffect(() => {
+    const checkConnectivity = async () => {
+      try {
+        const state = await NetInfo.fetch();
+        setIsConnected(state.isConnected ?? true);
+      } catch (error) {
+        console.log('Network check failed:', error);
+        setIsConnected(true); // Assume connected if check fails
+      }
+    };
+
+    checkConnectivity();
+
+    // Listen for network changes
+    const unsubscribe = NetInfo.addEventListener((state: any) => {
+      setIsConnected(state.isConnected ?? true);
+    });
+
+    return () => unsubscribe();
+  }, []);
+
+  const validateForm = () => {
+    // Clear previous errors
+    setError("");
+    setShowLoginAlert(false);
+
+    // Check network connectivity first
+    if (!isConnected) {
+      setError("Tidak ada koneksi internet. Periksa koneksi Anda dan coba lagi.");
+      return false;
+    }
+
+    // Email validation
+    if (!email.trim()) {
+      setError("Email tidak boleh kosong");
+      return false;
     }
 
     if (!isValidEmail(email)) {
-      setError("Mohon masukkan alamat email yang valid");
-      return;
+      setError("Format email tidak valid. Contoh: user@example.com");
+      return false;
+    }
+
+    // Password validation
+    if (!password.trim()) {
+      setError("Password tidak boleh kosong");
+      return false;
     }
 
     if (password.length < 6) {
       setError("Password minimal 6 karakter");
+      return false;
+    }
+
+    return true;
+  };
+
+  const handleLogin = async () => {
+    if (!validateForm()) {
       return;
     }
 
     setIsLoading(true);
 
     try {
+      console.log("🔐 Login: Attempting login...");
       const result = await login(email, password);
+      console.log("🔐 Login: Result:", result);
 
       if (result.success) {
-        // Login successful - navigate to Main screen
-        navigation.replace("Main");
+        console.log("✅ Login: Success, navigating to Main");
+        // Show success message before navigation
+        showSuccessAlert(
+          ALERT_MESSAGES.LOGIN_SUCCESS.title,
+          ALERT_MESSAGES.LOGIN_SUCCESS.message,
+          () => {
+            // Navigate to Main screen
+            setTimeout(() => {
+              navigation.replace("Main");
+            }, 100);
+          }
+        );
       } else {
-        setError(result.message || "Login gagal. Silakan coba lagi.");
+        // Handle login failure with enhanced error handling
+        const errorInfo = parseAuthError(new Error(result.message || "Login gagal"));
+        
+        // Show specific alert based on error type
+        if (errorInfo.type === '401') {
+          if (result.message?.includes('email tidak terdaftar')) {
+            setAlertMessage("Email tidak terdaftar. Silakan daftar terlebih dahulu atau periksa kembali email Anda.");
+            setAlertType('warning');
+          } else if (result.message?.includes('password salah')) {
+            setAlertMessage("Password salah. Silakan periksa kembali password Anda.");
+            setAlertType('error');
+          } else {
+            setAlertMessage("Email atau password salah. Silakan periksa kembali kredensial Anda.");
+            setAlertType('error');
+          }
+        } else if (errorInfo.type === '403') {
+          setAlertMessage("Akun Anda telah dinonaktifkan. Hubungi admin untuk bantuan lebih lanjut.");
+          setAlertType('warning');
+        } else if (errorInfo.type === 'rate_limit') {
+          setAlertMessage("Terlalu banyak percobaan login. Silakan tunggu 5 menit sebelum mencoba lagi.");
+          setAlertType('warning');
+        } else {
+          setAlertMessage(errorInfo.userMessage);
+          setAlertType('error');
+        }
+        
+        setShowLoginAlert(true);
       }
     } catch (error: any) {
       console.error("❌ Login: Login error:", error);
       
-      // Enhanced error handling for invalid credentials
-      let errorMessage = "Login gagal. Silakan coba lagi.";
+      // Enhanced error parsing and handling
+      const errorInfo = parseError(error);
+      const authErrorInfo = parseAuthError(error);
       
-      if (error?.message) {
-        const message = error.message.toLowerCase();
-        
-        // Handle specific invalid credential cases
-        if (message.includes("invalid credentials") || 
-            message.includes("email atau password salah") ||
-            message.includes("kredensial tidak valid")) {
-          errorMessage = "Email atau password salah. Silakan periksa kembali.";
-        } else if (message.includes("user not found") || 
-                   message.includes("user tidak ditemukan")) {
-          errorMessage = "Email tidak terdaftar. Silakan daftar terlebih dahulu.";
-        } else if (message.includes("account is deactivated") || 
-                   message.includes("akun dinonaktifkan")) {
-          errorMessage = "Akun Anda telah dinonaktifkan. Hubungi admin untuk bantuan.";
-        } else if (message.includes("too many attempts") || 
-                   message.includes("terlalu banyak percobaan")) {
-          errorMessage = "Terlalu banyak percobaan login. Silakan tunggu beberapa menit.";
-        } else if (message.includes("network") || 
-                   message.includes("koneksi")) {
-          errorMessage = "Koneksi gagal. Periksa internet Anda dan coba lagi.";
-        } else if (message.includes("authentication failed")) {
-          errorMessage = "Sesi Anda telah berakhir. Silakan login kembali.";
-        } else if (message.includes("server error")) {
-          errorMessage = "Terjadi kesalahan pada server. Silakan coba lagi nanti.";
-        } else if (message.includes("timeout")) {
-          errorMessage = "Koneksi timeout. Silakan coba lagi.";
-        } else {
-          errorMessage = error.message;
-        }
+      let finalMessage = authErrorInfo.userMessage;
+      let finalType: 'error' | 'warning' | 'info' = 'error';
+      
+      // Handle specific error cases
+      if (errorInfo.type === 'NETWORK') {
+        finalMessage = "Koneksi internet terputus. Periksa koneksi Anda dan coba lagi.";
+        finalType = 'warning';
+      } else if (errorInfo.type === 'TIMEOUT') {
+        finalMessage = "Koneksi timeout. Silakan coba lagi.";
+        finalType = 'warning';
+      } else if (errorInfo.type === 'SERVER') {
+        finalMessage = "Server sedang mengalami gangguan. Silakan coba lagi dalam beberapa menit.";
+        finalType = 'warning';
+      } else if (errorInfo.type === 'RATE_LIMIT') {
+        finalMessage = "Terlalu banyak percobaan login. Silakan tunggu beberapa menit sebelum mencoba lagi.";
+        finalType = 'warning';
       }
       
-      setError(errorMessage);
+      setAlertMessage(finalMessage);
+      setAlertType(finalType);
+      setShowLoginAlert(true);
     } finally {
       setIsLoading(false);
     }
@@ -119,82 +199,81 @@ const LoginScreen = ({ navigation }: any) => {
   };
 
   const handleForgotPassword = () => {
-    Alert.alert(
-      "Forgot Password",
-      "Password reset functionality will be implemented soon.",
-      [{ text: "OK" }]
-    );
+    navigation.navigate("ForgotPassword");
   };
 
   const handleRegister = () => {
     navigation.navigate("Register");
   };
 
+  // Login Alert Handlers
+  const handleAlertClose = () => {
+    setShowLoginAlert(false);
+  };
 
+  const handleAlertRetry = () => {
+    setShowLoginAlert(false);
+    // Add small delay before retry
+    setTimeout(() => {
+      handleLogin();
+    }, 500);
+  };
+
+  const handleAlertRegister = () => {
+    setShowLoginAlert(false);
+    navigation.navigate("Register");
+  };
+
+  const handleAlertForgotPassword = () => {
+    setShowLoginAlert(false);
+    handleForgotPassword();
+  };
 
   // Social login handlers
-  const handleSocialLoginSuccess = (data: any) => {
-    setSocialLoginData(data);
-    setShowOTPVerification(true);
-  };
-
-  const handleSocialLoginError = (error: string) => {
-    setError(error);
-  };
-
-  const handleOTPVerificationSuccess = async (data: any) => {
+  const handleSocialLoginSuccess = async (data: any) => {
     try {
-      // OTP verification successful - complete social login process
+      setSocialLoading(true);
       
       // Use the social login method to properly authenticate the user
-      const success = await socialLogin(data.user, data.token);
+      const success = await socialLogin(data.user, data.accessToken);
       
       if (success) {
-        navigation.replace("Main");
+        showSuccessAlert(
+          ALERT_MESSAGES.LOGIN_SUCCESS.title,
+          ALERT_MESSAGES.LOGIN_SUCCESS.message,
+          () => navigation.replace("Main")
+        );
+      } else {
+        setError('Social login gagal. Silakan coba lagi.');
       }
-    } catch (error) {
-      setError('Social login verification failed. Please try again.');
-    }
-  };
-
-  const handleOTPVerificationError = (error: string) => {
-    setError(error);
-    setShowOTPVerification(false);
-  };
-
-  const handleResendOTP = async () => {
-    // Re-trigger the social login process to get a new OTP
-    setSocialLoading(true);
-    try {
-      // This would typically call the social auth service again
-      // For now, we'll just show a success message
-      Alert.alert('Success', 'New OTP has been sent');
-    } catch (error) {
-      setError('Failed to resend OTP. Please try again.');
+    } catch (error: any) {
+      console.error('Social login error:', error);
+      const errorInfo = parseError(error);
+      setError(errorInfo.userMessage);
     } finally {
       setSocialLoading(false);
     }
   };
 
-  const handleCancelOTP = () => {
-    setShowOTPVerification(false);
-    setSocialLoginData(null);
-    setError('');
+  const handleSocialLoginError = (error: string) => {
+    setError(error);
+    setSocialLoading(false);
   };
 
-  // Show OTP verification screen if needed
-  if (showOTPVerification && socialLoginData) {
-    return (
-      <OTPVerification
-        email={socialLoginData.user.email}
-        authMethod={socialLoginData.authMethod}
-        onVerificationSuccess={handleOTPVerificationSuccess}
-        onVerificationError={handleOTPVerificationError}
-        onResendOTP={handleResendOTP}
-        onCancel={handleCancelOTP}
-      />
-    );
-  }
+  // Network status indicator
+  const renderNetworkStatus = () => {
+    if (!isConnected) {
+      return (
+        <View style={styles.networkWarning}>
+          <Icon name="wifi-off" size={16} color="#FFFFFF" />
+          <Text style={styles.networkWarningText}>
+            Tidak ada koneksi internet
+          </Text>
+        </View>
+      );
+    }
+    return null;
+  };
 
   return (
     <SafeAreaView style={styles.container}>
@@ -207,6 +286,9 @@ const LoginScreen = ({ navigation }: any) => {
             contentContainerStyle={styles.scrollContent}
             showsVerticalScrollIndicator={false}
           >
+            {/* Network Status */}
+            {renderNetworkStatus()}
+
             {/* Header */}
             <View style={styles.header}>
               <TouchableOpacity
@@ -215,13 +297,13 @@ const LoginScreen = ({ navigation }: any) => {
               >
                 <Icon name="arrow-left" size={24} color="#FFFFFF" />
               </TouchableOpacity>
-              <LogoPutih size="large" />
+              <LogoPutih size={500} />
               <Text style={styles.welcomeText}>
-          Selamat Datang Kembali!
-        </Text>
-                              <Text style={styles.subtitleText}>
-                  Masuk untuk melanjutkan perjalanan kesehatan Anda
-                </Text>
+                Selamat Datang Kembali!
+              </Text>
+              <Text style={styles.subtitleText}>
+                Masuk untuk melanjutkan perjalanan kesehatan Anda
+              </Text>
             </View>
 
             {/* Login Form */}
@@ -240,10 +322,15 @@ const LoginScreen = ({ navigation }: any) => {
                     placeholder="Email"
                     placeholderTextColor="#9CA3AF"
                     value={email}
-                    onChangeText={setEmail}
+                    onChangeText={(text) => {
+                      setEmail(text);
+                      // Clear error when user starts typing
+                      if (error) setError("");
+                    }}
                     keyboardType="email-address"
                     autoCapitalize="none"
                     autoCorrect={false}
+                    editable={!isLoading}
                   />
                 </View>
               </View>
@@ -262,14 +349,20 @@ const LoginScreen = ({ navigation }: any) => {
                     placeholder="Password"
                     placeholderTextColor="#9CA3AF"
                     value={password}
-                    onChangeText={setPassword}
+                    onChangeText={(text) => {
+                      setPassword(text);
+                      // Clear error when user starts typing
+                      if (error) setError("");
+                    }}
                     secureTextEntry={!showPassword}
                     autoCapitalize="none"
                     autoCorrect={false}
+                    editable={!isLoading}
                   />
                   <TouchableOpacity
                     onPress={() => setShowPassword(!showPassword)}
                     style={styles.eyeIcon}
+                    disabled={isLoading}
                   >
                     <Icon
                       name={showPassword ? "eye-off" : "eye"}
@@ -280,7 +373,6 @@ const LoginScreen = ({ navigation }: any) => {
                 </View>
               </View>
 
-              {/* Error Message */}
               {/* Error Display */}
               <LoginErrorDisplay
                 error={error}
@@ -288,57 +380,51 @@ const LoginScreen = ({ navigation }: any) => {
                 onRetry={handleLogin}
               />
 
+              {/* Login Alert */}
+              <LoginAlert
+                visible={showLoginAlert}
+                message={alertMessage}
+                type={alertType}
+                onRetry={handleAlertRetry}
+                onRegister={handleAlertRegister}
+                onForgotPassword={handleAlertForgotPassword}
+                onClose={handleAlertClose}
+              />
+
               {/* Forgot Password */}
               <TouchableOpacity
                 onPress={handleForgotPassword}
                 style={styles.forgotPasswordContainer}
+                disabled={isLoading}
               >
                 <Text style={styles.forgotPasswordText}>
                   Lupa Password?
                 </Text>
               </TouchableOpacity>
 
-             
-
               {/* Login Button */}
               <Button
                 mode="contained"
                 onPress={handleLogin}
                 loading={isLoading}
-                disabled={isLoading}
-                style={styles.loginButton}
+                disabled={isLoading || !isConnected}
+                style={[
+                  styles.loginButton,
+                  (!isConnected || isLoading) && styles.loginButtonDisabled
+                ]}
                 labelStyle={styles.loginButtonText}
                 buttonColor="#FFFFFF"
                 textColor="#E22345"
               >
                 {isLoading 
                   ? "Sedang Masuk..." 
+                  : !isConnected
+                  ? "Tidak Ada Koneksi"
                   : "Masuk"
                 }
               </Button>
 
-
-
-              {/* Divider */}
-              <View style={styles.dividerContainer}>
-                <View style={styles.dividerLine} />
-                <Text style={styles.dividerText}>
-                  atau
-                </Text>
-                <View style={styles.dividerLine} />
-              </View>
-
-              {/* Social Login Buttons */}
-              <SocialLoginButtons
-                onSocialLoginSuccess={handleSocialLoginSuccess}
-                onSocialLoginError={handleSocialLoginError}
-                loading={socialLoading}
-              />
-
-
-            </View>
-
-                          {/* Footer */}
+              {/* Footer */}
               <View style={styles.footer}>
                 <Text style={styles.footerText}>
                   Tidak punya akun?{" "}
@@ -347,8 +433,7 @@ const LoginScreen = ({ navigation }: any) => {
                   </Text>
                 </Text>
               </View>
-
-              
+            </View>
           </ScrollView>
         </KeyboardAvoidingView>
       </LinearGradient>
@@ -369,10 +454,25 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     minHeight: "100%",
   },
+  networkWarning: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(239, 68, 68, 0.9)',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    marginBottom: 16,
+    borderRadius: 8,
+  },
+  networkWarningText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '500',
+    marginLeft: 8,
+  },
   header: {
     alignItems: "center",
-    paddingTop: 40,
-    paddingBottom: 30,
+    paddingTop: 10,
     position: "relative",
   },
   backButton: {
@@ -399,7 +499,6 @@ const styles = StyleSheet.create({
   },
   formContainer: {
     flex: 1,
-    paddingTop: 10,
     justifyContent: "center",
   },
   inputContainer: {
@@ -473,6 +572,9 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 5,
   },
+  loginButtonDisabled: {
+    opacity: 0.6,
+  },
   loginButtonText: {
     fontSize: 16,
     fontWeight: "600",
@@ -533,7 +635,6 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
     fontWeight: "600",
   },
-
 });
 
 export default LoginScreen;

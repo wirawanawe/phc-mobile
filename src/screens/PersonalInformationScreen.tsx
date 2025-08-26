@@ -15,6 +15,7 @@ import Icon from "react-native-vector-icons/MaterialCommunityIcons";
 import { useAuth } from "../contexts/AuthContext";
 import apiService from "../services/api";
 import { safeGoBack } from "../utils/safeNavigation";
+import SimpleDatePicker from "../components/SimpleDatePicker";
 
 // Helper functions for formatting
 const formatDateOfBirth = (dateStr: string): string => {
@@ -67,6 +68,7 @@ const PersonalInformationScreen = ({ navigation }: any) => {
 
   const [isEditing, setIsEditing] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [selectedDate, setSelectedDate] = useState(new Date());
 
   // Fetch user profile on component mount
   useEffect(() => {
@@ -77,6 +79,8 @@ const PersonalInformationScreen = ({ navigation }: any) => {
     try {
       const response = await apiService.getUserProfile();
       if (response.success) {
+        const dateOfBirth = response.data.date_of_birth ? new Date(response.data.date_of_birth) : new Date();
+        setSelectedDate(dateOfBirth);
         setUserInfo({
           name: response.data.name || "",
           email: response.data.email || "",
@@ -91,6 +95,13 @@ const PersonalInformationScreen = ({ navigation }: any) => {
     } catch (error) {
       console.error("Error fetching user profile:", error);
     }
+  };
+
+  const handleDateChange = (date: Date) => {
+    setSelectedDate(date);
+    // Format date to ISO string for API
+    const isoDate = date.toISOString().split('T')[0];
+    setUserInfo({ ...userInfo, date_of_birth: isoDate });
   };
 
   const handleSave = async () => {
@@ -187,6 +198,24 @@ const PersonalInformationScreen = ({ navigation }: any) => {
     </View>
   );
 
+  const renderDateOfBirthField = () => (
+    <View style={styles.fieldContainer}>
+      <Text style={styles.fieldLabel}>Date of Birth</Text>
+      {isEditing ? (
+        <SimpleDatePicker
+          selectedDate={selectedDate}
+          onDateChange={handleDateChange}
+          title="Pilih Tanggal Lahir"
+          variant="light"
+        />
+      ) : (
+        <Text style={[styles.fieldValue, !userInfo.date_of_birth && styles.fieldValueEmpty]}>
+          {userInfo.date_of_birth ? formatDateOfBirth(userInfo.date_of_birth) : "Not provided"}
+        </Text>
+      )}
+    </View>
+  );
+
   return (
     <SafeAreaView style={styles.container}>
       {/* Header */}
@@ -242,12 +271,7 @@ const PersonalInformationScreen = ({ navigation }: any) => {
           {renderField("Full Name", userInfo.name, "name")}
           {renderField("Email", userInfo.email, "email", "email-address")}
           {renderField("Phone", userInfo.phone, "phone", "phone-pad")}
-          {renderFormattedField(
-            "Date of Birth",
-            userInfo.date_of_birth,
-            "date_of_birth",
-            formatDateOfBirth
-          )}
+          {renderDateOfBirthField()}
           
           {/* Gender Selection */}
           <View style={styles.fieldContainer}>

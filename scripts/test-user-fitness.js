@@ -2,7 +2,7 @@ const mysql = require('mysql2/promise');
 
 // Database configuration
 const dbConfig = {
-  host: 'localhost',
+      host: 'dash.doctorphc.id',
   user: 'root',
   password: 'your_password_here', // Replace with your actual password
   database: 'phc_dashboard'

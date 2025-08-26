@@ -1,7 +1,7 @@
 import fetch from 'node-fetch';
 
 // Test configuration
-const BASE_URL = 'http://localhost:3000/api/mobile';
+const BASE_URL = 'https://dash.doctorphc.id/api/mobile';
 const TEST_EMAIL = 'test@example.com';
 const TEST_PASSWORD = 'password123';
 

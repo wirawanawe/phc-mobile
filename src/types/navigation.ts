@@ -23,7 +23,11 @@ export type RootStackParamList = {
   Calculator: undefined;
   AllCalculators: undefined;
   PersonalInformation: undefined;
-  MissionDetail: { missionId: string };
+  MissionDetail: { 
+    mission: any; 
+    userMission: any; 
+  };
+
   Notification: undefined;
   ChatAssistant: undefined;
   Login: undefined;
@@ -33,6 +37,7 @@ export type RootStackParamList = {
   HealthInsights: undefined;
   WaterTracking: undefined;
   SleepTracking: undefined;
+  SleepHistory: undefined;
   MealLogging: undefined;
   FitnessTracking: undefined;
   RealtimeFitness: undefined;
@@ -47,11 +52,13 @@ export type RootStackParamList = {
   TestWellnessApp: undefined;
   WellnessDebug: undefined;
   Activity: undefined;
+  HabitActivity: undefined;
   WellnessActivityDetail: { activity: any };
   WellnessActivityCompletion: { activity: any };
   HealthGoals: undefined;
   MedicalHistory: undefined;
   WellnessHistory: undefined;
+  PinSettings: undefined;
   PrivacySettings: undefined;
   HelpSupport: undefined;
   AboutApp: undefined;
@@ -59,6 +66,9 @@ export type RootStackParamList = {
   ChatDetail: { chatId: string };
   PaymentProof: { consultationId: string };
   Anthropometry: undefined;
+  ForgotPassword: undefined;
+  ResetPassword: { email: string };
+  ForgotPin: undefined;
 };
 
 export type RootStackNavigationProp = StackNavigationProp<RootStackParamList>;

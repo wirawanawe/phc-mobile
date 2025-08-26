@@ -63,3 +63,103 @@ export const getDaysDifference = (date1: Date | string, date2: Date | string): n
   const timeDiff = d1.getTime() - d2.getTime();
   return Math.floor(timeDiff / (1000 * 3600 * 24));
 };
+
+/**
+ * Get current timestamp in local timezone (not UTC)
+ * @returns string in ISO format but adjusted to local timezone
+ */
+export const getLocalTimestamp = (): string => {
+  const now = new Date();
+  const offset = now.getTimezoneOffset() * 60000; // offset in milliseconds
+  const localDate = new Date(now.getTime() - offset);
+  return localDate.toISOString();
+};
+
+/**
+ * Format date to YYYY-MM-DD from any date input using local timezone
+ * @param date - Date object, string, or undefined (uses current date)
+ * @returns string in YYYY-MM-DD format
+ */
+export const formatDateToLocalYYYYMMDD = (date?: Date | string): string => {
+  const dateObj = date ? (typeof date === 'string' ? new Date(date) : date) : new Date();
+  return formatDateToYYYYMMDD(dateObj);
+};
+
+/**
+ * Get current date and time in local timezone
+ * @returns object with date and time strings
+ */
+export const getCurrentLocalDateTime = () => {
+  const now = new Date();
+  return {
+    date: formatDateToYYYYMMDD(now),
+    time: now.toLocaleTimeString('id-ID', {
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false
+    }),
+    datetime: now.toLocaleString('id-ID', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false
+    })
+  };
+};
+
+/**
+ * Convert UTC date string to local date string
+ * @param utcDateString - UTC date string
+ * @returns local date string in YYYY-MM-DD format
+ */
+export const convertUTCToLocalDate = (utcDateString: string): string => {
+  const utcDate = new Date(utcDateString);
+  return formatDateToYYYYMMDD(utcDate);
+};
+
+/**
+ * Get current time in HH:MM:SS format (local timezone)
+ * @returns string in HH:MM:SS format
+ */
+export const getCurrentTime = (): string => {
+  const now = new Date();
+  return now.toLocaleTimeString('id-ID', {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false
+  });
+};
+
+/**
+ * Check if a date is today (local timezone)
+ * @param date - Date to check
+ * @returns boolean
+ */
+export const isToday = (date: Date | string): boolean => {
+  return isSameDay(date, new Date());
+};
+
+/**
+ * Get yesterday's date in YYYY-MM-DD format (local timezone)
+ * @returns string in YYYY-MM-DD format
+ */
+export const getYesterdayDate = (): string => {
+  const yesterday = new Date();
+  yesterday.setDate(yesterday.getDate() - 1);
+  return formatDateToYYYYMMDD(yesterday);
+};
+
+/**
+ * Get tomorrow's date in YYYY-MM-DD format (local timezone)
+ * @returns string in YYYY-MM-DD format
+ */
+export const getTomorrowDate = (): string => {
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  return formatDateToYYYYMMDD(tomorrow);
+};

@@ -77,29 +77,15 @@ export class NetworkDiagnostic {
 
   private getTestUrls(): string[] {
     if (__DEV__) {
-      if (Platform.OS === 'android') {
-        return [
-          'http://10.0.2.2:3000/api/health',
-          'http://localhost:3000/api/health'
-        ];
-      } else if (Platform.OS === 'ios') {
-        return [
-          'http://localhost:3000/api/health',
-          'http://127.0.0.1:3000/api/health'
-        ];
-      } else {
-        // Physical device or unknown platform
-        return [
-          'http://localhost:3000/api/health',
-          'http://192.168.18.30:3000/api/health',
-          'http://192.168.193.150:3000/api/health',
-          'http://10.242.90.103:3000/api/health'
-        ];
-      }
+      return [
+        'http://localhost:3000/api/health',
+        'https://dash.doctorphc.id/api/health'
+      ];
+    } else {
+      return [
+        'https://dash.doctorphc.id/api/health'
+      ];
     }
-    
-    // Production
-    return ['https://dash.doctorphc.id/api/health'];
   }
 
   private getRecommendedAction(): string {

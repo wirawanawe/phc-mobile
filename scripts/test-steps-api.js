@@ -1,7 +1,7 @@
 const fetch = require('node-fetch');
 
 async function testStepsAPI() {
-  const baseURL = 'http://localhost:3000/api/mobile';
+  const baseURL = 'https://dash.doctorphc.id/api/mobile';
   
   try {
     console.log('🧪 Testing Steps API endpoints...\n');

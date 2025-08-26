@@ -102,7 +102,7 @@ class ConnectionTester {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 10000);
       
-      const response = await fetch('http://localhost:3000/api/health', {
+      const response = await fetch('http://localhost:3000/api/mobile/health', {
         method: 'GET',
         signal: controller.signal
       });
@@ -184,7 +184,7 @@ class ConnectionTester {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 10000);
       
-      const response = await fetch('http://localhost:3000/api/mobile/tracking/today-summary', {
+      const response = await fetch('http://192.168.193.150:3000/api/mobile/tracking/today-summary', {
         method: 'GET',
         signal: controller.signal
       });

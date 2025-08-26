@@ -18,6 +18,7 @@ import { useAuth } from '../contexts/AuthContext';
 import api from '../services/api';
 import { handleAuthError, handleError } from '../utils/errorHandler';
 import eventEmitter from '../utils/eventEmitter';
+import SimpleDatePicker from '../components/SimpleDatePicker';
 
 interface WellnessActivity {
   id: number;
@@ -40,6 +41,7 @@ interface UserWellnessActivity {
   notes?: string;
   points_earned: number;
   completed_at: string;
+  activity_date?: string;
   // API returns these field names
   title: string;
   description: string;
@@ -58,7 +60,9 @@ const ActivityScreen = ({ navigation }: any) => {
   const [isLoadingWellness, setIsLoadingWellness] = useState(false);
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
   const [activeTab, setActiveTab] = useState<'activities' | 'history'>('activities');
-
+  
+  // Date filter state for activity history
+  const [selectedDate, setSelectedDate] = useState(new Date());
 
 
   const getDifficultyColor = (difficulty: string | undefined) => {
@@ -83,6 +87,13 @@ const ActivityScreen = ({ navigation }: any) => {
       loadUserActivityHistory();
     }
   }, [isAuthenticated]);
+
+  // Load history when selected date changes
+  useEffect(() => {
+    if (isAuthenticated && activeTab === 'history') {
+      loadUserActivityHistory();
+    }
+  }, [selectedDate, isAuthenticated, activeTab]);
 
   // Listen for wellness activity events
   useEffect(() => {
@@ -180,10 +191,20 @@ const ActivityScreen = ({ navigation }: any) => {
     }
   };
 
+  const handleDateChange = (date: Date) => {
+
+    setSelectedDate(date);
+  };
+
   const loadUserActivityHistory = async () => {
     try {
       setIsLoadingHistory(true);
-      const response = await api.getWellnessActivityHistory({ period: 30 });
+      // Format the selected date to YYYY-MM-DD
+      const dateString = selectedDate.toISOString().split('T')[0];
+      const response = await api.getWellnessActivityHistory({ 
+        period: 30,
+        date: dateString 
+      });
       if (response.success) {
         setUserActivities(response.data || []);
       }
@@ -216,7 +237,7 @@ const ActivityScreen = ({ navigation }: any) => {
           style: 'destructive',
           onPress: async () => {
             try {
-              const response = await api.resetWellnessActivities(activityId);
+              const response = await api.resetWellnessActivities(activityId as any);
               if (response.success) {
                 // Emit event to refresh all related data
                 eventEmitter.emitWellnessActivityDeleted();
@@ -245,7 +266,7 @@ const ActivityScreen = ({ navigation }: any) => {
     // Check if this activity is already completed today
     const isCompletedToday = userActivities.some(
       userActivity => userActivity.activity_id === item.id && 
-      new Date(userActivity.activity_date).toDateString() === new Date().toDateString()
+      new Date(userActivity.activity_date || userActivity.completed_at).toDateString() === new Date().toDateString()
     );
 
     return (
@@ -342,7 +363,7 @@ const ActivityScreen = ({ navigation }: any) => {
         </View>
         <View style={styles.userActivityPoints}>
           <Icon name="star" size={16} color="#FFFFFF" />
-          <Text style={styles.userActivityPointsText}>+{parseInt(item.points_earned) || 0}</Text>
+          <Text style={styles.userActivityPointsText}>+{parseInt(String(item.points_earned)) || 0}</Text>
           <Text style={styles.userActivityPointsLabel}>points</Text>
         </View>
         <View style={styles.userActivityActions}>
@@ -490,6 +511,17 @@ const ActivityScreen = ({ navigation }: any) => {
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Riwayat Aktivitas</Text>
             
+            {/* Date Picker for Activity History */}
+            <View style={styles.dateFilterContainer}>
+              <Text style={styles.dateFilterLabel}>Filter berdasarkan Tanggal Aktivitas:</Text>
+              <SimpleDatePicker
+                selectedDate={selectedDate}
+                onDateChange={handleDateChange}
+                title="Pilih Tanggal Aktivitas"
+                variant="light"
+              />
+            </View>
+            
             {/* History Summary */}
             {userActivities.length > 0 && (
               <View style={styles.historySummaryContainer}>
@@ -497,7 +529,7 @@ const ActivityScreen = ({ navigation }: any) => {
                   <Icon name="star" size={24} color="#10B981" />
                   <View style={styles.historySummaryInfo}>
                     <Text style={styles.historySummaryTitle}>
-                      {userActivities.reduce((total, activity) => total + (parseInt(activity.points_earned) || 0), 0)}
+                      {userActivities.reduce((total, activity) => total + (parseInt(String(activity.points_earned)) || 0), 0)}
                     </Text>
                     <Text style={styles.historySummarySubtitle}>Total Poin</Text>
                   </View>
@@ -963,6 +995,24 @@ const styles = StyleSheet.create({
     alignItems: "center",
     borderWidth: 1,
     borderColor: "#FECACA",
+  },
+  // Date filter styles
+  dateFilterContainer: {
+    marginBottom: 20,
+    padding: 16,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  dateFilterLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#374151',
+    marginBottom: 12,
   },
 
 

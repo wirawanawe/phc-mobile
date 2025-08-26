@@ -3,7 +3,8 @@ export interface RSSItem {
   title: string;
   description: string;
   readTime: string;
-  image: string;
+  image: string; // Keep as icon name for fallback
+  imageUrl?: string; // Add actual image URL from RSS feed
   color: string;
   bgColor: string;
   category: string;
@@ -60,7 +61,7 @@ class RSSService {
       let match;
       let index = 0;
       
-      while ((match = itemRegex.exec(xmlText)) !== null && index < 6) {
+      while ((match = itemRegex.exec(xmlText)) !== null && index < 12) {
         const itemContent = match[1];
         
         // Extract title and clean it
@@ -71,6 +72,21 @@ class RSSService {
         // Extract description and clean it
         const descMatch = itemContent.match(/<description[^>]*><!\[CDATA\[(.*?)\]\]><\/description>|<description[^>]*>([^<]+)<\/description>/i);
         let description = descMatch ? (descMatch[1] || descMatch[2] || '').trim() : '';
+        
+        // Extract image URL from description or media:content
+        let imageUrl: string | undefined;
+        
+        // Try to extract from media:content first (more reliable)
+        const mediaMatch = itemContent.match(/<media:content[^>]+url="([^"]+)"/i);
+        if (mediaMatch) {
+          imageUrl = mediaMatch[1];
+        } else {
+          // Try to extract from description HTML
+          const imgMatch = description.match(/<img[^>]+src="([^"]+)"/i);
+          if (imgMatch) {
+            imageUrl = imgMatch[1];
+          }
+        }
         
         // Clean description (remove HTML tags and trim)
         description = description.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').trim();
@@ -101,27 +117,35 @@ class RSSService {
         
         // Assign colors and category based on source
         const getSourceConfig = (source: string) => {
-          if (source.includes('lifestyle')) {
-            return {
-              color: '#9F7AEA',
-              bgColor: '#FAF5FF',
-              category: 'Lifestyle',
-              icons: ['run', 'sleep', 'meditation', 'water', 'food-apple', 'dumbbell']
-            };
-          } else if (source.includes('health')) {
-            return {
-              color: '#E53E3E',
-              bgColor: '#FEF2F2',
-              category: 'Health',
-              icons: ['heart-pulse', 'hospital-building', 'medical-bag', 'pill']
-            };
-          } else {
-            return {
-              color: '#3182CE',
-              bgColor: '#EBF8FF',
-              category: 'General Health',
-              icons: ['heart-pulse', 'brain', 'account-heart', 'dumbbell']
-            };
+          switch (source.toLowerCase()) {
+            case 'detikhealth':
+              return {
+                color: '#E53E3E',
+                bgColor: '#FEF2F2',
+                category: 'Health',
+                icons: ['heart-pulse', 'hospital-building', 'medical-bag', 'pill']
+              };
+            case 'antaranews':
+              return {
+                color: '#3182CE',
+                bgColor: '#EBF8FF',
+                category: 'News',
+                icons: ['newspaper', 'heart-pulse', 'brain', 'account-heart']
+              };
+            case 'tempo':
+              return {
+                color: '#38A169',
+                bgColor: '#F0FDF4',
+                category: 'Health',
+                icons: ['clock', 'heart-pulse', 'hospital-building', 'medical-bag']
+              };
+            default:
+              return {
+                color: '#9F7AEA',
+                bgColor: '#FAF5FF',
+                category: 'Health',
+                icons: ['heart-pulse', 'brain', 'account-heart', 'dumbbell']
+              };
           }
         };
         
@@ -154,6 +178,7 @@ class RSSService {
           description,
           readTime,
           image: icon,
+          imageUrl,
           color: config.color,
           bgColor: config.bgColor,
           category: config.category,
@@ -186,26 +211,27 @@ class RSSService {
 
       const allItems: RSSItem[] = [];
 
-      const rssUrls = [
-        'https://health.detik.com/rss',
-        'https://health.detik.com/rss/health',
-        'https://health.detik.com/rss/lifestyle'
+      // Use a single reliable RSS source with better content filtering
+      const rssFeeds = [
+        {
+          url: 'https://health.detik.com/rss',
+          source: 'detikhealth'
+        }
       ];
 
-             for (const [index, rssUrl] of rssUrls.entries()) {
+      for (const feed of rssFeeds) {
         try {
-          const sources = ['detikhealth', 'detikhealth', 'detikhealth'];
-          const source = sources[index];
-                     const xmlText = await this.fetchRSSFeed(rssUrl);
-            
-            // If xmlText is empty, return empty array
-            if (!xmlText || xmlText.trim().length === 0) {
-              continue;
-            }
+          const xmlText = await this.fetchRSSFeed(feed.url);
           
-          const items = this.parseRSSItems(xmlText, source);
+          // If xmlText is empty, continue to next feed
+          if (!xmlText || xmlText.trim().length === 0) {
+            continue;
+          }
+        
+          const items = this.parseRSSItems(xmlText, feed.source);
           allItems.push(...items);
         } catch (error) {
+          console.log(`Failed to fetch from ${feed.url}:`, error instanceof Error ? error.message : 'Unknown error');
           // Continue with other feeds if one fails
         }
       }
@@ -215,8 +241,11 @@ class RSSService {
         return this.getFallbackData();
       }
 
+      // Remove duplicates based on title and description
+      const uniqueItems = this.removeDuplicates(allItems);
+
       // Shuffle and limit to 6 items
-      const shuffled = allItems.sort(() => Math.random() - 0.5).slice(0, 6);
+      const shuffled = uniqueItems.sort(() => Math.random() - 0.5).slice(0, 6);
       
       // Cache the results
       this.cache.set('health-news', { data: shuffled, timestamp: Date.now() });
@@ -228,6 +257,19 @@ class RSSService {
     }
   }
 
+  private removeDuplicates(items: RSSItem[]): RSSItem[] {
+    const seen = new Set();
+    return items.filter(item => {
+      // Create a unique key based on title (more reliable than description)
+      const titleKey = item.title.toLowerCase().trim();
+      if (seen.has(titleKey)) {
+        return false;
+      }
+      seen.add(titleKey);
+      return true;
+    });
+  }
+
   private getFallbackData(): RSSItem[] {
     return [
       {
@@ -236,6 +278,7 @@ class RSSService {
         description: "Vaksinasi COVID-19 menjadi langkah penting dalam melindungi kesehatan masyarakat dan mengendalikan pandemi...",
         readTime: "5 min read",
         image: "heart-pulse",
+        imageUrl: "https://akcdn.detik.net.id/community/media/visual/2021/01/13/vaksinasi-covid-19_169.jpeg",
         color: "#E53E3E",
         bgColor: "#FEF2F2",
         category: "Health",
@@ -247,6 +290,7 @@ class RSSService {
         description: "Di era digital yang serba cepat, menjaga kesehatan mental menjadi tantangan tersendiri...",
         readTime: "4 min read",
         image: "brain",
+        imageUrl: "https://akcdn.detik.net.id/community/media/visual/2021/06/15/kesehatan-mental_169.jpeg",
         color: "#3182CE",
         bgColor: "#EBF8FF",
         category: "Mental Health",
@@ -258,6 +302,7 @@ class RSSService {
         description: "Mengonsumsi nutrisi seimbang sangat penting untuk menjaga daya tahan tubuh...",
         readTime: "6 min read",
         image: "food-apple",
+        imageUrl: "https://akcdn.detik.net.id/community/media/visual/2021/03/10/nutrisi-seimbang_169.jpeg",
         color: "#38A169",
         bgColor: "#F0FDF4",
         category: "Nutrition",
@@ -269,6 +314,7 @@ class RSSService {
         description: "Olahraga rutin terbukti memberikan berbagai manfaat kesehatan...",
         readTime: "7 min read",
         image: "run",
+        imageUrl: "https://akcdn.detik.net.id/community/media/visual/2021/02/20/olahraga-rutin_169.jpeg",
         color: "#D69E2E",
         bgColor: "#FFFAF0",
         category: "Fitness",
@@ -280,6 +326,7 @@ class RSSService {
         description: "Tidur yang berkualitas sangat penting untuk kesehatan fisik dan mental...",
         readTime: "5 min read",
         image: "sleep",
+        imageUrl: "https://akcdn.detik.net.id/community/media/visual/2021/04/15/kualitas-tidur_169.jpeg",
         color: "#9F7AEA",
         bgColor: "#FAF5FF",
         category: "Health",
@@ -291,6 +338,7 @@ class RSSService {
         description: "Penyakit jantung masih menjadi penyebab kematian tertinggi di dunia...",
         readTime: "8 min read",
         image: "heart-pulse",
+        imageUrl: "https://akcdn.detik.net.id/community/media/visual/2021/05/10/pencegahan-jantung_169.jpeg",
         color: "#ED64A6",
         bgColor: "#FDF2F8",
         category: "Cardiology",
@@ -301,6 +349,12 @@ class RSSService {
 
   clearCache(): void {
     this.cache.clear();
+  }
+
+  // Force refresh by clearing cache and returning fresh data
+  async refreshHealthNews(): Promise<RSSItem[]> {
+    this.clearCache();
+    return this.getHealthNews();
   }
 }
 
